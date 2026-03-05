@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import type { Ollama } from 'ollama';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('OllamaSidebarProvider', () => {
   let provider: any;

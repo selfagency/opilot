@@ -1,13 +1,13 @@
 import { Ollama } from 'ollama';
 import {
+  commands,
+  Event,
+  EventEmitter,
+  ExtensionContext,
   TreeDataProvider,
   TreeItem,
   TreeItemCollapsibleState,
-  EventEmitter,
-  Event,
   window,
-  commands,
-  ExtensionContext,
   workspace,
 } from 'vscode';
 
