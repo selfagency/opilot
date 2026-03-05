@@ -110,6 +110,11 @@
           "id": "ollama-model-preview",
           "name": "Model Details",
           "type": "webview"
+        },
+        {
+          "icon": "$(file-code)",
+          "id": "ollama-modelfiles",
+          "name": "Modelfiles"
         }
       ]
     },
@@ -122,86 +127,80 @@
       {
         "command": "ollama-copilot.refreshSidebar",
         "title": "Refresh Local Ollama Models",
-        "category": "Ollama",
-        "icon": "$(refresh)"
+        "icon": "$(refresh)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.refreshLocalModels",
         "title": "Refresh Local Ollama Models",
-        "category": "Ollama",
-        "icon": "$(refresh)"
+        "icon": "$(refresh)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.refreshLibrary",
         "title": "Refresh Ollama Library",
-        "category": "Ollama",
-        "icon": "$(refresh)"
+        "icon": "$(refresh)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.sortLibraryByName",
         "title": "Sort Ollama Library by name",
-        "category": "Ollama",
-        "icon": "$(sort-precedence)"
+        "icon": "$(sort-precedence)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.sortLibraryByRecency",
         "title": "Sort Ollama Library by recency",
-        "category": "Ollama",
-        "icon": "$(sort-precedence)"
+        "icon": "$(sort-precedence)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.deleteModel",
         "title": "Delete Ollama Model",
-        "category": "Ollama",
-        "icon": "$(trash)"
+        "icon": "$(trash)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.pullModel",
         "title": "Pull Ollama Model",
-        "category": "Ollama",
-        "icon": "$(cloud-download)"
+        "icon": "$(cloud-download)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.stopModel",
         "title": "Stop Ollama Model",
-        "category": "Ollama",
-        "icon": "$(stop-circle)"
+        "icon": "$(stop-circle)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.startModel",
         "title": "Start Ollama Model",
-        "category": "Ollama",
-        "icon": "$(play-circle)"
+        "icon": "$(play-circle)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.pullModelFromLibrary",
-        "title": "Pull Ollama Model from Library",
-        "category": "Ollama",
-        "icon": "$(cloud-download)"
+        "title": "Pull Ollama Model",
+        "icon": "$(cloud-download)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.openLibraryModelPage",
         "title": "Open Ollama Model Page",
-        "category": "Ollama",
-        "icon": "$(link-external)"
+        "icon": "$(link-external)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.previewLibraryModel",
-        "title": "Show Ollama Model Details",
-        "category": "Ollama",
-        "icon": "$(preview)"
-      },
-      {
-        "command": "ollama-copilot.showModelDetails",
-        "title": "Show Ollama Model Details",
-        "category": "Ollama",
-        "icon": "$(info)"
+        "title": "Ollama Model Details",
+        "icon": "$(preview)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.refreshCloudModels",
         "title": "Refresh Ollama Cloud Models",
-        "category": "Ollama",
-        "icon": "$(refresh)"
+        "icon": "$(refresh)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.manageCloudApiKey",
@@ -211,14 +210,44 @@
       {
         "command": "ollama-copilot.startCloudModel",
         "title": "Run Ollama Cloud Model",
-        "category": "Ollama",
-        "icon": "$(play-circle)"
+        "icon": "$(play-circle)",
+        "category": "Ollama"
       },
       {
         "command": "ollama-copilot.stopCloudModel",
         "title": "Stop Ollama Cloud Model",
-        "category": "Ollama",
-        "icon": "$(stop-circle)"
+        "icon": "$(stop-circle)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.refreshModelfiles",
+        "title": "Refresh Modelfiles",
+        "icon": "$(refresh)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.newModelfile",
+        "title": "New Modelfile",
+        "icon": "$(add)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.editModelfile",
+        "title": "Edit Modelfile",
+        "icon": "$(edit)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.buildModelfile",
+        "title": "Build Model from Modelfile",
+        "icon": "$(rocket)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.openModelfilesFolder",
+        "title": "Open Modelfiles Folder",
+        "icon": "$(folder-opened)",
+        "category": "Ollama"
       }
     ],
     "menus": {
@@ -252,6 +281,21 @@
           "command": "ollama-copilot.manageCloudApiKey",
           "when": "view == ollama-cloud-models",
           "group": "navigation@9"
+        },
+        {
+          "command": "ollama-copilot.refreshModelfiles",
+          "when": "view == ollama-modelfiles",
+          "group": "navigation"
+        },
+        {
+          "command": "ollama-copilot.newModelfile",
+          "when": "view == ollama-modelfiles",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ollama-copilot.openModelfilesFolder",
+          "when": "view == ollama-modelfiles",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -299,6 +343,16 @@
           "command": "ollama-copilot.stopCloudModel",
           "when": "view == ollama-cloud-models && viewItem == cloud-running",
           "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.editModelfile",
+          "when": "view == ollama-modelfiles && viewItem == modelfile",
+          "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.buildModelfile",
+          "when": "view == ollama-modelfiles && viewItem == modelfile",
+          "group": "inline@2"
         }
       ]
     },
@@ -349,9 +403,30 @@
             "error"
           ],
           "description": "Controls Ollama extension diagnostics verbosity in the output channel"
+        },
+        "ollama.modelfilesPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to folder containing Modelfiles. Leave empty to use ~/.ollama/modelfiles"
         }
       }
     },
+    "languages": [
+      {
+        "id": "modelfile",
+        "aliases": ["Modelfile"],
+        "extensions": [".modelfile"],
+        "filenames": ["Modelfile"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "modelfile",
+        "scopeName": "source.modelfile",
+        "path": "./syntaxes/modelfile.tmLanguage.json"
+      }
+    ],
     "languageModelChatProviders": [
       {
         "vendor": "selfagency-ollama",

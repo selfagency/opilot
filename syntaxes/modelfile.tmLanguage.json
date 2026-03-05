@@ -1,0 +1,46 @@
+{
+  "name": "Modelfile",
+  "scopeName": "source.modelfile",
+  "patterns": [
+    {
+      "match": "#.*$",
+      "name": "comment.line.number-sign.modelfile"
+    },
+    {
+      "match": "^(FROM|PARAMETER|SYSTEM|TEMPLATE|MESSAGE|ADAPTER|LICENSE|REQUIRES|DESCRIPTION)\\b",
+      "name": "keyword.control.modelfile"
+    },
+    {
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "name": "string.quoted.triple.double.modelfile"
+    },
+    {
+      "begin": "'''",
+      "end": "'''",
+      "name": "string.quoted.triple.single.modelfile"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.modelfile"
+    },
+    {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.modelfile"
+    },
+    {
+      "match": "\\b(temperature|num_ctx|num_threads|num_gpu|top_k|top_p|stop|seed|num_predict|repeat_last_n|repeat_penalty|presence_penalty|frequency_penalty|min_p|tfs_z|mirostat|mirostat_tau|mirostat_eta)\\b",
+      "name": "variable.parameter.modelfile"
+    },
+    {
+      "match": "\\b(system|user|assistant)\\b",
+      "name": "support.constant.modelfile"
+    },
+    {
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b",
+      "name": "constant.numeric.modelfile"
+    }
+  ]
+}

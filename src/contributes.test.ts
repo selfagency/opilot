@@ -80,12 +80,18 @@ describe('package contributes integrity', () => {
     expect(existsSync(iconPath)).toBe(true);
   });
 
-  it('every command has category "Ollama"', () => {
+  it('declares the ollama-modelfiles view', () => {
     const pkg = loadPackageJson();
-    const commands = pkg.contributes?.commands ?? [];
+    const explorerViews = pkg.contributes?.views?.['ollama-explorer'] ?? [];
+    const ids = explorerViews.map(view => view.id);
+    expect(ids).toContain('ollama-modelfiles');
+  });
 
-    const missing = commands.filter(cmd => cmd.category !== 'Ollama').map(cmd => cmd.command);
-
+  it('all commands have "Ollama" category', () => {
+    const pkg = loadPackageJson();
+    type PkgCommand = { command: string; category?: string };
+    const commands = (pkg.contributes?.commands ?? []) as PkgCommand[];
+    const missing = commands.filter(c => c.category !== 'Ollama').map(c => c.command);
     expect(missing).toEqual([]);
   });
 });

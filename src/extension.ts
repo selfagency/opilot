@@ -6,6 +6,7 @@ import { getOllamaClient, testConnection } from './client.js';
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
 import { OllamaChatModelProvider } from './provider.js';
 import { registerSidebar } from './sidebar.js';
+import { registerModelfileManager } from './modelfiles.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-ollama';
 
@@ -230,6 +231,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register sidebar view
   registerSidebar(context, client, diagnostics);
+
+  // Register modelfile manager
+  registerModelfileManager(context, client, diagnostics);
 
   // Test connection to Ollama server on startup (non-blocking)
   void (async () => {

@@ -25,7 +25,8 @@
 - 💬 **Chat Participant** - Invoke `@ollama` directly in Copilot Chat for a dedicated, history-aware conversation with your local model
 - 🔧 **Tool Calling** - Function calling support for agentic workflows with compatible models
 - 🖼️ **Vision Support** - Image input for models with vision capabilities
-- 📝 **Modelfile Support** - Syntax highlighting and editing for custom Ollama modelfiles
+- 📝 **Modelfile Management** - Create, edit, and build custom Ollama modelfiles with syntax highlighting, hover docs, and autocomplete
+- ⚡ **Streami
 - ⚡ **Streaming** - Real-time response streaming for faster interactions
 
 ## 🔧 Requirements
@@ -96,17 +97,47 @@ The Ollama sidebar provides three sections:
 - View context window and memory usage
 - Stop models when done
 
-### Modelfile Support
+### Modelfile Manager
 
-The extension provides syntax highlighting for `.modelfile` files. Create custom models by defining them in a Modelfile:
+The **Modelfile Manager** is a dedicated sidebar pane for creating and managing custom Ollama modelfiles.
+
+#### Creating a new Modelfile
+
+Click the **+** button in the Modelfile Manager pane header. An interactive wizard will guide you through:
+
+1. **Name** — enter a name for the modelfile (e.g. `pirate-bot`)
+2. **Base model** — pick a model from your locally installed Ollama models
+3. **System prompt** — describe the AI persona or task
+
+The wizard creates the file, pre-populates it with the chosen settings, and opens it in the editor.
+
+#### Building a Modelfile
+
+Right-click any `.modelfile` in the pane and choose **Build Modelfile** (or use the command palette: `Ollama: Build Modelfile`). This runs `ollama create` with the file and streams progress in a VS Code notification.
+
+#### Syntax support
+
+All `.modelfile` files receive:
+
+- **Syntax highlighting** — keywords (`FROM`, `PARAMETER`, `SYSTEM`, `TEMPLATE`, `ADAPTER`, `LICENSE`, `MESSAGE`), parameter names, numbers, strings, and comments
+- **Hover documentation** — hover over any keyword to see its description and usage
+- **Autocomplete** — suggestions for Modelfile keywords and common parameter names
 
 ```modelfile
-FROM llama2
+# Modelfile — pirate-bot
+FROM llama3.2:3b
+
+SYSTEM """You are a helpful pirate assistant. Arr!"""
+
 PARAMETER temperature 0.7
-SYSTEM You are a helpful coding assistant.
+PARAMETER num_ctx 4096
 ```
 
-See the [Ollama Modelfile Docs](https://github.com/ollama/ollama/blob/main/docs/modelfile.md) for full syntax.
+See the [Ollama Modelfile Docs](https://github.com/ollama/ollama/blob/main/docs/modelfile.md) for the full syntax reference.
+
+#### Configuration
+
+- **`ollama.modelfilesPath`** — folder where modelfiles are stored (default: `~/.ollama/modelfiles`)
 
 ## 🛡️ Privacy & Security
 

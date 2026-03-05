@@ -150,12 +150,6 @@ describe('LocalModelsProvider', () => {
     expect(treeItem.description).toContain('GB');
   });
 
-  it('uses model details command when clicking local model items', async () => {
-    const models = await provider.getChildren();
-    expect(models[0].command?.command).toBe('ollama-copilot.showModelDetails');
-    expect(models[1].command?.command).toBe('ollama-copilot.showModelDetails');
-  });
-
   it('uses model details command when clicking library model items', async () => {
     vi.stubGlobal(
       'fetch',
@@ -679,17 +673,6 @@ describe('Extracted command handlers', () => {
     handleOpenLibraryModelPage(item);
 
     expect(handleOpenLibraryModelPage).toBeDefined();
-  });
-
-  it('handlePreviewLibraryModel ignores non-library models', async () => {
-    const { handlePreviewLibraryModel, ModelTreeItem } = await import('./sidebar.js');
-
-    const item = new ModelTreeItem('test-model', 'local-running');
-
-    // Should not throw
-    handlePreviewLibraryModel(item);
-
-    expect(handlePreviewLibraryModel).toBeDefined();
   });
 
   it('handleShowModelDetails returns early for status items', async () => {

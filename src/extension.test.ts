@@ -98,6 +98,10 @@ describe('activate', () => {
       registerSidebar: vi.fn(),
     }));
 
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
+    }));
+
     const ext = await import('./extension.js');
     await ext.activate({ subscriptions: [], extensionUri: {} } as any);
 
@@ -194,6 +198,10 @@ describe('activate', () => {
 
     vi.doMock('./sidebar.js', () => ({
       registerSidebar: vi.fn(),
+    }));
+
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
     }));
 
     const ext = await import('./extension.js');
@@ -301,6 +309,10 @@ describe('activate', () => {
 
     vi.doMock('./sidebar.js', () => ({
       registerSidebar: vi.fn(),
+    }));
+
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
     }));
 
     const ext = await import('./extension.js');
@@ -418,6 +430,10 @@ describe('activate', () => {
       registerSidebar: vi.fn(),
     }));
 
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
+    }));
+
     const ext = await import('./extension.js');
     await ext.activate({ subscriptions: [], extensionUri: {} } as any);
 
@@ -528,6 +544,10 @@ describe('activate', () => {
       registerSidebar: vi.fn(),
     }));
 
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
+    }));
+
     const ext = await import('./extension.js');
     await ext.activate({ subscriptions: [], extensionUri: {} } as any);
 
@@ -626,6 +646,10 @@ describe('activate', () => {
       registerSidebar: vi.fn(),
     }));
 
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
+    }));
+
     const ext = await import('./extension.js');
 
     await expect(ext.activate({ subscriptions: [], extensionUri: {} } as any)).rejects.toThrow(unhandledError);
@@ -718,6 +742,10 @@ describe('activate', () => {
 
     vi.doMock('./sidebar.js', () => ({
       registerSidebar: vi.fn(),
+    }));
+
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
     }));
 
     const ext = await import('./extension.js');
@@ -831,6 +859,10 @@ describe('activate', () => {
 
     vi.doMock('./sidebar.js', () => ({
       registerSidebar: vi.fn(),
+    }));
+
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
     }));
 
     const ext = await import('./extension.js');

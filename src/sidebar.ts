@@ -348,11 +348,6 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
             },
           );
 
-          item.command = {
-            command: 'ollama-copilot.showModelDetails',
-            title: 'Model Details',
-            arguments: [item],
-          };
           return item;
         })
         .sort((a, b) => {
@@ -1094,16 +1089,6 @@ export function handleShowModelDetails(
 }
 
 /**
- * Command handler: preview library model
- */
-export function handlePreviewLibraryModel(item: ModelTreeItem, _previewProvider?: ModelPreviewViewProvider): void {
-  if (!item || item.type !== 'library-model') {
-    return;
-  }
-  void commands.executeCommand('ollama-copilot.showModelDetails', item);
-}
-
-/**
  * Command handler: start model
  */
 export function handleStartModel(item: ModelTreeItem, localProvider: LocalModelsProvider): void {
@@ -1193,9 +1178,6 @@ export function registerSidebar(context: ExtensionContext, client: Ollama, logCh
     ),
     commands.registerCommand('ollama-copilot.showModelDetails', (item: ModelTreeItem) =>
       handleShowModelDetails(item, previewProvider),
-    ),
-    commands.registerCommand('ollama-copilot.previewLibraryModel', (item: ModelTreeItem) =>
-      handlePreviewLibraryModel(item),
     ),
     commands.registerCommand('ollama-copilot.startModel', (item: ModelTreeItem) =>
       handleStartModel(item, localProvider),
