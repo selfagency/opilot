@@ -253,7 +253,7 @@ Filter options for querying beans
 input BeanFilter {
   """
   Full-text search across slug, title, and body using Bleve query syntax.
-  
+
   Examples:
   - "login" - exact term match
   - "login~" - fuzzy match (1 edit distance)

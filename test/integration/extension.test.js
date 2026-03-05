@@ -1,3 +1,4 @@
+/* eslint-disable jest/expect-expect */
 'use strict';
 const assert = require('assert');
 const vscode = require('vscode');
@@ -14,9 +15,6 @@ suite('Extension Integration', () => {
 
   test('manageApiKey command is registered', async () => {
     const commands = await vscode.commands.getCommands(true);
-    assert.ok(
-      commands.includes('mistral-chat.manageApiKey'),
-      'mistral-chat.manageApiKey command not registered'
-    );
+    assert.ok(commands.includes('mistral-chat.manageApiKey'), 'mistral-chat.manageApiKey command not registered');
   });
 });

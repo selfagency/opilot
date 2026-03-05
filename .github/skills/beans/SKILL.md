@@ -253,101 +253,102 @@ The following baseline is derived from `beans graphql --schema` and provides com
 A bean represents an issue/task in the beans tracker
 """
 type Bean {
-  """
-  Unique identifier (NanoID)
-  """
-  id: ID!
-  """
-  Human-readable slug from filename
-  """
-  slug: String
-  """
-  Relative path from .beans/ directory
-  """
-  path: String!
-  """
-  Bean title
-  """
-  title: String!
-  """
-  Current status (draft, todo, in-progress, completed, scrapped)
-  """
-  status: String!
-  """
-  Bean type (milestone, epic, bug, feature, task)
-  """
-  type: String!
-  """
-  Priority level (critical, high, normal, low, deferred)
-  """
-  priority: String!
-  """
-  Tags for categorization
-  """
-  tags: [String!]!
-  """
-  Creation timestamp
-  """
-  createdAt: Time!
-  """
-  Last update timestamp
-  """
-  updatedAt: Time!
-  """
-  Markdown body content
-  """
-  body: String!
-  """
-  Content hash for optimistic concurrency control
-  """
-  etag: String!
-  """
-  Parent bean ID (optional, type-restricted)
-  """
-  parentId: String
-  """
-  IDs of beans this bean is blocking
-  """
-  blockingIds: [String!]!
-  """
-  IDs of beans that are blocking this bean (direct field)
-  """
-  blockedByIds: [String!]!
-  """
-  Beans that block this one (incoming blocking links)
-  """
-  blockedBy(filter: BeanFilter): [Bean!]!
-  """
-  Beans this one is blocking (resolved from blockingIds)
-  """
-  blocking(filter: BeanFilter): [Bean!]!
-  """
-  Parent bean (resolved from parentId)
-  """
-  parent: Bean
-  """
-  Child beans (beans with this as parent)
-  """
-  children(filter: BeanFilter): [Bean!]!
+"""
+Unique identifier (NanoID)
+"""
+id: ID!
+"""
+Human-readable slug from filename
+"""
+slug: String
+"""
+Relative path from .beans/ directory
+"""
+path: String!
+"""
+Bean title
+"""
+title: String!
+"""
+Current status (draft, todo, in-progress, completed, scrapped)
+"""
+status: String!
+"""
+Bean type (milestone, epic, bug, feature, task)
+"""
+type: String!
+"""
+Priority level (critical, high, normal, low, deferred)
+"""
+priority: String!
+"""
+Tags for categorization
+"""
+tags: [String!]!
+"""
+Creation timestamp
+"""
+createdAt: Time!
+"""
+Last update timestamp
+"""
+updatedAt: Time!
+"""
+Markdown body content
+"""
+body: String!
+"""
+Content hash for optimistic concurrency control
+"""
+etag: String!
+"""
+Parent bean ID (optional, type-restricted)
+"""
+parentId: String
+"""
+IDs of beans this bean is blocking
+"""
+blockingIds: [String!]!
+"""
+IDs of beans that are blocking this bean (direct field)
+"""
+blockedByIds: [String!]!
+"""
+Beans that block this one (incoming blocking links)
+"""
+blockedBy(filter: BeanFilter): [Bean!]!
+"""
+Beans this one is blocking (resolved from blockingIds)
+"""
+blocking(filter: BeanFilter): [Bean!]!
+"""
+Parent bean (resolved from parentId)
+"""
+parent: Bean
+"""
+Child beans (beans with this as parent)
+"""
+children(filter: BeanFilter): [Bean!]!
 }
 """
 Filter options for querying beans
 """
 input BeanFilter {
-  """
-  Full-text search across slug, title, and body using Bleve query syntax.
-  
-  Examples:
-  - "login" - exact term match
-  - "login~" - fuzzy match (1 edit distance)
-  - "login~2" - fuzzy match (2 edit distance)
-  - "log*" - wildcard prefix
-  - "\"user login\"" - exact phrase
-  - "user AND login" - both terms required
-  - "user OR login" - either term
-  - "slug:auth" - search only slug field
-  - "title:login" - search only title field
-  - "body:auth" - search only body field
+"""
+Full-text search across slug, title, and body using Bleve query syntax.
+
+Examples:
+
+- "login" - exact term match
+- "login~" - fuzzy match (1 edit distance)
+- "login~2" - fuzzy match (2 edit distance)
+- "log\*" - wildcard prefix
+- "\"user login\"" - exact phrase
+- "user AND login" - both terms required
+- "user OR login" - either term
+- "slug:auth" - search only slug field
+- "title:login" - search only title field
+- "body:auth" - search only body field
   """
   search: String
   """
@@ -422,13 +423,13 @@ input BeanFilter {
   Exclude beans that have explicit blocked-by entries
   """
   noBlockedBy: Boolean
-}
-"""
-Structured body modifications applied atomically.
-Operations are applied in order: all replacements sequentially, then append.
-If any operation fails, the entire mutation fails (transactional).
-"""
-input BodyModification {
+  }
+  """
+  Structured body modifications applied atomically.
+  Operations are applied in order: all replacements sequentially, then append.
+  If any operation fails, the entire mutation fails (transactional).
+  """
+  input BodyModification {
   """
   Text replacements applied sequentially in array order.
   Each old text must match exactly once at the time it's applied.
@@ -439,11 +440,11 @@ input BodyModification {
   Appended with blank line separator.
   """
   append: String
-}
-"""
-Input for creating a new bean
-"""
-input CreateBeanInput {
+  }
+  """
+  Input for creating a new bean
+  """
+  input CreateBeanInput {
   """
   Bean title (required)
   """
@@ -484,8 +485,8 @@ input CreateBeanInput {
   Custom ID prefix (overrides config prefix for this bean)
   """
   prefix: String
-}
-type Mutation {
+  }
+  type Mutation {
   """
   Create a new bean
   """
@@ -518,8 +519,8 @@ type Mutation {
   Remove a bean from the blocked-by list
   """
   removeBlockedBy(id: ID!, targetId: ID!, ifMatch: String): Bean!
-}
-type Query {
+  }
+  type Query {
   """
   Get a single bean by ID. Accepts either the full ID (e.g., "beans-abc1") or the short ID without prefix (e.g., "abc1").
   """
@@ -528,11 +529,11 @@ type Query {
   List beans with optional filtering
   """
   beans(filter: BeanFilter): [Bean!]!
-}
-"""
-A single text replacement operation.
-"""
-input ReplaceOperation {
+  }
+  """
+  A single text replacement operation.
+  """
+  input ReplaceOperation {
   """
   Text to find (must occur exactly once, cannot be empty)
   """
@@ -541,12 +542,12 @@ input ReplaceOperation {
   Replacement text (can be empty to delete the matched text)
   """
   new: String!
-}
-scalar Time
-"""
-Input for updating an existing bean
-"""
-input UpdateBeanInput {
+  }
+  scalar Time
+  """
+  Input for updating an existing bean
+  """
+  input UpdateBeanInput {
   """
   New title
   """
@@ -607,4 +608,4 @@ input UpdateBeanInput {
   ETag for optimistic concurrency control (optional)
   """
   ifMatch: String
-}
+  }

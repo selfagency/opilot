@@ -9,63 +9,281 @@
     "Machine Learning"
   ],
   "keywords": [
-    "ollama",
     "ai",
-    "copilot",
     "chat",
+    "code assistant",
+    "coding",
+    "copilot",
     "llama",
     "local",
     "models",
-    "coding",
-    "code assistant",
+    "ollama",
     "tools",
     "vision"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/selfagency/ollama-copilot.git"
-  },
   "license": "MIT",
-  "qna": "marketplace",
   "author": {
     "name": "Daniel Sieradski",
     "email": "daniel@self.agency",
     "url": "https://self.agency"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/selfagency/ollama-copilot.git"
+  },
+  "qna": "marketplace",
   "publisher": "selfagency",
   "main": "./dist/extension.js",
   "scripts": {
-    "check-types": "tsc --noEmit",
-    "compile": "pnpm run check-types && pnpm run lint && tsup",
-    "deploy": "vsce publish --no-dependencies",
-    "format": "oxfmt 'src/**/*.ts' --write",
-    "lint:fix": "oxlint 'src/**/*.ts' --fix",
-    "lint": "oxlint 'src/**/*.ts'",
-    "package": "pnpm run check-types && pnpm run lint && NODE_ENV=production tsup",
+    "compile": "task compile",
     "prepare": "husky",
-    "release": "zx ./scripts/release.mjs",
-    "release:pre": "zx ./scripts/release.mjs --pre-release",
-    "test": "vitest run src",
-    "test:extension": "vscode-test test/integration",
-    "test:coverage": "vitest run --coverage",
-    "vscode:prepublish": "pnpm run package",
-    "watch:build": "tsup --watch",
-    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "watch": "run-p watch:*"
+    "test": "task unit-tests",
+    "test:coverage": "task unit-test-coverage",
+    "test:extension": "task extension-tests"
+  },
+  "dependencies": {
+    "ollama": "^0.6.3"
+  },
+  "devDependencies": {
+    "@octokit/rest": "^22.0.1",
+    "@types/node": "^25.3.3",
+    "@types/vscode": "^1.109.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "@vscode/dts": "^0.4.1",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "assert": "^2.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.2",
+    "npm-run-all": "^4.1.5",
+    "ora": "^9.3.0",
+    "oxfmt": "^0.36.0",
+    "oxlint": "^1.51.0",
+    "oxlint-tsgolint": "^0.16.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "vscode": "^1.1.37",
+    "zx": "^8.8.5"
   },
   "lint-staged": {
+    "scripts/*.mjs": [
+      "oxlint --fix",
+      "oxfmt --write"
+    ],
     "src/**/*.ts": [
       "oxlint --fix",
+      "oxfmt --write"
+    ],
+    "**/*.{json,yml,yaml,md}": [
       "oxfmt --write"
     ]
   },
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ollama-explorer",
+          "title": "Ollama",
+          "icon": "ollama.svg"
+        }
+      ]
+    },
+    "views": {
+      "ollama-explorer": [
+        {
+          "icon": "$(server)",
+          "id": "ollama-local-models",
+          "name": "Local Models"
+        },
+        {
+          "icon": "$(globe)",
+          "id": "ollama-cloud-models",
+          "name": "Cloud Models"
+        },
+        {
+          "icon": "$(cloud)",
+          "id": "ollama-library-models",
+          "name": "Library"
+        },
+        {
+          "id": "ollama-model-preview",
+          "name": "Model Details",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "ollama-copilot.manageAuthToken",
-        "title": "Ollama: Manage Auth Token"
+        "title": "Manage Ollama Auth Token"
+      },
+      {
+        "command": "ollama-copilot.refreshSidebar",
+        "title": "Refresh Local Ollama Models",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ollama-copilot.refreshLocalModels",
+        "title": "Refresh Local Ollama Models",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ollama-copilot.refreshLibrary",
+        "title": "Refresh Ollama Library",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ollama-copilot.sortLibraryByName",
+        "title": "Sort Ollama Library by name",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "ollama-copilot.sortLibraryByRecency",
+        "title": "Sort Ollama Library by recency",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "ollama-copilot.deleteModel",
+        "title": "Delete Ollama Model",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "ollama-copilot.pullModel",
+        "title": "Pull Ollama Model",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ollama-copilot.stopModel",
+        "title": "Stop Ollama Model",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "ollama-copilot.startModel",
+        "title": "Start Ollama Model",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "ollama-copilot.pullModelFromLibrary",
+        "title": "Pull Ollama Model",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ollama-copilot.openLibraryModelPage",
+        "title": "Open Ollama Model Page",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "ollama-copilot.previewLibraryModel",
+        "title": "Ollama Model Details",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "ollama-copilot.showModelDetails",
+        "title": "Ollama Model Details",
+        "icon": "$(info)"
+      },
+      {
+        "command": "ollama-copilot.refreshCloudModels",
+        "title": "Refresh Ollama Cloud Models",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ollama-copilot.manageCloudApiKey",
+        "title": "Manage Ollama Cloud API Key"
+      },
+      {
+        "command": "ollama-copilot.startCloudModel",
+        "title": "Run Ollama Cloud Model",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "ollama-copilot.stopCloudModel",
+        "title": "Stop Ollama Cloud Model",
+        "icon": "$(stop-circle)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ollama-copilot.refreshLocalModels",
+          "when": "view == ollama-local-models",
+          "group": "navigation"
+        },
+        {
+          "command": "ollama-copilot.refreshLibrary",
+          "when": "view == ollama-library-models",
+          "group": "navigation"
+        },
+        {
+          "command": "ollama-copilot.sortLibraryByRecency",
+          "when": "view == ollama-library-models && ollama.librarySortMode == name",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ollama-copilot.sortLibraryByName",
+          "when": "view == ollama-library-models && ollama.librarySortMode == recency",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ollama-copilot.refreshCloudModels",
+          "when": "view == ollama-cloud-models",
+          "group": "navigation"
+        },
+        {
+          "command": "ollama-copilot.manageCloudApiKey",
+          "when": "view == ollama-cloud-models",
+          "group": "navigation@9"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ollama-copilot.deleteModel",
+          "when": "view == ollama-local-models && viewItem == local-stopped",
+          "group": "inline@3"
+        },
+        {
+          "command": "ollama-copilot.stopModel",
+          "when": "view == ollama-local-models && viewItem == local-running",
+          "group": "inline@2"
+        },
+        {
+          "command": "ollama-copilot.startModel",
+          "when": "view == ollama-local-models && viewItem == local-stopped",
+          "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.deleteModel",
+          "when": "view == ollama-local-models && viewItem == local-running",
+          "group": "inline@3"
+        },
+        {
+          "command": "ollama-copilot.pullModelFromLibrary",
+          "when": "view == ollama-library-models && viewItem == library-model",
+          "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.openLibraryModelPage",
+          "when": "view == ollama-library-models && viewItem == library-model",
+          "group": "inline@2"
+        },
+        {
+          "command": "ollama-copilot.previewLibraryModel",
+          "when": "view == ollama-library-models && viewItem == library-model",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ollama-copilot.startCloudModel",
+          "when": "view == ollama-cloud-models && viewItem == cloud-stopped",
+          "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.stopCloudModel",
+          "when": "view == ollama-cloud-models && viewItem == cloud-running",
+          "group": "inline@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "Ollama",
       "properties": {
@@ -79,16 +297,46 @@
           "default": 0,
           "description": "Override context window size (0 = use model default)"
         },
-        "ollama.refreshInterval": {
+        "ollama.localModelRefreshInterval": {
           "type": "number",
-          "default": 5,
-          "description": "Sidebar auto-refresh interval in seconds (0 = off)"
+          "default": 30,
+          "description": "Auto-refresh local and running models interval in seconds"
+        },
+        "ollama.libraryRefreshInterval": {
+          "type": "number",
+          "default": 21600,
+          "description": "Auto-refresh library and cloud model catalogs interval in seconds (default 6 hours)"
+        },
+        "ollama.librarySortMode": {
+          "type": "string",
+          "default": "name",
+          "enum": [
+            "name",
+            "recency"
+          ],
+          "description": "Sort mode for library models: Alphabetical by name or by recency"
+        },
+        "ollama.streamLogs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stream Ollama server logs to output channel"
+        },
+        "ollama.diagnostics.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "description": "Controls Ollama extension diagnostics verbosity in the output channel"
         }
       }
     },
     "languageModelChatProviders": [
       {
-        "vendor": "ollama",
+        "vendor": "selfagency-ollama",
         "displayName": "Ollama",
         "configuration": {
           "managementCommand": "ollama-copilot.manageAuthToken"
@@ -106,38 +354,13 @@
     ]
   },
   "activationEvents": [
-    "onStartupFinished",
-    "onLanguageModelChatProvider:ollama",
-    "onChatParticipant:ollama-copilot.ollama"
+    "onChatParticipant:ollama-copilot.ollama",
+    "onLanguageModelChatProvider:selfagency-ollama",
+    "onStartupFinished"
   ],
-  "dependencies": {
-    "ollama": "^0.5.8"
-  },
-  "devDependencies": {
-    "@octokit/rest": "^22.0.1",
-    "@types/node": "^25.3.3",
-    "@types/vscode": "^1.109.0",
-    "@vitest/coverage-v8": "^4.0.18",
-    "@vscode/dts": "^0.4.1",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
-    "assert": "^2.1.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.3.0",
-    "npm-run-all": "^4.1.5",
-    "ora": "^9.3.0",
-    "oxfmt": "^0.35.0",
-    "oxlint": "^1.50.0",
-    "oxlint-tsgolint": "^0.15.0",
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18",
-    "vscode": "^1.1.37",
-    "zx": "^8.8.5"
-  },
+  "icon": "logo.png",
   "engines": {
     "vscode": "^1.109.0"
   },
-  "icon": "logo.png",
   "packageManager": "pnpm@10.30.3+sha512.c961d1e0a2d8e354ecaa5166b822516668b7f44cb5bd95122d590dd81922f606f5473b6d23ec4a5be05e7fcd18e8488d47d978bbe981872f1145d06e9a740017"
 }

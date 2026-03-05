@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+
+version: '3'
+
+tasks:
+  check-types:
+    desc: Check types
+    cmds:
+      - ./node_modules/.bin/tsc --noEmit
+    silent: false
+
+  lint:
+    desc: Run linter
+    cmds:
+      - ./node_modules/.bin/oxlint .
+    silent: false
+
+  lint-fix:
+    desc: Run linter with auto-fix
+    cmds:
+      - ./node_modules/.bin/oxlint . --fix
+    silent: false
+
+  check-formatting:
+    desc: Check formatting
+    cmds:
+      - ./node_modules/.bin/oxfmt . --check
+    silent: false
+
+  compile:
+    desc: Compile the extension
+    env:
+      NODE_ENV: production
+    cmds:
+      - ./node_modules/.bin/tsup
+    silent: false
+
+  format:
+    desc: Format code
+    cmds:
+      - ./node_modules/.bin/oxfmt . --write
+    silent: false
+
+  unit-tests:
+    desc: Run unit tests
+    cmds:
+      - ./node_modules/.bin/vitest run src {{.CLI_ARGS}}
+    silent: false
+
+  unit-test-coverage:
+    desc: Run unit tests with coverage
+    cmds:
+      - ./node_modules/.bin/vitest run --coverage {{.CLI_ARGS}}
+    silent: false
+
+  extension-tests:
+    desc: Run extension tests
+    cmds:
+      - ./node_modules/.bin/vscode-test test/integration {{.CLI_ARGS}}
+    silent: false
+
+  prerelease:
+    desc: Create a pre-release
+    cmds:
+      - task: compile
+      - ./node_modules/.bin/zx ./scripts/release.mjs --pre-release {{.CLI_ARGS}}
+    silent: false
+
+  release:
+    desc: Release the extension
+    cmds:
+      - task: compile
+      - ./node_modules/.bin/zx ./scripts/release.mjs {{.CLI_ARGS}}
+    silent: false
+
+  test-build-release:
+    desc: Test, Build & Release
+    cmds:
+      - task: check-types
+      - task: lint
+      - task: check-formatting
+      - task: unit-tests
+      - task: extension-tests
+      - task: release
+    silent: false
+
+  watch:
+    desc: Watch for changes and recompile
+    cmds:
+      - ./node_modules/.bin/tsup --watch
+    silent: false

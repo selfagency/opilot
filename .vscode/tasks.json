@@ -1,41 +1,41 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "compile",
-            "type": "shell",
-            "command": "pnpm",
-            "args": ["run", "compile"],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": [],
-            "presentation": {
-                "reveal": "always"
-            }
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "compile",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["run", "compile"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "watch",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["run", "watch:build"],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "tsup",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "message": 1
         },
-        {
-            "label": "watch",
-            "type": "shell",
-            "command": "pnpm",
-            "args": ["run", "watch:build"],
-            "isBackground": true,
-            "problemMatcher": {
-                "owner": "tsup",
-                "pattern": {
-                    "regexp": "^(.*)$",
-                    "message": 1
-                },
-                "background": {
-                    "activeOnStart": true,
-                    "beginsPattern": "^CJS Build start",
-                    "endsPattern": "^CJS .* Build success"
-                }
-            },
-            "presentation": {
-                "reveal": "never"
-            }
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^CJS Build start",
+          "endsPattern": "^CJS .* Build success"
         }
-    ]
+      },
+      "presentation": {
+        "reveal": "never"
+      }
+    }
+  ]
 }

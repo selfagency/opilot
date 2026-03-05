@@ -52,8 +52,6 @@
       "Bash(vsce package)",
       "Bash(pnpm dlx @vscode/vsce package --no-dependencies)"
     ],
-    "additionalDirectories": [
-      "/tmp"
-    ]
+    "additionalDirectories": ["/tmp"]
   }
 }

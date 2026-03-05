@@ -1,6 +1,6 @@
-import { defineConfig } from 'tsup'
+import { defineConfig } from 'tsup';
 
-const production = process.env.NODE_ENV === 'production'
+const production = process.env.NODE_ENV === 'production';
 
 export default defineConfig({
   entry: ['src/extension.ts', 'src/provider.ts'],
@@ -13,6 +13,6 @@ export default defineConfig({
   minify: production,
   clean: true,
   esbuildOptions(options) {
-    options.sourcesContent = false
+    options.sourcesContent = false;
   },
-})
+});

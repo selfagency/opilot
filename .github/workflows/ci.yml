@@ -5,15 +5,15 @@ on:
     branches: [main]
     tags: ['v*']
     paths:
-      - "src/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   pull_request:
     branches: [main]
     paths:
-      - "src/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 permissions:
@@ -63,26 +63,29 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
+      - name: Install task
+        run: curl -1sLf 'https://dl.cloudsmith.io/public/task/task/setup.deb.sh' | sudo -E bash && sudo apt-get install task -y
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
-          cache: "pnpm"
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        run: pnpm run check-types
+      - name: Check types
+        run: task check-types
 
       - name: Lint
-        run: pnpm run lint
+        run: task lint
 
       - name: Compile
-        run: pnpm run compile
+        run: task compile
 
       - name: Run tests
-        run: xvfb-run -a pnpm test:coverage --reporter=default --reporter=junit --outputFile=test-report.junit.xml
+        run: xvfb-run -a task unit-test-coverage -- --reporter=default --reporter=junit --outputFile=test-report.junit.xml
         env:
           CI: true
 

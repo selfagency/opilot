@@ -5,15 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-
-
-
-
 ## [1.0.9] - 2026-03-05
 
 ## What's Changed
-* fix: resolve model display and extension activation issues by @selfagency in https://github.com/selfagency/mistral-models-vscode/pull/4
 
+- fix: resolve model display and extension activation issues by @selfagency in https://github.com/selfagency/mistral-models-vscode/pull/4
 
 **Full Changelog**: https://github.com/selfagency/mistral-models-vscode/compare/v0.1.8...v1.0.9
 
@@ -22,9 +18,9 @@ _Source: changes from v0.1.8 to v1.0.9._
 ## [0.1.8] - 2026-03-04
 
 ## What's Changed
-* ui: show 'Mistral AI' in manage models detail by @selfagency in https://github.com/selfagency/mistral-models-vscode/pull/3
-* ci: run tests on release tag pushes by @selfagency in https://github.com/selfagency/mistral-models-vscode/pull/2
 
+- ui: show 'Mistral AI' in manage models detail by @selfagency in https://github.com/selfagency/mistral-models-vscode/pull/3
+- ci: run tests on release tag pushes by @selfagency in https://github.com/selfagency/mistral-models-vscode/pull/2
 
 **Full Changelog**: https://github.com/selfagency/mistral-models-vscode/compare/v0.1.7...v0.1.8
 
@@ -33,10 +29,12 @@ _Source: changes from v0.1.7 to v0.1.8._
 ## [0.1.7] - 2026-03-04
 
 ## What's Changed
-* Show 'Mistral AI' in manage models dropdown by @selfagency in https://github.com/selfagency/mistral-models-vscode/pull/1
+
+- Show 'Mistral AI' in manage models dropdown by @selfagency in https://github.com/selfagency/mistral-models-vscode/pull/1
 
 ## New Contributors
-* @selfagency made their first contribution in https://github.com/selfagency/mistral-models-vscode/pull/1
+
+- @selfagency made their first contribution in https://github.com/selfagency/mistral-models-vscode/pull/1
 
 **Full Changelog**: https://github.com/selfagency/mistral-models-vscode/compare/v0.1.6...v0.1.7
 

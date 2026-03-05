@@ -12,19 +12,24 @@ import {
   LanguageModelTextPart,
   LanguageModelToolCallPart,
   LanguageModelToolResultPart,
-  LogOutputChannel,
   Progress,
   ProvideLanguageModelChatResponseOptions,
-  QuickPickItemKind,
   window,
 } from 'vscode';
 import { getContextLengthOverride, getOllamaClient } from './client';
+import type { DiagnosticsLogger } from './diagnostics.js';
+
+const MODEL_LIST_REFRESH_MIN_INTERVAL_MS = 30_000;
+const MODEL_INFO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Ollama Chat Model Provider
  */
 export class OllamaChatModelProvider implements LanguageModelChatProvider<LanguageModelChatInformation> {
   private models: Map<string, LanguageModelChatInformation> = new Map();
+  private modelInfoCache: Map<string, { info: LanguageModelChatInformation; updatedAtMs: number }> = new Map();
+  private cachedModelList: LanguageModelChatInformation[] = [];
+  private lastModelListRefreshMs = 0;
   private modelsChangeEventEmitter: EventEmitter<void> = new EventEmitter();
   private toolCallIdMap: Map<string, string> = new Map();
   private reverseToolCallIdMap: Map<string, string> = new Map();
@@ -34,7 +39,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   constructor(
     readonly context: ExtensionContext,
     private client: Ollama,
-    private outputChannel: LogOutputChannel,
+    private outputChannel: DiagnosticsLogger,
   ) {}
 
   /**
@@ -44,25 +49,68 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     _options: { silent: boolean },
     _token: CancellationToken,
   ): Promise<LanguageModelChatInformation[]> {
+    const now = Date.now();
+    if (this.cachedModelList.length > 0 && now - this.lastModelListRefreshMs < MODEL_LIST_REFRESH_MIN_INTERVAL_MS) {
+      return this.cachedModelList;
+    }
+
     try {
       const response = await this.client.list();
-      const models: LanguageModelChatInformation[] = [];
+      const modelNames = new Set(response.models.map(model => model.name));
+      this.pruneModelCache(modelNames);
 
-      for (const model of response.models) {
-        const info = await this.getChatModelInfo(model.name);
-        if (info) {
-          models.push(info);
-          this.models.set(model.name, info);
-        }
+      const models = await Promise.all(
+        response.models.map(async model => {
+          const cached = this.modelInfoCache.get(model.name);
+          if (cached && now - cached.updatedAtMs < MODEL_INFO_CACHE_TTL_MS) {
+            return cached.info;
+          }
+
+          const info = await this.getChatModelInfo(model.name);
+          if (info) {
+            const updatedAtMs = Date.now();
+            this.modelInfoCache.set(model.name, { info, updatedAtMs });
+            this.models.set(model.name, info);
+          }
+
+          return info;
+        }),
+      );
+
+      const resolvedModels = models.filter((model): model is LanguageModelChatInformation => Boolean(model));
+      this.cachedModelList = resolvedModels;
+      this.lastModelListRefreshMs = Date.now();
+
+      if (resolvedModels.length > 0) {
+        this.modelsChangeEventEmitter.fire();
+        return resolvedModels;
       }
 
-      this.modelsChangeEventEmitter.fire();
-      return models;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.outputChannel.error(`Failed to fetch models: ${errorMessage}`);
+      if (this.cachedModelList.length > 0) {
+        return this.cachedModelList;
+      }
+
       return [];
+    } catch (error) {
+      this.outputChannel.exception('[Ollama] Failed to fetch models', error);
+      return this.cachedModelList;
     }
+  }
+
+  private pruneModelCache(activeModelNames: Set<string>): void {
+    for (const modelName of this.modelInfoCache.keys()) {
+      if (!activeModelNames.has(modelName)) {
+        this.modelInfoCache.delete(modelName);
+        this.models.delete(modelName);
+      }
+    }
+  }
+
+  private clearModelCache(): void {
+    this.modelInfoCache.clear();
+    this.models.clear();
+    this.cachedModelList = [];
+    this.lastModelListRefreshMs = 0;
   }
 
   /**
@@ -85,8 +133,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         },
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.outputChannel.warn(`Failed to get model info for ${modelId}: ${errorMessage}`);
+      this.outputChannel.exception(`[Ollama] Failed to get model info for ${modelId}`, error);
       return undefined;
     }
   }
@@ -188,8 +235,8 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         progress.report(new LanguageModelTextPart(currentText));
       }
     } catch (error) {
+      this.outputChannel.exception('[Ollama] Chat response failed', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      this.outputChannel.error(`Chat response failed: ${errorMessage}`);
       progress.report(new LanguageModelTextPart(`Error: ${errorMessage}`));
     }
   }
@@ -335,7 +382,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
     const action = await window.showQuickPick(
       [
-        { label: `${status}`, description: 'Current authentication status', kind: QuickPickItemKind.Separator },
+        { label: `${status}`, description: 'Current authentication status', kind: -1 },
         { label: 'Set Token', description: 'Enter a new authentication token' },
         ...(existingToken ? [{ label: 'Clear Token', description: 'Remove stored authentication' }] : []),
       ],
@@ -348,6 +395,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       await this.context.secrets.delete('ollama-auth-token');
       this.outputChannel.info('Ollama authentication token cleared');
       this.client = await getOllamaClient(this.context);
+      this.clearModelCache();
       this.modelsChangeEventEmitter.fire();
     } else if (action.label === 'Set Token') {
       const token = await window.showInputBox({
@@ -366,6 +414,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         }
         // Reinitialize client with new token
         this.client = await getOllamaClient(this.context);
+        this.clearModelCache();
         this.modelsChangeEventEmitter.fire();
       }
     }

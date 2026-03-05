@@ -64,14 +64,16 @@ function runGit(args, options = {}) {
 
 function resolveGitExecutable() {
   const direct = spawnSync('git', ['--version'], { stdio: 'ignore', shell: false });
-  if (direct.status === 0) {return 'git';}
+  if (direct.status === 0) {
+    return 'git';
+  }
 
   const locatorCommand = process.platform === 'win32' ? 'where' : 'which';
   const located = spawnSync(locatorCommand, ['git'], { encoding: 'utf8', shell: false });
   if (located.status === 0) {
     const candidate = located.stdout
       .split(/\r?\n/)
-      .map((line) => line.trim())
+      .map(line => line.trim())
       .find(Boolean);
     if (candidate) {
       return candidate;
@@ -82,7 +84,9 @@ function resolveGitExecutable() {
 }
 
 async function rollback() {
-  if (releaseDone) {return;}
+  if (releaseDone) {
+    return;
+  }
   $.verbose = false;
   try {
     if (tagPushed) {
@@ -115,11 +119,19 @@ async function rollback() {
         console.error('❌ Reset failed. Manually run: git reset --hard HEAD~1');
       }
     }
-  } catch { /* best effort */ }
+  } catch {
+    /* best effort */
+  }
 }
 
-process.on('SIGINT', async () => { await rollback(); process.exit(130); });
-process.on('SIGTERM', async () => { await rollback(); process.exit(143); });
+process.on('SIGINT', async () => {
+  await rollback();
+  process.exit(130);
+});
+process.on('SIGTERM', async () => {
+  await rollback();
+  process.exit(143);
+});
 
 // ---------------------------------------------------------------------------
 // Main — wrapped so any unhandled error triggers rollback
@@ -203,16 +215,17 @@ async function main() {
     per_page: 100,
   });
 
-  const previousTag = tagsResp
-    .map((r) => r.ref.replace('refs/tags/', ''))
-    .filter((t) => t !== tag)
-    .sort((a, b) => {
-      const parse = (v) => v.replace(/^v/, '').split('.').map(Number);
-      const [aMaj, aMin, aPatch] = parse(a);
-      const [bMaj, bMin, bPatch] = parse(b);
-      return aMaj - bMaj || aMin - bMin || aPatch - bPatch;
-    })
-    .at(-1) ?? '';
+  const previousTag =
+    tagsResp
+      .map(r => r.ref.replace('refs/tags/', ''))
+      .filter(t => t !== tag)
+      .sort((a, b) => {
+        const parse = v => v.replace(/^v/, '').split('.').map(Number);
+        const [aMaj, aMin, aPatch] = parse(a);
+        const [bMaj, bMin, bPatch] = parse(b);
+        return aMaj - bMaj || aMin - bMin || aPatch - bPatch;
+      })
+      .at(-1) ?? '';
 
   // --- Release notes --------------------------------------------------------
 
@@ -358,7 +371,7 @@ async function waitForWorkflow(
 ) {
   // Resolve the workflow ID by name.
   const workflowsResp = await octokit.actions.listRepoWorkflows({ owner, repo, per_page: 100 });
-  const workflow = workflowsResp.data.workflows.find((w) => w.name === name);
+  const workflow = workflowsResp.data.workflows.find(w => w.name === name);
   if (!workflow) {
     spinner.fail(`${name}: workflow not found in ${owner}/${repo}`);
     throw new Error(`[${name}] workflow not found in ${owner}/${repo}`);
@@ -381,7 +394,7 @@ async function waitForWorkflow(
     });
 
     // Find the latest run that isn't one we already marked as cancelled.
-    const run = runsResp.data.workflow_runs.find((r) => !cancelledRunIds.has(r.id));
+    const run = runsResp.data.workflow_runs.find(r => !cancelledRunIds.has(r.id));
 
     if (!run) {
       if (autoDispatch && !triggered) {
@@ -420,7 +433,7 @@ async function waitForWorkflow(
 // Entry point
 // ---------------------------------------------------------------------------
 
-main().catch(async (err) => {
+main().catch(async err => {
   const msg = err?.message ?? String(err);
   // ProcessOutput errors from zx already printed the command output; only
   // print extra context for our own thrown errors.

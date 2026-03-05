@@ -65,6 +65,11 @@ export enum InputBoxValidationSeverity {
   Error = 3,
 }
 
+export enum QuickPickItemKind {
+  Separator = -1,
+  Default = 0,
+}
+
 export class LanguageModelTextPart {
   constructor(public readonly value: string) {}
 }
@@ -93,6 +98,7 @@ export class LanguageModelDataPart {
 
 export const window = {
   showInputBox: vi.fn(),
+  showQuickPick: vi.fn(),
 };
 
 export const lm = {

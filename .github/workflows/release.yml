@@ -2,11 +2,11 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g. 1.2.3)"
+        description: 'Version to release (e.g. 1.2.3)'
         required: true
         type: string
 
@@ -119,6 +119,9 @@ jobs:
           ref: ${{ needs.detect-tag.outputs.release_tag }}
           fetch-depth: 0
 
+      - name: Install task
+        run: curl -1sLf 'https://dl.cloudsmith.io/public/task/task/setup.deb.sh' | sudo -E bash && sudo apt-get install task -y
+
       - name: Generate release notes for changelog
         id: changelog_notes
         uses: actions/github-script@v8
@@ -176,25 +179,25 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
-          cache: "pnpm"
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build extension package
-        run: pnpm run package
+        run: task compile
 
       - name: Package extension
         run: |
-          pnpm dlx @vscode/vsce package --no-dependencies --out mistral-models-vscode.vsix
+          pnpm dlx @vscode/vsce package --no-dependencies --out ollama-copilot.vsix
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.detect-tag.outputs.release_tag }}
           body_path: release-notes.md
-          files: "mistral-models-vscode.vsix"
+          files: 'ollama-copilot.vsix'
           draft: false
           prerelease: false
         env:
@@ -222,7 +225,7 @@ jobs:
       - name: Publish to VS Code Marketplace
         id: publish_vsce
         if: "!contains(needs.detect-tag.outputs.release_tag, '-')"
-        run: pnpm dlx @vscode/vsce publish --packagePath mistral-models-vscode.vsix -p ${{ secrets.VSCE_PAT }}
+        run: pnpm dlx @vscode/vsce publish --packagePath ollama-copilot.vsix -p ${{ secrets.VSCE_PAT }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
@@ -239,7 +242,7 @@ jobs:
               deployment_id: ${{ steps.deploy_vsce.outputs.deployment_id }},
               state: outcome === 'success' ? 'success' : 'failure',
               description: `VS Code Marketplace publish ${outcome}`,
-              environment_url: 'https://marketplace.visualstudio.com/items?itemName=selfagency.mistral-models-vscode',
+              environment_url: 'https://marketplace.visualstudio.com/items?itemName=selfagency.ollama-copilot',
               auto_inactive: false,
             });
 
@@ -265,7 +268,7 @@ jobs:
       - name: Publish to Open VSX
         id: publish_ovsx
         if: "!contains(needs.detect-tag.outputs.release_tag, '-')"
-        run: pnpm dlx ovsx publish mistral-models-vscode.vsix -p ${{ secrets.OVSX_PAT }}
+        run: pnpm dlx ovsx publish ollama-copilot.vsix -p ${{ secrets.OVSX_PAT }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
@@ -282,6 +285,6 @@ jobs:
               deployment_id: ${{ steps.deploy_ovsx.outputs.deployment_id }},
               state: outcome === 'success' ? 'success' : 'failure',
               description: `Open VSX publish ${outcome}`,
-              environment_url: 'https://open-vsx.org/extension/selfagency/mistral-models-vscode',
+              environment_url: 'https://open-vsx.org/extension/selfagency/ollama-copilot',
               auto_inactive: false,
             });
