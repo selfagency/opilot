@@ -60,6 +60,25 @@ describe('formatModelName', () => {
   it('removes ollama/ prefix if present', () => {
     expect(formatModelName('ollama/llama2')).toBe('Llama2');
   });
+
+  it('strips :tag suffix', () => {
+    expect(formatModelName('granite4:latest')).toBe('Granite4');
+    expect(formatModelName('qwen3:8b')).toBe('Qwen3');
+    expect(formatModelName('codegemma:2b')).toBe('Codegemma');
+  });
+
+  it('strips namespace/ prefix for non-ollama namespaces', () => {
+    expect(formatModelName('m3cha/m3cha-coder:7b')).toBe('M3cha Coder');
+    expect(formatModelName('microsoft/phi4:latest')).toBe('Phi4');
+  });
+
+  it('strips @digest from version tag', () => {
+    expect(formatModelName('m3cha/m3cha-coder:7b@1.0.0')).toBe('M3cha Coder');
+  });
+
+  it('formats qwen2.5-coder style names', () => {
+    expect(formatModelName('qwen2.5-coder:latest')).toBe('Qwen2.5 Coder');
+  });
 });
 
 describe('OllamaChatModelProvider caching', () => {

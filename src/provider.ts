@@ -411,10 +411,19 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
  * Format model name for display
  */
 export function formatModelName(modelId: string): string {
-  return modelId
-    .replace(/^ollama\//, '')
-    .replace(/-/g, ' ')
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  return (
+    modelId
+      // strip @digest suffix (e.g. :7b@1.0.0 → :7b)
+      .replace(/@[^:/@]+$/, '')
+      // strip :tag suffix (e.g. :latest, :7b)
+      .replace(/:[^:/]+$/, '')
+      // strip namespace prefix (e.g. m3cha/m3cha-coder → m3cha-coder)
+      .replace(/^[^/]+\//, '')
+      // replace separators with spaces
+      .replace(/[-_]/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  );
 }
