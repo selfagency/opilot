@@ -23,11 +23,11 @@ export function handleConfigurationChange(
     onLogLevelChange?.();
   }
 
-  if (!event.affectsConfiguration('ollama.autoStartLogStreaming')) {
+  if (!event.affectsConfiguration('ollama.streamLogs')) {
     return;
   }
 
-  const enabled = vscode.workspace.getConfiguration('ollama').get<boolean>('autoStartLogStreaming') ?? true;
+  const enabled = vscode.workspace.getConfiguration('ollama').get<boolean>('streamLogs') ?? true;
   diagnostics.info(`[Ollama] Auto-start log streaming setting changed: ${enabled ? 'enabled' : 'disabled'}`);
   onAutoStartChange?.(enabled);
 }
@@ -55,13 +55,11 @@ export function setupChatParticipant(
   context: vscode.ExtensionContext,
   participantHandler: vscode.ChatRequestHandler,
   chatApi?: Pick<typeof vscode.chat, 'createChatParticipant'>,
-  uriApi?: Pick<typeof vscode.Uri, 'joinPath'>,
 ): vscode.Disposable {
   const chat = chatApi || vscode.chat;
-  const Uri = uriApi || vscode.Uri;
 
   const participant = chat.createChatParticipant('ollama-copilot.ollama', participantHandler);
-  participant.iconPath = Uri.joinPath(context.extensionUri, 'logo.png');
+  participant.iconPath = (vscode.Uri as any).joinPath(context.extensionUri, 'logo.png');
   return participant;
 }
 
@@ -194,7 +192,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const client = await getOllamaClient(context);
   const config = vscode.workspace.getConfiguration('ollama');
   const host = config.get<string>('host') || 'http://localhost:11434';
-  const autoStartLogStreaming = config.get<boolean>('autoStartLogStreaming') ?? true;
+  const autoStartLogStreaming = config.get<boolean>('streamLogs') ?? true;
   diagnostics.info(`[Ollama] Configured host: ${host}`);
   diagnostics.info(`[Ollama] Auto-start log streaming: ${autoStartLogStreaming ? 'enabled' : 'disabled'}`);
   diagnostics.info(`[Ollama] Diagnostics log level: ${getConfiguredLogLevel()}`);

@@ -50,7 +50,7 @@ Open VS Code Settings (`Ctrl+,` / `Cmd+,`) and search for "Ollama":
 
 - **`ollama.host`** - Ollama server address (default: `http://localhost:11434`)
 - **`ollama.contextLength`** - Context window size for models (default: `1024`)
-- **`ollama.autoStartLogStreaming`** - Automatically display Ollama server logs (default: `true`)
+- **`ollama.streamLogs`** - Stream Ollama server logs to output channel (default: `true`)
 
 To use a remote Ollama instance, update `ollama.host` to point to your remote server.
 

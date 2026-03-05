@@ -316,10 +316,10 @@
           ],
           "description": "Sort mode for library models: Alphabetical by name or by recency"
         },
-        "ollama.autoStartLogStreaming": {
+        "ollama.streamLogs": {
           "type": "boolean",
           "default": true,
-          "description": "Stream Ollama server logs to the Ollama for Copilot output channel"
+          "description": "Stream Ollama server logs to output channel"
         },
         "ollama.diagnostics.logLevel": {
           "type": "string",
