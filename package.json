@@ -81,16 +81,31 @@
         {
           "id": "ollama-explorer",
           "title": "Ollama",
-          "icon": "$(package)"
+          "icon": "ollama.png"
         }
       ]
     },
     "views": {
       "ollama-explorer": [
         {
-          "icon": "$(package)",
-          "id": "ollama-sidebar",
-          "name": "Models"
+          "icon": "$(server)",
+          "id": "ollama-local-models",
+          "name": "Local Models"
+        },
+        {
+          "icon": "$(globe)",
+          "id": "ollama-cloud-models",
+          "name": "Cloud Models"
+        },
+        {
+          "icon": "$(cloud)",
+          "id": "ollama-library-models",
+          "name": "Library"
+        },
+        {
+          "id": "ollama-model-preview",
+          "name": "Model Preview",
+          "type": "webview"
         }
       ]
     },
@@ -101,7 +116,17 @@
       },
       {
         "command": "ollama-copilot.refreshSidebar",
-        "title": "Refresh",
+        "title": "Refresh Local Models",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ollama-copilot.refreshLocalModels",
+        "title": "Refresh Local Models",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ollama-copilot.refreshLibrary",
+        "title": "Refresh Library",
         "icon": "$(refresh)"
       },
       {
@@ -118,26 +143,115 @@
         "command": "ollama-copilot.stopModel",
         "title": "Stop Model",
         "icon": "$(stop-circle)"
+      },
+      {
+        "command": "ollama-copilot.startModel",
+        "title": "Start Model",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "ollama-copilot.pullModelFromLibrary",
+        "title": "Pull Model",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ollama-copilot.openLibraryModelPage",
+        "title": "Open Model Page",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "ollama-copilot.previewLibraryModel",
+        "title": "Preview Model",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "ollama-copilot.refreshCloudModels",
+        "title": "Refresh Cloud Models",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ollama-copilot.manageCloudApiKey",
+        "title": "Ollama: Manage Cloud API Key"
+      },
+      {
+        "command": "ollama-copilot.startCloudModel",
+        "title": "Run Cloud Model",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "ollama-copilot.stopCloudModel",
+        "title": "Stop Cloud Model",
+        "icon": "$(stop-circle)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "ollama-copilot.refreshSidebar",
-          "when": "view == ollama-sidebar",
+          "command": "ollama-copilot.refreshLocalModels",
+          "when": "view == ollama-local-models",
           "group": "navigation"
+        },
+        {
+          "command": "ollama-copilot.refreshLibrary",
+          "when": "view == ollama-library-models",
+          "group": "navigation"
+        },
+        {
+          "command": "ollama-copilot.refreshCloudModels",
+          "when": "view == ollama-cloud-models",
+          "group": "navigation"
+        },
+        {
+          "command": "ollama-copilot.manageCloudApiKey",
+          "when": "view == ollama-cloud-models",
+          "group": "navigation@9"
         }
       ],
       "view/item/context": [
         {
           "command": "ollama-copilot.deleteModel",
-          "when": "view == ollama-sidebar && viewItem == model",
-          "group": "inline"
+          "when": "view == ollama-local-models && viewItem == local-stopped",
+          "group": "inline@3"
         },
         {
           "command": "ollama-copilot.stopModel",
-          "when": "view == ollama-sidebar && viewItem == running",
-          "group": "inline"
+          "when": "view == ollama-local-models && viewItem == local-running",
+          "group": "inline@2"
+        },
+        {
+          "command": "ollama-copilot.startModel",
+          "when": "view == ollama-local-models && viewItem == local-stopped",
+          "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.deleteModel",
+          "when": "view == ollama-local-models && viewItem == local-running",
+          "group": "inline@3"
+        },
+        {
+          "command": "ollama-copilot.pullModelFromLibrary",
+          "when": "view == ollama-library-models && viewItem == library-model",
+          "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.openLibraryModelPage",
+          "when": "view == ollama-library-models && viewItem == library-model",
+          "group": "inline@2"
+        },
+        {
+          "command": "ollama-copilot.previewLibraryModel",
+          "when": "view == ollama-library-models && viewItem == library-model",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ollama-copilot.startCloudModel",
+          "when": "view == ollama-cloud-models && viewItem == cloud-stopped",
+          "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.stopCloudModel",
+          "when": "view == ollama-cloud-models && viewItem == cloud-running",
+          "group": "inline@1"
         }
       ]
     },
@@ -168,6 +282,11 @@
           "type": "number",
           "default": 21600,
           "description": "Auto-refresh library catalog interval in seconds (default 6 hours)"
+        },
+        "ollama.autoStartLogStreaming": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start streaming Ollama server logs to the Ollama for Copilot output channel on extension startup"
         }
       }
     },

@@ -1,13 +1,13 @@
 import type { Ollama } from 'ollama';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('OllamaSidebarProvider', () => {
+describe('LocalModelsProvider', () => {
   let provider: any;
   let mockClient: Ollama;
-  let MockModule: any;
+  let ModelTreeItem: any;
+  let LocalModelsProvider: any;
 
   beforeEach(async () => {
-    // Mock vscode module before importing sidebar
     vi.resetModules();
     vi.doMock('vscode', () => ({
       TreeItem: class {
@@ -15,9 +15,19 @@ describe('OllamaSidebarProvider', () => {
         description?: string;
         contextValue?: string;
         collapsibleState?: number;
+        iconPath?: unknown;
 
         constructor(label: string) {
           this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      MarkdownString: class {
+        value = '';
+        isTrusted = false;
+
+        appendMarkdown(text: string) {
+          this.value += text;
         }
       },
       TreeItemCollapsibleState: {
@@ -31,7 +41,7 @@ describe('OllamaSidebarProvider', () => {
       },
       window: {
         registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
-        withProgress: vi.fn(async (_options: any, callback: any) => callback({})),
+        withProgress: vi.fn(async (_options: unknown, callback: () => Promise<void>) => callback()),
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
@@ -43,7 +53,9 @@ describe('OllamaSidebarProvider', () => {
       workspace: {
         getConfiguration: vi.fn(() => ({
           get: vi.fn((key: string) => {
-            if (key === 'refreshInterval') return 5;
+            if (key === 'localModelRefreshInterval') return 0;
+            if (key === 'libraryRefreshInterval') return 0;
+            if (key === 'debounceInterval') return 100;
             return undefined;
           }),
         })),
@@ -51,10 +63,9 @@ describe('OllamaSidebarProvider', () => {
       },
     }));
 
-    // Import after mocking
     const sidebarModule = await import('./sidebar.js');
-    const OllamaSidebarProvider = sidebarModule.OllamaSidebarProvider;
-    const ModelTreeItem = sidebarModule.ModelTreeItem;
+    LocalModelsProvider = sidebarModule.LocalModelsProvider;
+    ModelTreeItem = sidebarModule.ModelTreeItem;
 
     mockClient = {
       list: vi.fn().mockResolvedValue({
@@ -74,54 +85,55 @@ describe('OllamaSidebarProvider', () => {
         ],
       }),
       ps: vi.fn().mockResolvedValue({
-        models: [{ name: 'llama2:latest', digest: 'abc123', size: 3826087936, until: '2026-03-05T00:00:00Z' }],
+        models: [
+          {
+            name: 'llama2:latest',
+            digest: 'abc123',
+            size: 3826087936,
+            expires_at: '2099-03-05T00:00:00Z',
+          },
+        ],
       }),
-    } as any;
+      delete: vi.fn().mockResolvedValue({}),
+      generate: vi.fn().mockResolvedValue({}),
+      pull: vi.fn().mockResolvedValue({}),
+    } as unknown as Ollama;
 
-    provider = new OllamaSidebarProvider(mockClient);
-    MockModule = { OllamaSidebarProvider, ModelTreeItem };
+    provider = new LocalModelsProvider(mockClient);
   });
 
   afterEach(() => {
     vi.resetModules();
+    vi.restoreAllMocks();
   });
 
-  describe('getChildren', () => {
-    it('should return three root panes: Library, Installed, Processes', async () => {
-      const root = await provider.getChildren();
-      expect(root).toHaveLength(3);
-      expect(root[0].label).toBe('Library');
-      expect(root[1].label).toBe('Installed');
-      expect(root[2].label).toBe('Processes');
-    });
+  it('returns local models sorted with running models first', async () => {
+    const models = await provider.getChildren();
 
-    it('should return installed models for Installed pane', async () => {
-      const root = await provider.getChildren();
-      const installedPane = root[1];
-      const models = await provider.getChildren(installedPane);
-
-      expect(models.length).toBeGreaterThan(0);
-      expect(models[0].label).toContain('llama2');
-    });
-
-    it('should return running models for Processes pane', async () => {
-      const root = await provider.getChildren();
-      const processesPane = root[2];
-      const models = await provider.getChildren(processesPane);
-
-      expect(models.length).toEqual(1);
-      expect(models[0].label).toContain('llama2');
-    });
+    expect(models).toHaveLength(2);
+    expect(models[0].label).toBe('llama2:latest');
+    expect(models[0].contextValue).toBe('local-running');
+    expect(models[1].label).toBe('mistral:latest');
+    expect(models[1].contextValue).toBe('local-stopped');
   });
 
-  describe('getTreeItem', () => {
-    it('should return tree item for a model', async () => {
-      const { ModelTreeItem } = MockModule;
-      const item = new ModelTreeItem('llama2:latest', 'model', 3826087936);
-      const treeItem = provider.getTreeItem(item);
+  it('returns no children for nested element', async () => {
+    const item = new ModelTreeItem('llama2:latest', 'local-running', 3826087936, 1000);
+    const children = await provider.getChildren(item);
+    expect(children).toEqual([]);
+  });
 
-      expect(treeItem.label).toBe('llama2:latest');
-      expect(treeItem.description).toContain('3.6');
-    });
+  it('formats running model description with size and duration', () => {
+    const item = new ModelTreeItem('llama2:latest', 'local-running', 3826087936, 90_000);
+    expect(item.description).toContain('GB');
+    expect(item.description).toContain('1m');
+  });
+
+  it('returns tree item unchanged', () => {
+    const item = new ModelTreeItem('mistral:latest', 'local-stopped', 4109738016);
+    const treeItem = provider.getTreeItem(item);
+
+    expect(treeItem.label).toBe('mistral:latest');
+    expect(treeItem.description).toContain('GB');
   });
 });
