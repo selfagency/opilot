@@ -836,10 +836,10 @@ describe('activate', () => {
     const ext = await import('./extension.js');
     await ext.activate({ subscriptions: [], extensionUri: {} } as any);
 
-    // Simulate autoStartLogStreaming configuration change
+    // Simulate streamLogs configuration change
     if (configChangeCallback) {
       configChangeCallback({
-        affectsConfiguration: (key: string) => key === 'ollama.autoStartLogStreaming',
+        affectsConfiguration: (key: string) => key === 'ollama.streamLogs',
       });
     }
 
@@ -958,7 +958,7 @@ describe('handleConfigurationChange', () => {
     const event = {
       affectsConfiguration: vi.fn((key: string) => {
         if (key === 'ollama.diagnostics.logLevel') return false;
-        if (key === 'ollama.autoStartLogStreaming') return true;
+        if (key === 'ollama.streamLogs') return true;
         return false;
       }),
     };
@@ -979,7 +979,7 @@ describe('handleConfigurationChange', () => {
     const event = {
       affectsConfiguration: vi.fn((key: string) => {
         if (key === 'ollama.diagnostics.logLevel') return false;
-        if (key === 'ollama.autoStartLogStreaming') return false;
+        if (key === 'ollama.streamLogs') return false;
         return false;
       }),
     };
@@ -998,7 +998,7 @@ describe('handleConfigurationChange', () => {
     const event = {
       affectsConfiguration: vi.fn((key: string) => {
         if (key === 'ollama.diagnostics.logLevel') return true;
-        if (key === 'ollama.autoStartLogStreaming') return true;
+        if (key === 'ollama.streamLogs') return true;
         return false;
       }),
     };
