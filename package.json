@@ -414,9 +414,15 @@
     "languages": [
       {
         "id": "modelfile",
-        "aliases": ["Modelfile"],
-        "extensions": [".modelfile"],
-        "filenames": ["Modelfile"],
+        "aliases": [
+          "Modelfile"
+        ],
+        "extensions": [
+          ".modelfile"
+        ],
+        "filenames": [
+          "Modelfile"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
