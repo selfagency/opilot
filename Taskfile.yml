@@ -54,6 +54,5 @@ tasks:
       - task: check-formatting
       - task: unit-tests
       - task: extension-tests
-      - task: build
-      - pnpm run release {{.CLI_ARGS}}
+      - task: release
     silent: false
