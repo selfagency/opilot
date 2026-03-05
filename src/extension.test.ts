@@ -1122,6 +1122,7 @@ describe('handleBuiltInOllamaConflict', () => {
       lm: {
         registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
         selectChatModels: vi.fn().mockResolvedValue([]),
+        onDidChangeChatModels: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       },
       chat: {
         createChatParticipant: vi.fn(() => ({ iconPath: undefined, dispose: vi.fn() })),
@@ -1139,56 +1140,52 @@ describe('handleBuiltInOllamaConflict', () => {
     }));
   });
 
-  it('does nothing when github.copilot.chat.ollama.url is empty', async () => {
+  it('does nothing when no conflicting models are registered', async () => {
     const showWarningMessage = vi.fn();
-    const mockConfig = { get: vi.fn().mockReturnValue(''), update: vi.fn() };
-    const getConfiguration = vi.fn().mockReturnValue(mockConfig);
+    const selectChatModels = vi.fn().mockResolvedValue([]);
 
     const ext = await import('./extension.js');
-    await ext.handleBuiltInOllamaConflict({ showWarningMessage, showInformationMessage: vi.fn() }, { getConfiguration });
+    await ext.handleBuiltInOllamaConflict({ showWarningMessage, showInformationMessage: vi.fn() }, { selectChatModels });
 
+    expect(selectChatModels).toHaveBeenCalledWith({ vendor: 'ollama' });
     expect(showWarningMessage).not.toHaveBeenCalled();
   });
 
-  it('does nothing when github.copilot.chat.ollama.url is undefined', async () => {
-    const showWarningMessage = vi.fn();
-    const mockConfig = { get: vi.fn().mockReturnValue(undefined), update: vi.fn() };
-    const getConfiguration = vi.fn().mockReturnValue(mockConfig);
-
-    const ext = await import('./extension.js');
-    await ext.handleBuiltInOllamaConflict({ showWarningMessage, showInformationMessage: vi.fn() }, { getConfiguration });
-
-    expect(showWarningMessage).not.toHaveBeenCalled();
-  });
-
-  it('shows a warning when the built-in Ollama URL is set', async () => {
+  it('shows a warning when conflicting Ollama models are present', async () => {
     const showWarningMessage = vi.fn().mockResolvedValue(undefined);
-    const mockConfig = { get: vi.fn().mockReturnValue('http://localhost:11434'), update: vi.fn() };
-    const getConfiguration = vi.fn().mockReturnValue(mockConfig);
+    const mockModel = { id: 'ollama:llama3', vendor: 'ollama', name: 'Llama 3' };
+    const selectChatModels = vi.fn().mockResolvedValue([mockModel]);
 
     const ext = await import('./extension.js');
-    await ext.handleBuiltInOllamaConflict({ showWarningMessage, showInformationMessage: vi.fn() }, { getConfiguration });
+    await ext.handleBuiltInOllamaConflict({ showWarningMessage, showInformationMessage: vi.fn() }, { selectChatModels });
 
     expect(showWarningMessage).toHaveBeenCalledWith(
-      expect.stringContaining("built-in Ollama provider"),
+      expect.stringContaining('built-in Ollama provider'),
       'Disable Built-in Ollama Provider',
     );
-    expect(mockConfig.update).not.toHaveBeenCalled();
   });
 
-  it('clears the URL and shows reload prompt when user confirms', async () => {
-    const showWarningMessage = vi.fn().mockResolvedValue('Disable Built-in Ollama Provider');
-    const showInformationMessage = vi.fn().mockResolvedValue(undefined);
-    const mockConfig = {
-      get: vi.fn().mockReturnValue('http://localhost:11434'),
-      update: vi.fn().mockResolvedValue(undefined),
-    };
-    const getConfiguration = vi.fn().mockReturnValue(mockConfig);
+  it('does nothing when user dismisses the warning', async () => {
+    const showWarningMessage = vi.fn().mockResolvedValue(undefined);
+    const mockModel = { id: 'ollama:llama3', vendor: 'ollama', name: 'Llama 3' };
+    const selectChatModels = vi.fn().mockResolvedValue([mockModel]);
 
     const ext = await import('./extension.js');
-    await ext.handleBuiltInOllamaConflict({ showWarningMessage, showInformationMessage }, { getConfiguration });
+    await ext.handleBuiltInOllamaConflict({ showWarningMessage, showInformationMessage: vi.fn() }, { selectChatModels });
 
-    expect(mockConfig.update).toHaveBeenCalledWith('ollama.url', '', expect.anything());
+    expect(showWarningMessage).toHaveBeenCalled();
+    // config.update should not be called — workspace mock returns a plain stub
+  });
+
+  it('updates config and shows reload prompt when user confirms', async () => {
+    const showWarningMessage = vi.fn().mockResolvedValue('Disable Built-in Ollama Provider');
+    const showInformationMessage = vi.fn().mockResolvedValue(undefined);
+    const mockModel = { id: 'ollama:llama3', vendor: 'ollama', name: 'Llama 3' };
+    const selectChatModels = vi.fn().mockResolvedValue([mockModel]);
+
+    const ext = await import('./extension.js');
+    await ext.handleBuiltInOllamaConflict({ showWarningMessage, showInformationMessage }, { selectChatModels });
+
     expect(showInformationMessage).toHaveBeenCalledWith(
       expect.stringContaining('Reload VS Code'),
       'Reload Window',

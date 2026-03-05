@@ -66,19 +66,17 @@ export function setupChatParticipant(
 
 /**
  * Detect and offer to disable Copilot's conflicting built-in Ollama provider.
- * That provider registers under vendor 'ollama' and is active whenever
- * github.copilot.chat.ollama.url is non-empty.
+ * Detects by querying the LM API for models registered under vendor 'ollama'.
  */
 export async function handleBuiltInOllamaConflict(
   windowApi?: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage'>,
-  workspaceApi?: Pick<typeof vscode.workspace, 'getConfiguration'>,
+  lmApi?: Pick<typeof vscode.lm, 'selectChatModels'>,
 ): Promise<void> {
   const win = windowApi ?? vscode.window;
-  const ws = workspaceApi ?? vscode.workspace;
+  const lm = lmApi ?? vscode.lm;
 
-  const config = ws.getConfiguration('github.copilot.chat');
-  const url = config.get<string>('ollama.url');
-  if (!url) return;
+  const conflictModels = await lm.selectChatModels({ vendor: 'ollama' });
+  if (!conflictModels.length) return;
 
   const selection = await win.showWarningMessage(
     "Copilot's built-in Ollama provider is active and will show duplicate models alongside this extension. Disable it?",
@@ -87,11 +85,9 @@ export async function handleBuiltInOllamaConflict(
 
   if (selection !== 'Disable Built-in Ollama Provider') return;
 
-  await (config as vscode.WorkspaceConfiguration).update(
-    'ollama.url',
-    '',
-    vscode.ConfigurationTarget.Global,
-  );
+  await vscode.workspace
+    .getConfiguration('github.copilot.chat')
+    .update('ollama.url', undefined, vscode.ConfigurationTarget.Global);
 
   await win.showInformationMessage(
     "Copilot's built-in Ollama provider has been disabled. Reload VS Code to apply.",
@@ -284,6 +280,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Detect and offer to disable Copilot's built-in Ollama provider (non-blocking)
   void handleBuiltInOllamaConflict();
+  if (vscode.lm.onDidChangeChatModels) {
+    context.subscriptions.push(
+      vscode.lm.onDidChangeChatModels(() => { void handleBuiltInOllamaConflict(); }),
+    );
+  }
 
   // Test connection to Ollama server on startup (non-blocking)
   void (async () => {

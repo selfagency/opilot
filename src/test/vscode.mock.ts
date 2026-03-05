@@ -112,6 +112,7 @@ export const window = {
 export const lm = {
   registerLanguageModelChatProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
   selectChatModels: vi.fn().mockResolvedValue([]),
+  onDidChangeChatModels: vi.fn().mockReturnValue({ dispose: vi.fn() }),
 };
 
 export const commands = {
