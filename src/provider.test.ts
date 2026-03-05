@@ -61,23 +61,27 @@ describe('formatModelName', () => {
     expect(formatModelName('ollama/llama2')).toBe('Llama2');
   });
 
-  it('strips :tag suffix', () => {
-    expect(formatModelName('granite4:latest')).toBe('Granite4');
-    expect(formatModelName('qwen3:8b')).toBe('Qwen3');
-    expect(formatModelName('codegemma:2b')).toBe('Codegemma');
+  it('keeps :tag suffix', () => {
+    expect(formatModelName('granite4:latest')).toBe('Granite4:latest');
+    expect(formatModelName('qwen3:8b')).toBe('Qwen3:8b');
+    expect(formatModelName('codegemma:2b')).toBe('Codegemma:2b');
   });
 
   it('strips namespace/ prefix for non-ollama namespaces', () => {
-    expect(formatModelName('m3cha/m3cha-coder:7b')).toBe('M3cha Coder');
-    expect(formatModelName('microsoft/phi4:latest')).toBe('Phi4');
+    expect(formatModelName('m3cha/m3cha-coder:7b')).toBe('M3cha Coder:7b');
+    expect(formatModelName('microsoft/phi4:latest')).toBe('Phi4:latest');
   });
 
-  it('strips @digest from version tag', () => {
-    expect(formatModelName('m3cha/m3cha-coder:7b@1.0.0')).toBe('M3cha Coder');
+  it('strips @digest but keeps :tag', () => {
+    expect(formatModelName('m3cha/m3cha-coder:7b@1.0.0')).toBe('M3cha Coder:7b');
   });
 
   it('formats qwen2.5-coder style names', () => {
-    expect(formatModelName('qwen2.5-coder:latest')).toBe('Qwen2.5 Coder');
+    expect(formatModelName('qwen2.5-coder:latest')).toBe('Qwen2.5 Coder:latest');
+  });
+
+  it('formats names with no tag', () => {
+    expect(formatModelName('cogito-v1-preview-llama')).toBe('Cogito V1 Preview Llama');
   });
 });
 

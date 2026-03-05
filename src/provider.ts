@@ -411,19 +411,20 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
  * Format model name for display
  */
 export function formatModelName(modelId: string): string {
-  return (
-    modelId
-      // strip @digest suffix (e.g. :7b@1.0.0 → :7b)
-      .replace(/@[^:/@]+$/, '')
-      // strip :tag suffix (e.g. :latest, :7b)
-      .replace(/:[^:/]+$/, '')
-      // strip namespace prefix (e.g. m3cha/m3cha-coder → m3cha-coder)
-      .replace(/^[^/]+\//, '')
-      // replace separators with spaces
-      .replace(/[-_]/g, ' ')
-      .split(' ')
-      .filter(Boolean)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-  );
+  // Strip @digest suffix (e.g. :7b@1.0.0 → :7b)
+  const withoutDigest = modelId.replace(/@[^:/]+$/, '');
+  // Strip namespace/ prefix (e.g. m3cha/m3cha-coder → m3cha-coder)
+  const withoutNamespace = withoutDigest.replace(/^[^/]+\//, '');
+  // Split name and tag on the first `:` so we can format them independently
+  const colonIdx = withoutNamespace.indexOf(':');
+  const namePart = colonIdx === -1 ? withoutNamespace : withoutNamespace.slice(0, colonIdx);
+  const tagPart = colonIdx === -1 ? '' : withoutNamespace.slice(colonIdx); // includes the `:` prefix
+  // Capitalise each word in the name, replacing hyphens/underscores with spaces
+  const formattedName = namePart
+    .replace(/[-_]/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+  return formattedName + tagPart;
 }
