@@ -476,4 +476,53 @@ describe('OllamaChatModelProvider chat response', () => {
 
     expect(progress.report).toHaveBeenCalledWith(expect.objectContaining({ name: 'get_weather' }));
   });
+
+  it('streams text chunks immediately per chunk rather than batching', async () => {
+    const chat = vi.fn().mockResolvedValue(
+      (async function* () {
+        yield { message: { content: 'Hello' } };
+        yield { message: { content: ', ' } };
+        yield { message: { content: 'world!' } };
+      })(),
+    );
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { chat, list: vi.fn(), show: vi.fn() } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+
+    const model = {
+      id: 'test-model',
+      name: 'Test',
+      family: 'ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: false },
+    };
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('hi')],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      model,
+      [message as any],
+      { tools: [], toolMode: 'auto' } as any,
+      progress as any,
+      token as any,
+    );
+
+    // Each chunk must be reported individually, not batched
+    expect(progress.report).toHaveBeenCalledTimes(3);
+    expect(progress.report).toHaveBeenNthCalledWith(1, expect.objectContaining({ value: 'Hello' }));
+    expect(progress.report).toHaveBeenNthCalledWith(2, expect.objectContaining({ value: ', ' }));
+    expect(progress.report).toHaveBeenNthCalledWith(3, expect.objectContaining({ value: 'world!' }));
+  });
 });

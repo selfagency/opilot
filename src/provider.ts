@@ -187,37 +187,28 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       }
 
       // Stream chat response
-      const response = this.client.chat({
+      const response = await this.client.chat({
         model: model.id,
         messages: ollamaMessages,
         stream: true,
         tools,
       });
 
-      let currentText = '';
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for await (const chunk of response as any) {
+      for await (const chunk of response) {
         if (token.isCancellationRequested) {
           break;
         }
 
+        // Stream text chunks immediately as they arrive
         if (chunk.message?.content) {
-          currentText += chunk.message.content;
+          progress.report(new LanguageModelTextPart(chunk.message.content));
         }
 
         // Handle tool calls
         if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
-          // Flush accumulated text
-          if (currentText.trim()) {
-            progress.report(new LanguageModelTextPart(currentText));
-            currentText = '';
-          }
-
           for (const toolCall of chunk.message.tool_calls) {
-            // Map tool call ID and emit tool call
             const vsCodeId = this.generateToolCallId();
-            this.mapToolCallId(vsCodeId, toolCall.id || '');
+            this.mapToolCallId(vsCodeId, vsCodeId);
 
             progress.report(
               new LanguageModelToolCallPart(
@@ -228,11 +219,6 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             );
           }
         }
-      }
-
-      // Flush any remaining text
-      if (currentText.trim()) {
-        progress.report(new LanguageModelTextPart(currentText));
       }
     } catch (error) {
       this.outputChannel.exception('[Ollama] Chat response failed', error);
