@@ -63,11 +63,15 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       return this.modelListRefreshPromise;
     }
 
-    this.modelListRefreshPromise = this.refreshModelList();
+    const promise = this.refreshModelList();
+    this.modelListRefreshPromise = promise;
     try {
-      return await this.modelListRefreshPromise;
+      return await promise;
     } finally {
-      this.modelListRefreshPromise = undefined;
+      // Only clear if no newer refresh has replaced this promise in the meantime.
+      if (this.modelListRefreshPromise === promise) {
+        this.modelListRefreshPromise = undefined;
+      }
     }
   }
 

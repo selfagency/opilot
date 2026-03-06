@@ -67,6 +67,9 @@ export class ModelTreeItem extends TreeItem {
 
   private formatSize(bytes?: number): string {
     if (!bytes) return '';
+    if (bytes < 1024 ** 2) {
+      return Math.round(bytes / 1024) + ' KB';
+    }
     if (bytes < 1024 ** 3) {
       return Math.round(bytes / 1024 ** 2) + ' MB';
     }
@@ -456,6 +459,9 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   }
 }
 
+/** Raw scraped metadata for a single library model variant. */
+type VariantRaw = { name: string; size?: number };
+
 /**
  * Remote library models view provider
  */
@@ -470,7 +476,8 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
   private refreshIntervals: NodeJS.Timeout[] = [];
   private loadPromise: Promise<string[]> | null = null;
   private sortMode: LibrarySortMode;
-  private variantsCache = new Map<string, ModelTreeItem[]>();
+  /** Caches raw variant metadata (names + sizes) only — not materialized tree items. */
+  private variantsCache = new Map<string, VariantRaw[]>();
 
   constructor(
     private getCloudModelNames: () => Promise<Set<string>>,
@@ -487,13 +494,23 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
 
   async getChildren(element?: ModelTreeItem): Promise<ModelTreeItem[]> {
     if (element?.type === 'library-model') {
-      const cached = this.variantsCache.get(element.label);
-      if (cached) {
-        return cached;
+      let raw = this.variantsCache.get(element.label);
+      if (!raw) {
+        const fetched = await this.fetchModelVariants(element.label);
+        if (fetched === null) {
+          return [makeStatusItem('Failed to load variants')];
+        }
+        if (fetched.length === 0) {
+          return [makeStatusItem('No variants found')];
+        }
+        this.variantsCache.set(element.label, fetched);
+        raw = fetched;
       }
-      const variants = await this.fetchModelVariants(element.label, this.getLocalModelNames());
-      this.variantsCache.set(element.label, variants);
-      return variants;
+      if (raw.length === 0) {
+        return [makeStatusItem('No variants found')];
+      }
+      // Re-materialize on every call so check icons reflect current local state.
+      return this.materializeVariants(raw, this.getLocalModelNames());
     }
 
     if (element) {
@@ -510,6 +527,28 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     this.variantsCache.clear();
     this.cacheGeneration++;
     this.treeChangeEmitter.fire(null);
+  }
+
+  /**
+   * Notify VS Code that variant check-icons may be stale (e.g. after a local
+   * model is pulled or deleted). Raw variant metadata is preserved; items are
+   * re-materialized from the current local model set on the next getChildren call.
+   */
+  refreshVariantStates(): void {
+    this.treeChangeEmitter.fire(null);
+  }
+
+  private materializeVariants(raw: VariantRaw[], localNames: Set<string>): ModelTreeItem[] {
+    return raw.map(({ name, size }) => {
+      const isDownloaded = localNames.has(name);
+      const item = new ModelTreeItem(
+        name,
+        isDownloaded ? 'library-model-downloaded-variant' : 'library-model-variant',
+        size,
+      );
+      item.tooltip = name;
+      return item;
+    });
   }
 
   getSortMode(): LibrarySortMode {
@@ -662,7 +701,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     return names;
   }
 
-  private async fetchModelVariants(modelName: string, localNames: Set<string>): Promise<ModelTreeItem[]> {
+  private async fetchModelVariants(modelName: string): Promise<VariantRaw[] | null> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
     const url = getLibraryModelUrl(modelName);
@@ -680,7 +719,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       // which each contain a size string like "1.3GB" or "780MB".
       const sizeMap = new Map<string, number>();
       const blockPattern = new RegExp(
-        `href="/library/(${escapedName}:[^"?#]+)" class="sm:hidden[^>]+>([\\s\\S]*?)</a>`,
+        `href="/library/(${escapedName}:[^"?#]+)"[^>]*class="[^"]*sm:hidden[^"]*"[^>]*>([\\s\\S]*?)</a>`,
         'g',
       );
       for (const m of html.matchAll(blockPattern)) {
@@ -701,22 +740,10 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         ...new Set(matches.map(m => (typeof m[1] === 'string' ? decodeURIComponent(m[1]).trim() : '')).filter(Boolean)),
       ];
 
-      if (variantNames.length === 0) {
-        return [makeStatusItem('No variants found')];
-      }
-
-      return variantNames.map(name => {
-        const isDownloaded = localNames.has(name);
-        const item = new ModelTreeItem(
-          name,
-          isDownloaded ? 'library-model-downloaded-variant' : 'library-model-variant',
-          sizeMap.get(name),
-        );
-        item.tooltip = name;
-        return item;
-      });
-    } catch {
-      return [makeStatusItem('Failed to load variants')];
+      return variantNames.map(name => ({ name, size: sizeMap.get(name) }));
+    } catch (error) {
+      this.logChannel?.exception('[Ollama] Failed to fetch model variants', error);
+      return null;
     } finally {
       clearTimeout(timeout);
     }
@@ -1167,9 +1194,13 @@ export function registerSidebar(
   logChannel?: DiagnosticsLogger,
   onLocalModelsChanged?: () => void,
 ): void {
-  const localProvider = new LocalModelsProvider(client, logChannel, onLocalModelsChanged);
+  let libraryProvider: LibraryModelsProvider | undefined;
+  const localProvider = new LocalModelsProvider(client, logChannel, () => {
+    onLocalModelsChanged?.();
+    libraryProvider?.refreshVariantStates();
+  });
   const cloudProvider = new CloudModelsProvider(context, logChannel);
-  const libraryProvider = new LibraryModelsProvider(
+  libraryProvider = new LibraryModelsProvider(
     () => cloudProvider.getCloudModelNamesForFilter(),
     logChannel,
     () => localProvider.getCachedLocalModelNames(),

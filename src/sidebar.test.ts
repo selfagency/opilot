@@ -734,6 +734,81 @@ describe('LocalModelsProvider', () => {
     libraryProvider.dispose();
   });
 
+  it('library-model-variant shows KB size in description', () => {
+    const bytes = Math.round(780 * 1024);
+    const item = new ModelTreeItem('llama3.2:1b', 'library-model-variant', bytes);
+    expect(item.description).toBe('780 KB');
+  });
+
+  it('fetchModelVariants extracts size when sm:hidden is not first class', async () => {
+    const variantHtml = [
+      '<a href="/library/llama3.2:1b" class="flex sm:hidden flex-col">',
+      '  <p>1.3GB</p>',
+      '</a>',
+    ].join('\n');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === 'https://ollama.com/library') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+        }
+        if (url === 'https://ollama.com/library/llama3.2') {
+          return Promise.resolve({ ok: true, text: async () => variantHtml });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      }),
+    );
+
+    const libraryProvider = new LibraryModelsProvider(async () => new Set<string>(), undefined);
+    const parents = await libraryProvider.getChildren();
+    const parent = parents.find((item: any) => item.label === 'llama3.2');
+    const children = await libraryProvider.getChildren(parent);
+
+    const item1b = children.find((c: any) => c.label === 'llama3.2:1b');
+    expect(item1b?.description).toBe('1.3 GB');
+    libraryProvider.dispose();
+  });
+
+  it('variant checkmarks reflect updated local state without re-fetching', async () => {
+    let localModels = new Set<string>();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === 'https://ollama.com/library') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+        }
+        if (url === 'https://ollama.com/library/llama3.2') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2:1b"></a>' });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      }),
+    );
+
+    const libraryProvider = new LibraryModelsProvider(
+      async () => new Set<string>(),
+      undefined,
+      () => localModels,
+    );
+    const parents = await libraryProvider.getChildren();
+    const parent = parents.find((item: any) => item.label === 'llama3.2');
+
+    // First call: model not yet downloaded
+    const childrenBefore = await libraryProvider.getChildren(parent);
+    expect(childrenBefore.find((c: any) => c.label === 'llama3.2:1b')?.contextValue).toBe('library-model-variant');
+
+    // Simulate download
+    localModels = new Set(['llama3.2:1b']);
+
+    // Second call uses cached raw metadata but re-materializes with updated local state
+    const childrenAfter = await libraryProvider.getChildren(parent);
+    expect(childrenAfter.find((c: any) => c.label === 'llama3.2:1b')?.contextValue).toBe(
+      'library-model-downloaded-variant',
+    );
+    libraryProvider.dispose();
+  });
+
   it('getCachedLocalModelNames returns set of local model names after fetch', async () => {
     const localProvider = new LocalModelsProvider(
       {
