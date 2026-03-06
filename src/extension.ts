@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { promises as fsPromises } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import * as vscode from 'vscode';
 import { getOllamaClient, testConnection } from './client.js';
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
@@ -21,6 +22,60 @@ function isSelectedAction(selection: unknown, actionLabel: string): boolean {
   }
 
   return false;
+}
+
+async function removeBuiltInOllamaFromChatLanguageModels(
+  context: Pick<vscode.ExtensionContext, 'globalStorageUri'>,
+): Promise<boolean> {
+  const candidatePaths = new Set<string>();
+
+  // globalStorageUri: .../profiles/<profile-id>/globalStorage/<extension-id>
+  // or .../User/globalStorage/<extension-id>
+  const profileDir = dirname(dirname(context.globalStorageUri.fsPath));
+  candidatePaths.add(join(profileDir, 'chatLanguageModels.json'));
+
+  // Standard VS Code user folder on macOS where profile data lives.
+  const userDir = join(homedir(), 'Library', 'Application Support', 'Code', 'User');
+  candidatePaths.add(join(userDir, 'chatLanguageModels.json'));
+
+  // Profile-scoped files: User/profiles/<id>/chatLanguageModels.json
+  try {
+    const profilesDir = join(userDir, 'profiles');
+    const entries = await fsPromises.readdir(profilesDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        candidatePaths.add(join(profilesDir, entry.name, 'chatLanguageModels.json'));
+      }
+    }
+  } catch {
+    // profiles directory may not exist
+  }
+
+  let changed = false;
+  for (const modelsPath of candidatePaths) {
+    try {
+      const raw = await fsPromises.readFile(modelsPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        continue;
+      }
+
+      const filtered = parsed.filter(
+        item => !(item && typeof item === 'object' && (item as Record<string, unknown>).vendor === 'ollama'),
+      );
+
+      if (filtered.length === parsed.length) {
+        continue;
+      }
+
+      await fsPromises.writeFile(modelsPath, `${JSON.stringify(filtered, null, 2)}\n`, 'utf8');
+      changed = true;
+    } catch {
+      // file missing/unreadable/unwritable for this candidate, continue trying others
+    }
+  }
+
+  return changed;
 }
 
 /**
@@ -82,10 +137,11 @@ export function setupChatParticipant(
  * Detects via LM models registered under vendor 'ollama'.
  */
 export async function handleBuiltInOllamaConflict(
-  windowApi?: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage'>,
+  windowApi?: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage' | 'showErrorMessage'>,
   workspaceApi?: Pick<typeof vscode.workspace, 'getConfiguration'>,
   lmApi?: Pick<typeof vscode.lm, 'selectChatModels'>,
   commandsApi?: Pick<typeof vscode.commands, 'executeCommand'>,
+  context?: Pick<vscode.ExtensionContext, 'globalStorageUri'>,
 ): Promise<void> {
   if (builtInOllamaConflictPromptInProgress) {
     return;
@@ -110,15 +166,37 @@ export async function handleBuiltInOllamaConflict(
 
     // Use empty string to disable the built-in provider explicitly.
     // Using undefined can fall back to a non-empty default and keep it enabled.
+    let disabled = false;
     try {
       await (ws.getConfiguration('github.copilot.chat') as vscode.WorkspaceConfiguration).update(
         'ollama.url',
         '',
         vscode.ConfigurationTarget.Global,
       );
+      disabled = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await vscode.window.showErrorMessage(`Failed to disable Copilot's built-in Ollama provider: ${message}`);
+
+      // Some debug hosts don't register github.copilot.chat.ollama.url as a writable setting.
+      // Fall back to profile-scoped chatLanguageModels.json when available.
+      if (message.includes('not a registered configuration') && context) {
+        try {
+          disabled = await removeBuiltInOllamaFromChatLanguageModels(context);
+        } catch (fallbackError) {
+          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          await win.showErrorMessage(`Failed to disable Copilot's built-in Ollama provider: ${fallbackMessage}`);
+          return;
+        }
+      } else {
+        await win.showErrorMessage(`Failed to disable Copilot's built-in Ollama provider: ${message}`);
+        return;
+      }
+    }
+
+    if (!disabled) {
+      await win.showErrorMessage(
+        'Built-in Ollama provider appears to still be enabled. Please disable it in Chat Language Models settings.',
+      );
       return;
     }
 
@@ -319,11 +397,11 @@ export async function activate(context: vscode.ExtensionContext) {
   registerModelfileManager(context, client, diagnostics);
 
   // Detect and offer to disable Copilot's built-in Ollama provider (non-blocking)
-  void handleBuiltInOllamaConflict();
+  void handleBuiltInOllamaConflict(undefined, undefined, undefined, undefined, context);
   const conflictCheckDelaysMs = [1_500, 5_000, 10_000];
   const conflictCheckTimers = conflictCheckDelaysMs.map(delay =>
     setTimeout(() => {
-      void handleBuiltInOllamaConflict();
+      void handleBuiltInOllamaConflict(undefined, undefined, undefined, undefined, context);
     }, delay),
   );
   context.subscriptions.push({
