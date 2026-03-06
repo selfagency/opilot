@@ -5,7 +5,7 @@ status: in-progress
 type: fix
 priority: low
 created_at: 2026-03-05T22:03:25Z
-updated_at: 2026-03-06T06:03:53Z
+updated_at: 2026-03-06T06:04:11Z
 ---
 
 ## Todo
@@ -15,4 +15,4 @@ updated_at: 2026-03-06T06:03:53Z
 - [x] Add `"icon": "$(key)"` to `manageAuthToken` command in package.json
 - [x] Add `manageAuthToken` to `ollama-local-models` view/title header (navigation@9)
 - [x] Run tests green
-- [ ] Commit and push
+- [x] Commit and push
