@@ -21,6 +21,7 @@
 - 🧠 **All Ollama Models** - Download and run any model from the [Ollama Library](https://ollama.ai/library), including Cloud models (Requires API key)
 - 🛠️ **Model Management** - Pull, manage, and delete models directly from the sidebar
 - 🏠 **Local Execution** - Models run on your machine with full privacy—no data leaves your computer
+- 🤖 **Code Completions** - Use local models to provide code completions in the editor
 - 🔧 **Tool Calling** - Function calling support for agentic workflows with compatible models
 - 🖼️ **Vision Support** - Image input for models with vision capabilities
 - ⚡ **Streaming** - Real-time response streaming for faster interactions
@@ -49,6 +50,8 @@ Open VS Code Settings (`Ctrl+,` / `Cmd+,`) and search for "Ollama":
 - **`ollama.host`** - Ollama server address (default: `http://localhost:11434`)
 - **`ollama.contextLength`** - Context window size for models (default: `1024`)
 - **`ollama.streamLogs`** - Stream Ollama server logs to output channel (default: `true`)
+- **`ollama.completionModel`** - Model used for inline code completions (e.g. `qwen2.5-coder:1.5b`). Leave empty to disable.
+- **`ollama.enableInlineCompletions`** - Enable or disable inline code completions (default: `true`)
 
 To use a remote Ollama instance, update `ollama.host` to point to your remote server.
 
@@ -73,6 +76,16 @@ Type `@ollama` in any Copilot Chat input to direct the conversation to your loca
 
 The participant is sticky — once invoked, it stays active for the thread.
 
+### Inline Code Completions
+
+Set `ollama.completionModel` to a locally-installed model to get inline code completions as you type. Smaller, fast models work best:
+
+- `qwen2.5-coder:1.5b`
+- `deepseek-coder:1.3b`
+- `starcoder2:3b`
+
+Completions use fill-in-the-middle (FIM) when the model supports it, and can be toggled with `ollama.enableInlineCompletions`.
+
 ### Sidebar: Model Management
 
 The Ollama sidebar provides three sections:
@@ -81,19 +94,14 @@ The Ollama sidebar provides three sections:
 
 - View installed models on your system
 - Right-click to run, stop, or delete models
-- See memory usage of running models
+- Monitor active models in real-time
+- View context window and memory usage
 
 #### Library Models
 
-- Browse 100+ pre-configured models from [ollama.ai/library](https://ollama.ai/library)
+- Browse 200+ pre-configured models from [ollama.ai/library](https://ollama.ai/library)
 - Sort by recency or name
 - Click to view details, preview capabilities, or pull to local system
-
-#### Running Models
-
-- Monitor active models in real-time
-- View context window and memory usage
-- Stop models when done
 
 ### Modelfile Manager
 

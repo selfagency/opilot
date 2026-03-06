@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import type { ChatResponse, Ollama } from 'ollama';
 import * as vscode from 'vscode';
 import { getOllamaClient, testConnection } from './client.js';
+import { OllamaInlineCompletionProvider } from './completions.js';
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
 import { registerModelfileManager } from './modelfiles.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
@@ -512,6 +513,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register modelfile manager
   registerModelfileManager(context, client, diagnostics);
+
+  // Register inline completion provider
+  const completionProvider = new OllamaInlineCompletionProvider(client, diagnostics);
+  context.subscriptions.push(
+    vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, completionProvider),
+  );
 
   // Test connection to Ollama server on startup (non-blocking)
   void (async () => {
