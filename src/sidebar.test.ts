@@ -24,7 +24,13 @@ describe('LocalModelsProvider', () => {
           this.label = label;
         }
       },
-      ThemeIcon: class {},
+      ThemeIcon: class {
+        id: string;
+
+        constructor(id: string) {
+          this.id = id;
+        }
+      },
       TreeItemCollapsibleState: {
         None: 0,
         Collapsed: 1,
@@ -40,6 +46,7 @@ describe('LocalModelsProvider', () => {
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn().mockResolvedValue('Delete'),
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
@@ -149,6 +156,22 @@ describe('LocalModelsProvider', () => {
     const item = new ModelTreeItem('llama2:latest', 'local-running', 3826087936, 90_000);
     expect(item.description).toContain('GB');
     expect(item.description).toContain('1m');
+  });
+
+  it('uses play-circle icon for running models', () => {
+    const localRunning = new ModelTreeItem('llama2:latest', 'local-running', 3826087936, 90_000);
+    const cloudRunning = new ModelTreeItem('cloud/llama2:latest', 'cloud-running', undefined, 90_000);
+
+    expect((localRunning.iconPath as { id: string }).id).toBe('play-circle');
+    expect((cloudRunning.iconPath as { id: string }).id).toBe('play-circle');
+  });
+
+  it('uses stop-circle icon for stopped models', () => {
+    const localStopped = new ModelTreeItem('mistral:latest', 'local-stopped', 4109738016);
+    const cloudStopped = new ModelTreeItem('cloud/mistral:latest', 'cloud-stopped');
+
+    expect((localStopped.iconPath as { id: string }).id).toBe('stop-circle');
+    expect((cloudStopped.iconPath as { id: string }).id).toBe('stop-circle');
   });
 
   it('returns tree item unchanged', () => {
@@ -565,6 +588,247 @@ describe('LocalModelsProvider', () => {
     // After dispose, provider should be cleaned up
     expect(libraryProvider).toBeDefined();
   });
+
+  it('library-model item has Collapsed collapsible state', () => {
+    const item = new ModelTreeItem('llama3.2', 'library-model');
+    expect(item.collapsibleState).toBe(1); // TreeItemCollapsibleState.Collapsed
+  });
+
+  it('library-model-variant shows GB size in description', () => {
+    const bytes = Math.round(1.3 * 1024 ** 3);
+    const item = new ModelTreeItem('llama3.2:1b', 'library-model-variant', bytes);
+    expect(item.description).toBe('1.3 GB');
+  });
+
+  it('library-model-downloaded-variant shows MB size in description', () => {
+    const bytes = Math.round(780 * 1024 ** 2);
+    const item = new ModelTreeItem('llama3.2:1b', 'library-model-downloaded-variant', bytes);
+    expect(item.description).toBe('780 MB');
+  });
+
+  it('library variant without size has no description', () => {
+    const item = new ModelTreeItem('llama3.2:1b', 'library-model-variant');
+    expect(item.description).toBeFalsy();
+  });
+
+  it('fetchModelVariants extracts sizes from sm:hidden HTML blocks', async () => {
+    const variantHtml = [
+      '<a href="/library/llama3.2:1b" class="sm:hidden flex flex-col space-y-[6px] group text-[13px] px-4 py-3">',
+      '  <p class="flex text-neutral-500">1.3GB \u00b7 128K context window · Text</p>',
+      '</a>',
+      '<a href="/library/llama3.2:3b" class="sm:hidden flex flex-col space-y-[6px] group text-[13px] px-4 py-3">',
+      '  <p class="flex text-neutral-500">2.0GB \u00b7 128K context window · Text</p>',
+      '</a>',
+    ].join('\n');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === 'https://ollama.com/library') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+        }
+        if (url === 'https://ollama.com/library/llama3.2') {
+          return Promise.resolve({ ok: true, text: async () => variantHtml });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      }),
+    );
+
+    const libraryProvider = new LibraryModelsProvider(async () => new Set<string>(), undefined);
+    const parents = await libraryProvider.getChildren();
+    const parent = parents.find((item: any) => item.label === 'llama3.2');
+    const children = await libraryProvider.getChildren(parent);
+
+    const item1b = children.find((c: any) => c.label === 'llama3.2:1b');
+    const item3b = children.find((c: any) => c.label === 'llama3.2:3b');
+
+    expect(item1b?.description).toBe('1.3 GB');
+    expect(item3b?.description).toBe('2.0 GB');
+    libraryProvider.dispose();
+  });
+
+  it('getChildren with library-model parent fetches and returns variant children', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === 'https://ollama.com/library') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+        }
+        if (url === 'https://ollama.com/library/llama3.2') {
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2:1b"></a><a href="/library/llama3.2:3b"></a>',
+          });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      }),
+    );
+
+    const libraryProvider = new LibraryModelsProvider(async () => new Set<string>(), undefined);
+    const parents = await libraryProvider.getChildren();
+    const parent = parents.find((item: any) => item.label === 'llama3.2');
+    expect(parent).toBeDefined();
+
+    const children = await libraryProvider.getChildren(parent);
+    expect(children.length).toBeGreaterThan(0);
+    expect(children.some((c: any) => c.label === 'llama3.2:1b')).toBe(true);
+    expect(children.some((c: any) => c.label === 'llama3.2:3b')).toBe(true);
+    libraryProvider.dispose();
+  });
+
+  it('downloaded variant has check icon and library-model-downloaded-variant contextValue', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === 'https://ollama.com/library') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+        }
+        if (url === 'https://ollama.com/library/llama3.2') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2:1b"></a>' });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      }),
+    );
+
+    const libraryProvider = new LibraryModelsProvider(
+      async () => new Set<string>(),
+      undefined,
+      () => new Set(['llama3.2:1b']),
+    );
+    const parents = await libraryProvider.getChildren();
+    const parent = parents.find((item: any) => item.label === 'llama3.2');
+    const children = await libraryProvider.getChildren(parent);
+
+    const downloaded = children.find((c: any) => c.label === 'llama3.2:1b');
+    expect(downloaded?.contextValue).toBe('library-model-downloaded-variant');
+    expect((downloaded?.iconPath as { id: string }).id).toBe('check');
+    libraryProvider.dispose();
+  });
+
+  it('non-downloaded variant has library-model-variant contextValue without icon', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === 'https://ollama.com/library') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+        }
+        if (url === 'https://ollama.com/library/llama3.2') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2:3b"></a>' });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      }),
+    );
+
+    const libraryProvider = new LibraryModelsProvider(
+      async () => new Set<string>(),
+      undefined,
+      () => new Set(),
+    );
+    const parents = await libraryProvider.getChildren();
+    const parent = parents.find((item: any) => item.label === 'llama3.2');
+    const children = await libraryProvider.getChildren(parent);
+
+    const undownloaded = children.find((c: any) => c.label === 'llama3.2:3b');
+    expect(undownloaded?.contextValue).toBe('library-model-variant');
+    expect(undownloaded?.iconPath).toBeUndefined();
+    libraryProvider.dispose();
+  });
+
+  it('library-model-variant shows KB size in description', () => {
+    const bytes = Math.round(780 * 1024);
+    const item = new ModelTreeItem('llama3.2:1b', 'library-model-variant', bytes);
+    expect(item.description).toBe('780 KB');
+  });
+
+  it('fetchModelVariants extracts size when sm:hidden is not first class', async () => {
+    const variantHtml = [
+      '<a href="/library/llama3.2:1b" class="flex sm:hidden flex-col">',
+      '  <p>1.3GB</p>',
+      '</a>',
+    ].join('\n');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === 'https://ollama.com/library') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+        }
+        if (url === 'https://ollama.com/library/llama3.2') {
+          return Promise.resolve({ ok: true, text: async () => variantHtml });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      }),
+    );
+
+    const libraryProvider = new LibraryModelsProvider(async () => new Set<string>(), undefined);
+    const parents = await libraryProvider.getChildren();
+    const parent = parents.find((item: any) => item.label === 'llama3.2');
+    const children = await libraryProvider.getChildren(parent);
+
+    const item1b = children.find((c: any) => c.label === 'llama3.2:1b');
+    expect(item1b?.description).toBe('1.3 GB');
+    libraryProvider.dispose();
+  });
+
+  it('variant checkmarks reflect updated local state without re-fetching', async () => {
+    let localModels = new Set<string>();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === 'https://ollama.com/library') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+        }
+        if (url === 'https://ollama.com/library/llama3.2') {
+          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2:1b"></a>' });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      }),
+    );
+
+    const libraryProvider = new LibraryModelsProvider(
+      async () => new Set<string>(),
+      undefined,
+      () => localModels,
+    );
+    const parents = await libraryProvider.getChildren();
+    const parent = parents.find((item: any) => item.label === 'llama3.2');
+
+    // First call: model not yet downloaded
+    const childrenBefore = await libraryProvider.getChildren(parent);
+    expect(childrenBefore.find((c: any) => c.label === 'llama3.2:1b')?.contextValue).toBe('library-model-variant');
+
+    // Simulate download
+    localModels = new Set(['llama3.2:1b']);
+
+    // Second call uses cached raw metadata but re-materializes with updated local state
+    const childrenAfter = await libraryProvider.getChildren(parent);
+    expect(childrenAfter.find((c: any) => c.label === 'llama3.2:1b')?.contextValue).toBe(
+      'library-model-downloaded-variant',
+    );
+    libraryProvider.dispose();
+  });
+
+  it('getCachedLocalModelNames returns set of local model names after fetch', async () => {
+    const localProvider = new LocalModelsProvider(
+      {
+        list: vi.fn().mockResolvedValue({
+          models: [
+            { name: 'llama2:latest', size: 4000000000 },
+            { name: 'mistral:7b', size: 3000000000 },
+          ],
+        }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+      } as unknown as Ollama,
+      undefined,
+    );
+
+    await localProvider.getChildren();
+    const names = localProvider.getCachedLocalModelNames();
+    expect(names.has('llama2:latest')).toBe(true);
+    expect(names.has('mistral:7b')).toBe(true);
+    localProvider.dispose();
+  });
 });
 
 describe('Extracted command handlers', () => {
@@ -634,7 +898,7 @@ describe('Extracted command handlers', () => {
     expect(mockSync).toHaveBeenCalled();
   });
 
-  it('handleDeleteModel deletes local model', async () => {
+  it('handleDeleteModel deletes local model when confirmed', async () => {
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
@@ -643,9 +907,58 @@ describe('Extracted command handlers', () => {
 
     const item = new ModelTreeItem('test-model', 'local-running', 1000);
 
-    handleDeleteModel(item, mockProvider);
+    await handleDeleteModel(item, mockProvider);
 
     expect(mockProvider.deleteModel).toHaveBeenCalledWith('test-model');
+  });
+
+  it('handleDeleteModel does not delete when cancelled', async () => {
+    vi.resetModules();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showWarningMessage: vi.fn().mockResolvedValue('Cancel'),
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+      },
+      env: {
+        openExternal: vi.fn(),
+      },
+      Uri: {
+        parse: vi.fn((value: string) => ({ value })),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
+
+    const mockProvider = { deleteModel: vi.fn() } as any;
+    const item = new ModelTreeItem('test-model', 'local-stopped');
+
+    await handleDeleteModel(item, mockProvider);
+
+    expect(mockProvider.deleteModel).not.toHaveBeenCalled();
   });
 
   it('handleDeleteModel ignores non-local models', async () => {
@@ -657,7 +970,7 @@ describe('Extracted command handlers', () => {
 
     const item = new ModelTreeItem('test-model', 'library-model');
 
-    handleDeleteModel(item, mockProvider);
+    await handleDeleteModel(item, mockProvider);
 
     expect(mockProvider.deleteModel).not.toHaveBeenCalled();
   });
@@ -708,6 +1021,7 @@ describe('Extracted command handlers', () => {
 
     handleDeleteModel(null as any, mockProvider);
 
+    // null/undefined guard fires before any confirmation prompt
     expect(mockProvider.deleteModel).not.toHaveBeenCalled();
   });
 
@@ -880,9 +1194,14 @@ describe('Extracted command handlers', () => {
         showInputBox: vi.fn().mockResolvedValue('llama3:8b'),
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
-        withProgress: vi.fn(async (_opts: unknown, task: (p: { report: typeof progressReport }) => Promise<void>) => {
-          await task({ report: progressReport });
-        }),
+        withProgress: vi.fn(
+          async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
+            await task(
+              { report: progressReport },
+              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+            );
+          },
+        ),
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
@@ -974,9 +1293,14 @@ describe('Extracted command handlers', () => {
       window: {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
-        withProgress: vi.fn(async (_opts: unknown, task: (p: { report: typeof progressReport }) => Promise<void>) => {
-          await task({ report: progressReport });
-        }),
+        withProgress: vi.fn(
+          async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
+            await task(
+              { report: progressReport },
+              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+            );
+          },
+        ),
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
@@ -987,13 +1311,88 @@ describe('Extracted command handlers', () => {
 
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
-    const item = new ModelTreeItem('mistral:7b', 'library-model');
+    const item = new ModelTreeItem('mistral:7b', 'library-model-variant');
     await handlePullModelFromLibrary(item, { pull: mockPull } as any, { refresh: mockRefresh } as any);
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'mistral:7b', stream: true });
     const reportCalls = progressReport.mock.calls.map((c: any) => c[0].message as string);
     expect(reportCalls.some(msg => msg.includes('%'))).toBe(true);
     expect(mockRefresh).toHaveBeenCalled();
+  });
+
+  it('handlePullModelFromLibrary cancels download when token fires', async () => {
+    vi.resetModules();
+
+    const mockAbort = vi.fn();
+    const mockShowError = vi.fn();
+    const mockShowInfo = vi.fn();
+
+    // Stream that throws to simulate an aborted connection
+    async function* abortedStream() {
+      throw new Error('Request aborted');
+    }
+
+    const mockPull = vi.fn().mockReturnValue(abortedStream());
+
+    const mockToken = {
+      isCancellationRequested: true,
+      onCancellationRequested: vi.fn((fn: () => void) => {
+        fn();
+        return { dispose: vi.fn() };
+      }),
+    };
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInformationMessage: mockShowInfo,
+        showErrorMessage: mockShowError,
+        withProgress: vi.fn(
+          async (
+            _opts: unknown,
+            task: (p: { report: ReturnType<typeof vi.fn> }, t: typeof mockToken) => Promise<void>,
+          ) => {
+            await task({ report: vi.fn() }, mockToken);
+          },
+        ),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
+
+    const item = new ModelTreeItem('mistral:7b', 'library-model-variant');
+    await handlePullModelFromLibrary(
+      item,
+      { pull: mockPull, abort: mockAbort } as any,
+      {
+        refresh: vi.fn(),
+      } as any,
+    );
+
+    expect(mockAbort).toHaveBeenCalled();
+    expect(mockShowError).not.toHaveBeenCalled();
+    expect(mockShowInfo).toHaveBeenCalledWith('Download of mistral:7b cancelled');
   });
 
   it('local models show capability badges in description', async () => {
@@ -1066,5 +1465,164 @@ describe('Extracted command handlers', () => {
     expect(item.label).toBe('llama3-tools:latest');
     expect(item.description).toContain('[tools]');
     localProvider.dispose();
+  });
+
+  it('handlePullModelFromLibrary pulls for library-model-variant', async () => {
+    vi.resetModules();
+
+    const progressReport = vi.fn();
+
+    async function* makePullStream() {
+      yield { status: 'success', digest: 'sha256:abc', total: 100, completed: 100 };
+    }
+
+    const mockPull = vi.fn().mockReturnValue(makePullStream());
+    const mockRefresh = vi.fn();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+        withProgress: vi.fn(
+          async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
+            await task(
+              { report: progressReport },
+              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+            );
+          },
+        ),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
+
+    const item = new ModelTreeItem('llama3.2:1b', 'library-model-variant');
+    await handlePullModelFromLibrary(item, { pull: mockPull } as any, { refresh: mockRefresh } as any);
+
+    expect(mockPull).toHaveBeenCalledWith({ model: 'llama3.2:1b', stream: true });
+    expect(mockRefresh).toHaveBeenCalled();
+  });
+
+  it('handlePullModelFromLibrary pulls for library-model-downloaded-variant', async () => {
+    vi.resetModules();
+
+    const progressReport = vi.fn();
+
+    async function* makePullStream() {
+      yield { status: 'success', digest: 'sha256:abc', total: 100, completed: 100 };
+    }
+
+    const mockPull = vi.fn().mockReturnValue(makePullStream());
+    const mockRefresh = vi.fn();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+        withProgress: vi.fn(
+          async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
+            await task(
+              { report: progressReport },
+              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+            );
+          },
+        ),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
+
+    const item = new ModelTreeItem('llama3.2:1b', 'library-model-downloaded-variant');
+    await handlePullModelFromLibrary(item, { pull: mockPull } as any, { refresh: mockRefresh } as any);
+
+    expect(mockPull).toHaveBeenCalledWith({ model: 'llama3.2:1b', stream: true });
+    expect(mockRefresh).toHaveBeenCalled();
+  });
+
+  it('handlePullModelFromLibrary skips library-model parent items', async () => {
+    vi.resetModules();
+
+    const mockPull = vi.fn();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+        withProgress: vi.fn(),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
+
+    const item = new ModelTreeItem('llama3.2', 'library-model');
+    await handlePullModelFromLibrary(item, { pull: mockPull } as any, { refresh: vi.fn() } as any);
+
+    expect(mockPull).not.toHaveBeenCalled();
   });
 });

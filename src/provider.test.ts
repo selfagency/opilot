@@ -386,6 +386,43 @@ describe('OllamaChatModelProvider error handling', () => {
     expect(list).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
   });
+
+  it('refreshModels() discards stale in-flight fetch so next query gets fresh results', async () => {
+    let resolveFirstList!: (v: unknown) => void;
+    const firstListPending = new Promise(resolve => {
+      resolveFirstList = resolve;
+    });
+
+    const list = vi
+      .fn()
+      .mockReturnValueOnce(firstListPending) // first call hangs (started before pull)
+      .mockResolvedValueOnce({ models: [{ name: 'llama2' }, { name: 'newmodel' }] }); // second call after refresh
+
+    const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list, show } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    // First call starts an in-flight fetch that hangs
+    const firstFetch = provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+
+    // Pull completes — refreshModels() should discard the stale in-flight promise
+    provider.refreshModels();
+
+    // VS Code queries again after the event fires — must NOT reuse the stale promise
+    const secondFetch = provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+
+    // Now resolve the first (stale) list with old data
+    resolveFirstList({ models: [{ name: 'llama2' }] });
+
+    await firstFetch;
+    const models = await secondFetch;
+
+    expect(models.map((m: { id: string }) => m.id)).toContain('newmodel');
+  });
 });
 
 describe('OllamaChatModelProvider chat response', () => {

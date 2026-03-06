@@ -171,13 +171,13 @@
       {
         "command": "ollama-copilot.stopModel",
         "title": "Stop Ollama Model",
-        "icon": "$(stop-circle)",
+        "icon": "$(stop)",
         "category": "Ollama"
       },
       {
         "command": "ollama-copilot.startModel",
         "title": "Start Ollama Model",
-        "icon": "$(play-circle)",
+        "icon": "$(play)",
         "category": "Ollama"
       },
       {
@@ -207,13 +207,13 @@
       {
         "command": "ollama-copilot.startCloudModel",
         "title": "Run Ollama Cloud Model",
-        "icon": "$(play-circle)",
+        "icon": "$(play)",
         "category": "Ollama"
       },
       {
         "command": "ollama-copilot.stopCloudModel",
         "title": "Stop Ollama Cloud Model",
-        "icon": "$(stop-circle)",
+        "icon": "$(stop)",
         "category": "Ollama"
       },
       {
@@ -323,13 +323,18 @@
         },
         {
           "command": "ollama-copilot.pullModelFromLibrary",
-          "when": "view == ollama-library-models && viewItem == library-model",
+          "when": "view == ollama-library-models && viewItem == library-model-variant",
+          "group": "inline@1"
+        },
+        {
+          "command": "ollama-copilot.pullModelFromLibrary",
+          "when": "view == ollama-library-models && viewItem == library-model-downloaded-variant",
           "group": "inline@1"
         },
         {
           "command": "ollama-copilot.openLibraryModelPage",
           "when": "view == ollama-library-models && viewItem == library-model",
-          "group": "inline@2"
+          "group": "inline@1"
         },
         {
           "command": "ollama-copilot.startCloudModel",
