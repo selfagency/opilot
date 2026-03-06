@@ -32,6 +32,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   private cachedModelList: LanguageModelChatInformation[] = [];
   private lastModelListRefreshMs = 0;
   private modelListRefreshPromise: Promise<LanguageModelChatInformation[]> | undefined;
+  private modelListRefreshId = 0;
   private refreshGeneration = 0;
   private modelsChangeEventEmitter: EventEmitter<void> = new EventEmitter();
   private toolCallIdMap: Map<string, string> = new Map();
@@ -63,13 +64,13 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       return this.modelListRefreshPromise;
     }
 
-    const promise = this.refreshModelList();
-    this.modelListRefreshPromise = promise;
+    const refreshId = ++this.modelListRefreshId;
+    this.modelListRefreshPromise = this.refreshModelList();
     try {
-      return await promise;
+      return await this.modelListRefreshPromise;
     } finally {
-      // Only clear if no newer refresh has replaced this promise in the meantime.
-      if (this.modelListRefreshPromise === promise) {
+      // Only clear if no newer refresh has replaced this one in the meantime.
+      if (this.modelListRefreshId === refreshId) {
         this.modelListRefreshPromise = undefined;
       }
     }
@@ -140,6 +141,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     this.lastModelListRefreshMs = 0;
     // Discard any in-flight fetch started before this refresh so the next
     // provideLanguageModelChatInformation call starts a fresh one.
+    this.modelListRefreshId++;
     this.modelListRefreshPromise = undefined;
     this.refreshGeneration++;
     this.modelsChangeEventEmitter.fire();
