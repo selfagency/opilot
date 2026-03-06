@@ -21,6 +21,7 @@ import type { DiagnosticsLogger } from './diagnostics.js';
 
 const MODEL_LIST_REFRESH_MIN_INTERVAL_MS = 30_000;
 const MODEL_INFO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const MODEL_SHOW_TIMEOUT_MS = 2_000;
 
 /**
  * Ollama Chat Model Provider
@@ -30,6 +31,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   private modelInfoCache: Map<string, { info: LanguageModelChatInformation; updatedAtMs: number }> = new Map();
   private cachedModelList: LanguageModelChatInformation[] = [];
   private lastModelListRefreshMs = 0;
+  private modelListRefreshPromise: Promise<LanguageModelChatInformation[]> | undefined;
   private modelsChangeEventEmitter: EventEmitter<void> = new EventEmitter();
   private toolCallIdMap: Map<string, string> = new Map();
   private reverseToolCallIdMap: Map<string, string> = new Map();
@@ -54,6 +56,21 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       return this.cachedModelList;
     }
 
+    if (this.modelListRefreshPromise) {
+      return this.modelListRefreshPromise;
+    }
+
+    this.modelListRefreshPromise = this.refreshModelList();
+    try {
+      return await this.modelListRefreshPromise;
+    } finally {
+      this.modelListRefreshPromise = undefined;
+    }
+  }
+
+  private async refreshModelList(): Promise<LanguageModelChatInformation[]> {
+    const now = Date.now();
+
     try {
       const response = await this.client.list();
       const modelNames = new Set(response.models.map(model => model.name));
@@ -66,13 +83,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             return cached.info;
           }
 
-          const info = await this.getChatModelInfo(model.name);
-          if (info) {
-            const updatedAtMs = Date.now();
-            this.modelInfoCache.set(model.name, { info, updatedAtMs });
-            this.models.set(model.name, info);
-          }
-
+          const info = await this.getChatModelInfoWithFallback(model.name);
+          const updatedAtMs = Date.now();
+          this.modelInfoCache.set(model.name, { info, updatedAtMs });
+          this.models.set(model.name, info);
           return info;
         }),
       );
@@ -111,6 +125,46 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     this.models.clear();
     this.cachedModelList = [];
     this.lastModelListRefreshMs = 0;
+  }
+
+  /**
+   * Build lightweight model information when detailed metadata is unavailable.
+   */
+  private getBaseChatModelInfo(modelId: string): LanguageModelChatInformation {
+    const contextLength = getContextLengthOverride();
+    return {
+      id: modelId,
+      name: formatModelName(modelId),
+      family: 'Ollama',
+      version: '1.0.0',
+      detail: 'Ollama',
+      tooltip: `Ollama • ${modelId}`,
+      maxInputTokens: contextLength,
+      maxOutputTokens: contextLength,
+      capabilities: {
+        imageInput: false,
+        toolCalling: false,
+      },
+    };
+  }
+
+  /**
+   * Resolve chat model information with a timeout fallback so model discovery
+   * cannot block chat startup on slow /api/show responses.
+   */
+  private async getChatModelInfoWithFallback(modelId: string): Promise<LanguageModelChatInformation> {
+    const fallback = this.getBaseChatModelInfo(modelId);
+
+    try {
+      const timed = await Promise.race<LanguageModelChatInformation | undefined>([
+        this.getChatModelInfo(modelId),
+        new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), MODEL_SHOW_TIMEOUT_MS)),
+      ]);
+
+      return timed ?? fallback;
+    } catch {
+      return fallback;
+    }
   }
 
   /**

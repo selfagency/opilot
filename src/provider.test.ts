@@ -329,8 +329,10 @@ describe('OllamaChatModelProvider error handling', () => {
 
     const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
 
-    // Should return empty array when show() fails for all models
-    expect(models).toEqual([]);
+    expect(models).toHaveLength(2);
+    expect(models[0]?.name).toBe('Llama2');
+    expect(models[0]?.detail).toBe('Ollama');
+    expect(models[0]?.capabilities?.toolCalling).toBe(false);
   });
 
   it('prunes cache when models are removed', async () => {
