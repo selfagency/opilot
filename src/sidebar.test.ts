@@ -46,6 +46,7 @@ describe('LocalModelsProvider', () => {
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn().mockResolvedValue('Delete'),
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
@@ -157,20 +158,20 @@ describe('LocalModelsProvider', () => {
     expect(item.description).toContain('1m');
   });
 
-  it('uses play-circle icon for running models', () => {
+  it('uses circle-play icon for running models', () => {
     const localRunning = new ModelTreeItem('llama2:latest', 'local-running', 3826087936, 90_000);
     const cloudRunning = new ModelTreeItem('cloud/llama2:latest', 'cloud-running', undefined, 90_000);
 
-    expect((localRunning.iconPath as { id: string }).id).toBe('play-circle');
-    expect((cloudRunning.iconPath as { id: string }).id).toBe('play-circle');
+    expect((localRunning.iconPath as { id: string }).id).toBe('circle-play');
+    expect((cloudRunning.iconPath as { id: string }).id).toBe('circle-play');
   });
 
-  it('uses debug-stop icon for stopped models', () => {
+  it('uses stop-circle icon for stopped models', () => {
     const localStopped = new ModelTreeItem('mistral:latest', 'local-stopped', 4109738016);
     const cloudStopped = new ModelTreeItem('cloud/mistral:latest', 'cloud-stopped');
 
-    expect((localStopped.iconPath as { id: string }).id).toBe('debug-stop');
-    expect((cloudStopped.iconPath as { id: string }).id).toBe('debug-stop');
+    expect((localStopped.iconPath as { id: string }).id).toBe('stop-circle');
+    expect((cloudStopped.iconPath as { id: string }).id).toBe('stop-circle');
   });
 
   it('returns tree item unchanged', () => {
@@ -769,7 +770,7 @@ describe('Extracted command handlers', () => {
     expect(mockSync).toHaveBeenCalled();
   });
 
-  it('handleDeleteModel deletes local model', async () => {
+  it('handleDeleteModel deletes local model when confirmed', async () => {
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
@@ -778,9 +779,58 @@ describe('Extracted command handlers', () => {
 
     const item = new ModelTreeItem('test-model', 'local-running', 1000);
 
-    handleDeleteModel(item, mockProvider);
+    await handleDeleteModel(item, mockProvider);
 
     expect(mockProvider.deleteModel).toHaveBeenCalledWith('test-model');
+  });
+
+  it('handleDeleteModel does not delete when cancelled', async () => {
+    vi.resetModules();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showWarningMessage: vi.fn().mockResolvedValue('Cancel'),
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+      },
+      env: {
+        openExternal: vi.fn(),
+      },
+      Uri: {
+        parse: vi.fn((value: string) => ({ value })),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
+
+    const mockProvider = { deleteModel: vi.fn() } as any;
+    const item = new ModelTreeItem('test-model', 'local-stopped');
+
+    await handleDeleteModel(item, mockProvider);
+
+    expect(mockProvider.deleteModel).not.toHaveBeenCalled();
   });
 
   it('handleDeleteModel ignores non-local models', async () => {
@@ -792,7 +842,7 @@ describe('Extracted command handlers', () => {
 
     const item = new ModelTreeItem('test-model', 'library-model');
 
-    handleDeleteModel(item, mockProvider);
+    await handleDeleteModel(item, mockProvider);
 
     expect(mockProvider.deleteModel).not.toHaveBeenCalled();
   });
@@ -843,6 +893,7 @@ describe('Extracted command handlers', () => {
 
     handleDeleteModel(null as any, mockProvider);
 
+    // null/undefined guard fires before any confirmation prompt
     expect(mockProvider.deleteModel).not.toHaveBeenCalled();
   });
 
@@ -1016,11 +1067,11 @@ describe('Extracted command handlers', () => {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
         withProgress: vi.fn(
-          async (
-            _opts: unknown,
-            task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>,
-          ) => {
-            await task({ report: progressReport }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+          async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
+            await task(
+              { report: progressReport },
+              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+            );
           },
         ),
       },
@@ -1115,11 +1166,11 @@ describe('Extracted command handlers', () => {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
         withProgress: vi.fn(
-          async (
-            _opts: unknown,
-            task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>,
-          ) => {
-            await task({ report: progressReport }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+          async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
+            await task(
+              { report: progressReport },
+              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+            );
           },
         ),
       },
@@ -1203,9 +1254,13 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('mistral:7b', 'library-model-variant');
-    await handlePullModelFromLibrary(item, { pull: mockPull, abort: mockAbort } as any, {
-      refresh: vi.fn(),
-    } as any);
+    await handlePullModelFromLibrary(
+      item,
+      { pull: mockPull, abort: mockAbort } as any,
+      {
+        refresh: vi.fn(),
+      } as any,
+    );
 
     expect(mockAbort).toHaveBeenCalled();
     expect(mockShowError).not.toHaveBeenCalled();
@@ -1318,11 +1373,11 @@ describe('Extracted command handlers', () => {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
         withProgress: vi.fn(
-          async (
-            _opts: unknown,
-            task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>,
-          ) => {
-            await task({ report: progressReport }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+          async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
+            await task(
+              { report: progressReport },
+              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+            );
           },
         ),
       },
@@ -1376,11 +1431,11 @@ describe('Extracted command handlers', () => {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
         withProgress: vi.fn(
-          async (
-            _opts: unknown,
-            task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>,
-          ) => {
-            await task({ report: progressReport }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+          async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
+            await task(
+              { report: progressReport },
+              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+            );
           },
         ),
       },

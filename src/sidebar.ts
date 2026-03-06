@@ -7,10 +7,10 @@ import {
   EventEmitter,
   ExtensionContext,
   ProgressLocation,
+  ThemeIcon,
   TreeDataProvider,
   TreeItem,
   TreeItemCollapsibleState,
-  ThemeIcon,
   Uri,
   window,
   workspace,
@@ -47,9 +47,9 @@ export class ModelTreeItem extends TreeItem {
     }
 
     if (type === 'local-running' || type === 'cloud-running') {
-      this.iconPath = createThemeIcon('play-circle');
+      this.iconPath = createThemeIcon('circle-play');
     } else if (type === 'local-stopped' || type === 'cloud-stopped') {
-      this.iconPath = createThemeIcon('debug-stop');
+      this.iconPath = createThemeIcon('stop-circle');
     } else if (type === 'library-model-downloaded-variant') {
       this.iconPath = createThemeIcon('check');
     }
@@ -981,9 +981,12 @@ export function handleOpenCloudModel(modelName: string): void {
 /**
  * Command handler: delete model
  */
-export function handleDeleteModel(item: ModelTreeItem, localProvider: LocalModelsProvider): void {
+export async function handleDeleteModel(item: ModelTreeItem, localProvider: LocalModelsProvider): Promise<void> {
   if (item && (item.type === 'local-running' || item.type === 'local-stopped')) {
-    void localProvider.deleteModel(item.label);
+    const answer = await window.showWarningMessage(`Delete model "${item.label}"?`, 'Delete', 'Cancel');
+    if (answer === 'Delete') {
+      void localProvider.deleteModel(item.label);
+    }
   }
 }
 
