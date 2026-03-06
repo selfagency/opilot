@@ -215,29 +215,6 @@ export async function handleBuiltInOllamaConflict(
 }
 
 /**
- * Configure Copilot's built-in Ollama BYOK integration to use our endpoint.
- * This routes direct model-picker requests through Copilot's in-process BYOK handler,
- * avoiding the IPC boundary that buffers streamed responses for external providers.
- */
-export async function configureBYOKOllama(
-  host: string,
-  bearer?: string,
-  workspaceApi?: Pick<typeof vscode.workspace, 'getConfiguration'>,
-): Promise<void> {
-  const ws = workspaceApi ?? vscode.workspace;
-  try {
-    const config = ws.getConfiguration('github.copilot.chat') as vscode.WorkspaceConfiguration;
-    await config.update('ollama.url', host, vscode.ConfigurationTarget.Global);
-    if (bearer !== undefined) {
-      await config.update('ollama.bearer', bearer || null, vscode.ConfigurationTarget.Global);
-    }
-  } catch {
-    // The github.copilot.chat settings may not be registered in all VS Code environments
-    // (e.g. test hosts without Copilot). BYOK is an optional streaming enhancement.
-  }
-}
-
-/**
  * Build and send a message to the language model.
  *
  * When `client` is provided the request is streamed directly from Ollama —
