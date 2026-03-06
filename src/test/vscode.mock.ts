@@ -157,3 +157,7 @@ export const Uri = {
 export const chat = {
   createChatParticipant: vi.fn().mockReturnValue({ iconPath: undefined, dispose: vi.fn() }),
 };
+
+export class InlineCompletionItem {
+  constructor(public readonly insertText: string) {}
+}

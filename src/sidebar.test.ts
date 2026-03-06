@@ -322,7 +322,7 @@ describe('LocalModelsProvider', () => {
     const modelsAfterSortChange = await libraryProvider.getChildren();
 
     const libraryFetchUrls = mockFetch.mock.calls
-      .map(([url]: [string]) => url)
+      .map(call => String(call[0]))
       .filter(
         (url: string) => url === 'https://ollama.com/library' || url === 'https://ollama.com/library?sort=newest',
       );
@@ -810,7 +810,7 @@ describe('Extracted command handlers', () => {
     const item = new ModelTreeItem('mistral:7b', 'library-model');
 
     // Should not throw
-    handlePullModelFromLibrary(item, _mockClient, mockProvider);
+    await handlePullModelFromLibrary(item, _mockClient, mockProvider);
 
     // Since it's async with promise handling, pull should be called eventually
     // Verify the function exists and is callable
@@ -830,7 +830,7 @@ describe('Extracted command handlers', () => {
 
     const item = new ModelTreeItem('test-model', 'local-running');
 
-    handlePullModelFromLibrary(item, mockClient, mockProvider);
+    await handlePullModelFromLibrary(item, mockClient, mockProvider);
 
     // Pull should not be called for non-library models
     expect(mockClient.pull).not.toHaveBeenCalled();

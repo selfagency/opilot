@@ -134,15 +134,6 @@ function getLibraryModelUrl(modelName: string): string {
   return `https://ollama.com/library/${encoded}`;
 }
 
-function escapeHtml(input: string): string {
-  return input
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
 async function fetchModelPagePreview(
   modelName: string,
   timeoutMs = 8000,

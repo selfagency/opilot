@@ -14,6 +14,12 @@ type PackageJson = {
       'view/item/context'?: Array<{ command: string; when?: string; group?: string }>;
     };
     languageModelChatProviders?: Array<{ vendor: string }>;
+    configuration?: {
+      properties?: Record<
+        string,
+        { type?: string; default?: unknown; description?: string; markdownDescription?: string }
+      >;
+    };
   };
   activationEvents?: string[];
 };
@@ -103,6 +109,21 @@ describe('package contributes integrity', () => {
     );
     const missingIcon = navMenuEntries.filter(entry => !commandIconMap.get(entry.command)).map(entry => entry.command);
     expect(missingIcon).toEqual([]);
+  });
+
+  it('declares ollama.completionModel configuration property', () => {
+    const pkg = loadPackageJson();
+    const prop = pkg.contributes?.configuration?.properties?.['ollama.completionModel'];
+    expect(prop).toBeDefined();
+    expect(prop?.type).toBe('string');
+  });
+
+  it('declares ollama.enableInlineCompletions configuration property', () => {
+    const pkg = loadPackageJson();
+    const prop = pkg.contributes?.configuration?.properties?.['ollama.enableInlineCompletions'];
+    expect(prop).toBeDefined();
+    expect(prop?.type).toBe('boolean');
+    expect(prop?.default).toBe(true);
   });
 
   it('does not declare the ollama-model-preview webview view', () => {

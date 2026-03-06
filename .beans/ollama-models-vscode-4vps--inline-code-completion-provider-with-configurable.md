@@ -1,12 +1,13 @@
 ---
 # ollama-models-vscode-4vps
 title: Inline code completion provider with configurable model
-status: todo
+status: in-progress
 type: feature
 priority: medium
 created_at: 2026-03-06T05:50:22Z
 updated_at: 2026-03-06T06:30:00Z
 id: ollama-models-vscode-4vps
+branch: feature/4vps-inline-completion-provider
 ---
 
 ## Summary

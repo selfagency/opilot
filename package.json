@@ -405,6 +405,16 @@
           "type": "string",
           "default": "",
           "description": "Path to folder containing Modelfiles. Leave empty to use ~/.ollama/modelfiles"
+        },
+        "ollama.completionModel": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Model used for inline code completions. Leave empty to disable. Smaller, faster models work best (e.g. `qwen2.5-coder:1.5b`, `deepseek-coder:1.3b`)."
+        },
+        "ollama.enableInlineCompletions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Ollama inline code completions."
         }
       }
     },

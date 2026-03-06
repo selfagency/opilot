@@ -59,6 +59,9 @@ describe('activate', () => {
       lm: {
         registerLanguageModelChatProvider,
       },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
       chat: {
         createChatParticipant: vi.fn(() => ({
           iconPath: undefined,
@@ -77,6 +80,9 @@ describe('activate', () => {
       },
       LanguageModelTextPart: class {},
       CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
     }));
 
     vi.doMock('./client.js', () => ({
@@ -161,6 +167,9 @@ describe('activate', () => {
       lm: {
         registerLanguageModelChatProvider,
       },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
       chat: {
         createChatParticipant: vi.fn(() => ({
           iconPath: undefined,
@@ -179,6 +188,9 @@ describe('activate', () => {
       },
       LanguageModelTextPart: class {},
       CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
     }));
 
     vi.doMock('./client.js', () => ({
@@ -267,6 +279,9 @@ describe('activate', () => {
       lm: {
         registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
       },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
       chat: {
         createChatParticipant: vi.fn(() => ({
           iconPath: undefined,
@@ -285,6 +300,9 @@ describe('activate', () => {
       },
       LanguageModelTextPart: class {},
       CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
     }));
 
     vi.doMock('./client.js', () => ({
@@ -386,6 +404,9 @@ describe('activate', () => {
       lm: {
         registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
       },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
       chat: {
         createChatParticipant: vi.fn(() => ({
           iconPath: undefined,
@@ -404,6 +425,9 @@ describe('activate', () => {
       },
       LanguageModelTextPart: class {},
       CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
     }));
 
     vi.doMock('./client.js', () => ({
@@ -494,6 +518,9 @@ describe('activate', () => {
       lm: {
         registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
       },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
       chat: {
         createChatParticipant: vi.fn(() => ({
           iconPath: undefined,
@@ -512,6 +539,9 @@ describe('activate', () => {
       },
       LanguageModelTextPart: class {},
       CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
     }));
 
     vi.doMock('./client.js', () => ({
@@ -607,6 +637,9 @@ describe('activate', () => {
       lm: {
         registerLanguageModelChatProvider,
       },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
       chat: {
         createChatParticipant: vi.fn(() => ({
           iconPath: undefined,
@@ -625,6 +658,9 @@ describe('activate', () => {
       },
       LanguageModelTextPart: class {},
       CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
     }));
 
     vi.doMock('./client.js', () => ({
@@ -705,6 +741,9 @@ describe('activate', () => {
       lm: {
         registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
       },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
       chat: {
         createChatParticipant: vi.fn(() => ({
           iconPath: undefined,
@@ -723,6 +762,9 @@ describe('activate', () => {
       },
       LanguageModelTextPart: class {},
       CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
     }));
 
     vi.doMock('./client.js', () => ({
@@ -811,6 +853,9 @@ describe('activate', () => {
       lm: {
         registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
       },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
       chat: {
         createChatParticipant: vi.fn(() => ({
           iconPath: undefined,
@@ -829,6 +874,9 @@ describe('activate', () => {
       },
       LanguageModelTextPart: class {},
       CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
     }));
 
     vi.doMock('./client.js', () => ({
@@ -876,6 +924,115 @@ describe('activate', () => {
     }
 
     expect(mockInfo).toHaveBeenCalledWith(expect.stringContaining('Auto-start log streaming setting changed'));
+  });
+
+  it('registers inline completion provider during activation', async () => {
+    const registerInlineCompletionItemProvider = vi.fn(() => ({ dispose: vi.fn() }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        constructor(public label: string) {}
+      },
+      TreeItemCollapsibleState: {
+        None: 0,
+        Collapsed: 1,
+        Expanded: 2,
+      },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+        registerWebviewViewProvider: vi.fn(() => ({ dispose: vi.fn() })),
+        createOutputChannel: vi.fn(() => ({
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          debug: vi.fn(),
+          log: vi.fn(),
+          show: vi.fn(),
+        })),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: any, callback: any) => callback({})),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn((key: string) => {
+            if (key === 'autoStartLogStreaming') return false;
+            if (key === 'localModelRefreshInterval') return 0;
+            if (key === 'libraryRefreshInterval') return 0;
+            return undefined;
+          }),
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      lm: {
+        registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      languages: {
+        registerInlineCompletionItemProvider,
+      },
+      chat: {
+        createChatParticipant: vi.fn(() => ({
+          iconPath: undefined,
+          dispose: vi.fn(),
+        })),
+      },
+      Uri: {
+        joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
+      },
+      ChatResponseMarkdownPart: class {
+        value: any = {};
+      },
+      LanguageModelChatMessage: {
+        User: vi.fn(),
+        Assistant: vi.fn(),
+      },
+      LanguageModelTextPart: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
+      CancellationToken: class {},
+    }));
+
+    vi.doMock('./client.js', () => ({
+      getOllamaClient: vi.fn().mockResolvedValue({
+        list: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+        show: vi.fn().mockResolvedValue({ template: '' }),
+      }),
+      testConnection: vi.fn().mockResolvedValue(true),
+    }));
+
+    vi.doMock('./provider.js', () => ({
+      OllamaChatModelProvider: class {
+        setAuthToken = vi.fn();
+      },
+    }));
+
+    vi.doMock('./sidebar.js', () => ({
+      registerSidebar: vi.fn(),
+    }));
+
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
+    }));
+
+    const ext = await import('./extension.js');
+    await ext.activate({ subscriptions: [], extensionUri: {} } as any);
+
+    expect(registerInlineCompletionItemProvider).toHaveBeenCalledOnce();
+    expect(registerInlineCompletionItemProvider).toHaveBeenCalledWith(
+      { pattern: '**' },
+      expect.objectContaining({ provideInlineCompletionItems: expect.any(Function) }),
+    );
   });
 });
 
