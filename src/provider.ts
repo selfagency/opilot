@@ -159,8 +159,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       return {
         id: modelId,
         name: formatModelName(modelId),
-        family: 'ollama',
+        family: 'Ollama',
         version: '1.0.0',
+        detail: 'Ollama',
+        tooltip: `Ollama • ${modelId}`,
         maxInputTokens: contextLength,
         maxOutputTokens: contextLength,
         capabilities: {
