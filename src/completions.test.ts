@@ -14,9 +14,28 @@ describe('OllamaInlineCompletionProvider', () => {
   }
 
   function makeDocument(text: string, offset: number) {
+    const positionAt = (off: number) => ({ _off: Math.min(Math.max(0, off), text.length) });
     return {
-      getText: () => text,
-      offsetAt: (_position: unknown) => offset,
+      getText: (range?: unknown) => {
+        if (!range) return text;
+        const r = range as { start: { _off?: number }; end: { _off?: number } };
+        // When `position` (passed as `{}`) is used as a range boundary it has no
+        // `_off`, so fall back to the cursor offset so slicing stays correct.
+        const start = r.start._off ?? offset;
+        const end = r.end._off ?? offset;
+        return text.slice(start, end);
+      },
+      offsetAt: (pos: unknown) => {
+        if (typeof pos === 'object' && pos !== null) {
+          if ('_off' in (pos as object)) return (pos as { _off: number })._off;
+          // Sentinel: vscode.Position(lineCount - 1, MAX_SAFE_INTEGER) → document end
+          if ('character' in (pos as object) && (pos as { character: number }).character === Number.MAX_SAFE_INTEGER)
+            return text.length;
+        }
+        return offset;
+      },
+      positionAt,
+      lineCount: text.split('\n').length || 1,
     };
   }
 
@@ -34,6 +53,18 @@ describe('OllamaInlineCompletionProvider', () => {
         getConfiguration: vi.fn(() => ({
           get: makeConfigGet(false, 'llama3.2'),
         })),
+      },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
@@ -61,6 +92,18 @@ describe('OllamaInlineCompletionProvider', () => {
           get: makeConfigGet(true, ''),
         })),
       },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
@@ -86,6 +129,18 @@ describe('OllamaInlineCompletionProvider', () => {
         getConfiguration: vi.fn(() => ({
           get: makeConfigGet(true, '   '),
         })),
+      },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
@@ -114,6 +169,18 @@ describe('OllamaInlineCompletionProvider', () => {
         getConfiguration: vi.fn(() => ({
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
+      },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
@@ -151,6 +218,18 @@ describe('OllamaInlineCompletionProvider', () => {
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
       },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
@@ -178,6 +257,18 @@ describe('OllamaInlineCompletionProvider', () => {
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
       },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
@@ -204,6 +295,18 @@ describe('OllamaInlineCompletionProvider', () => {
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
       },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
@@ -229,6 +332,18 @@ describe('OllamaInlineCompletionProvider', () => {
         getConfiguration: vi.fn(() => ({
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
+      },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
@@ -258,6 +373,18 @@ describe('OllamaInlineCompletionProvider', () => {
         getConfiguration: vi.fn(() => ({
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
+      },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
@@ -291,6 +418,18 @@ describe('OllamaInlineCompletionProvider', () => {
         getConfiguration: vi.fn(() => ({
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
+      },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
@@ -327,6 +466,18 @@ describe('OllamaInlineCompletionProvider', () => {
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
       },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
@@ -362,6 +513,18 @@ describe('OllamaInlineCompletionProvider', () => {
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
       },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
@@ -394,6 +557,18 @@ describe('OllamaInlineCompletionProvider', () => {
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
       },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
@@ -421,6 +596,18 @@ describe('OllamaInlineCompletionProvider', () => {
           get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
         })),
       },
+      Position: class {
+        constructor(
+          public readonly line: number,
+          public readonly character: number,
+        ) {}
+      },
+      Range: class {
+        constructor(
+          public readonly start: unknown,
+          public readonly end: unknown,
+        ) {}
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
@@ -431,12 +618,7 @@ describe('OllamaInlineCompletionProvider', () => {
     const provider = new OllamaInlineCompletionProvider(client);
 
     await expect(
-      provider.provideInlineCompletionItems(
-        makeDocument('hello', 5) as any,
-        {} as any,
-        {} as any,
-        makeToken() as any,
-      ),
+      provider.provideInlineCompletionItems(makeDocument('hello', 5) as any, {} as any, {} as any, makeToken() as any),
     ).resolves.toBeNull();
   });
 });

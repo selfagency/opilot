@@ -25,11 +25,16 @@ export class OllamaInlineCompletionProvider implements vscode.InlineCompletionIt
     const modelId = config.get<string>('completionModel')?.trim() ?? '';
     if (!modelId) return null;
 
-    const fullText = document.getText();
     const offset = document.offsetAt(position);
-    const prefix = fullText.slice(0, offset).slice(-MAX_COMPLETION_PREFIX_CHARS);
-    const rawSuffix = fullText.slice(offset);
-    const suffix = rawSuffix.slice(0, MAX_COMPLETION_SUFFIX_CHARS);
+    // Compute prefix window using a range instead of materializing the entire document.
+    const prefixStartOffset = Math.max(0, offset - MAX_COMPLETION_PREFIX_CHARS);
+    const prefixStartPosition = document.positionAt(prefixStartOffset);
+    const prefix = document.getText(new vscode.Range(prefixStartPosition, position));
+    // Compute suffix window using a range limited by MAX_COMPLETION_SUFFIX_CHARS.
+    const documentLength = document.offsetAt(new vscode.Position(document.lineCount - 1, Number.MAX_SAFE_INTEGER));
+    const suffixEndOffset = Math.min(documentLength, offset + MAX_COMPLETION_SUFFIX_CHARS);
+    const suffixEndPosition = document.positionAt(suffixEndOffset);
+    const suffix = document.getText(new vscode.Range(position, suffixEndPosition));
 
     try {
       const response = await this.client.generate({
