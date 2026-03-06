@@ -1203,20 +1203,23 @@ describe('handleBuiltInOllamaConflict', () => {
 
   it('clears ollama.url setting when user confirms', async () => {
     const showWarningMessage = vi.fn().mockResolvedValue('Disable Built-in Ollama Provider');
-    const showInformationMessage = vi.fn().mockResolvedValue(undefined);
+    const showInformationMessage = vi.fn().mockResolvedValue('Reload Window');
     const mockConfig = { update: vi.fn().mockResolvedValue(undefined) };
     const getConfiguration = vi.fn().mockReturnValue(mockConfig);
     const selectChatModels = vi.fn().mockResolvedValue([{ id: 'ollama:llama3', vendor: 'ollama', name: 'Llama 3' }]);
+    const executeCommand = vi.fn().mockResolvedValue(undefined);
 
     const ext = await import('./extension.js');
     await ext.handleBuiltInOllamaConflict(
       { showWarningMessage, showInformationMessage },
       { getConfiguration },
       { selectChatModels },
+      { executeCommand },
     );
 
-    expect(mockConfig.update).toHaveBeenCalledWith('ollama.url', undefined, expect.anything());
+    expect(mockConfig.update).toHaveBeenCalledWith('ollama.url', '', expect.anything());
     expect(showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('Reload VS Code'), 'Reload Window');
+    expect(executeCommand).toHaveBeenCalledWith('workbench.action.reloadWindow');
   });
 });
 

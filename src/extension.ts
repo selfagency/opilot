@@ -9,6 +9,7 @@ import { registerSidebar } from './sidebar.js';
 import { registerModelfileManager } from './modelfiles.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-ollama';
+let builtInOllamaConflictPromptInProgress = false;
 
 /**
  * Handle configuration changes for log level and auto-start log streaming
@@ -72,31 +73,48 @@ export async function handleBuiltInOllamaConflict(
   windowApi?: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage'>,
   workspaceApi?: Pick<typeof vscode.workspace, 'getConfiguration'>,
   lmApi?: Pick<typeof vscode.lm, 'selectChatModels'>,
+  commandsApi?: Pick<typeof vscode.commands, 'executeCommand'>,
 ): Promise<void> {
+  if (builtInOllamaConflictPromptInProgress) {
+    return;
+  }
+
   const win = windowApi ?? vscode.window;
   const ws = workspaceApi ?? vscode.workspace;
   const lm = lmApi ?? vscode.lm;
+  const commands = commandsApi ?? vscode.commands;
 
   const conflictModels = await lm.selectChatModels({ vendor: 'ollama' });
   if (!conflictModels.length) return;
 
-  const selection = await win.showWarningMessage(
-    "Copilot's built-in Ollama provider is active and will show duplicate models alongside this extension. Disable it?",
-    'Disable Built-in Ollama Provider',
-  );
+  builtInOllamaConflictPromptInProgress = true;
+  try {
+    const selection = await win.showWarningMessage(
+      "Copilot's built-in Ollama provider is active and will show duplicate models alongside this extension. Disable it?",
+      'Disable Built-in Ollama Provider',
+    );
 
-  if (selection !== 'Disable Built-in Ollama Provider') return;
+    if (selection !== 'Disable Built-in Ollama Provider') return;
 
-  await (ws.getConfiguration('github.copilot.chat') as vscode.WorkspaceConfiguration).update(
-    'ollama.url',
-    undefined,
-    vscode.ConfigurationTarget.Global,
-  );
+    // Use empty string to disable the built-in provider explicitly.
+    // Using undefined can fall back to a non-empty default and keep it enabled.
+    await (ws.getConfiguration('github.copilot.chat') as vscode.WorkspaceConfiguration).update(
+      'ollama.url',
+      '',
+      vscode.ConfigurationTarget.Global,
+    );
 
-  await win.showInformationMessage(
-    "Copilot's built-in Ollama provider has been disabled. Reload VS Code to apply.",
-    'Reload Window',
-  );
+    const reloadSelection = await win.showInformationMessage(
+      "Copilot's built-in Ollama provider has been disabled. Reload VS Code to apply.",
+      'Reload Window',
+    );
+
+    if (reloadSelection === 'Reload Window') {
+      await commands.executeCommand('workbench.action.reloadWindow');
+    }
+  } finally {
+    builtInOllamaConflictPromptInProgress = false;
+  }
 }
 
 /**
