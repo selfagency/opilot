@@ -271,6 +271,12 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             );
           }
         }
+
+        // Some Ollama responses set done=true before the underlying stream closes.
+        // Exit promptly so VS Code doesn't stay in a perpetual "waiting" state.
+        if (chunk.done === true) {
+          break;
+        }
       }
     } catch (error) {
       this.outputChannel.exception('[Ollama] Chat response failed', error);
