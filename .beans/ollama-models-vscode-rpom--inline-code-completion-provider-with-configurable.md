@@ -1,12 +1,11 @@
 ---
 # ollama-models-vscode-rpom
 title: Inline code completion provider with configurable model selection
-status: todo
+status: scrapped
 type: feat
 priority: medium
 created_at: 2026-03-06T05:23:54Z
-updated_at: 2026-03-06T05:23:54Z
-id: ollama-models-vscode-rpom
+updated_at: 2026-03-06T05:56:45Z
 ---
 
 Implement a VS Code `InlineCompletionItemProvider` backed by Ollama `/api/generate` for ghost-text (autocomplete-as-you-type) completions.

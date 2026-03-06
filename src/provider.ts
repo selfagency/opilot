@@ -351,7 +351,6 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         if (shouldThink && this.isThinkingNotSupportedError(innerError)) {
           this.thinkingModels.delete(model.id);
           this.nonThinkingModels.add(model.id);
-          shouldThink = false;
           response = await perRequestClient.chat({
             model: model.id,
             messages: ollamaMessages,
@@ -394,7 +393,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
           for (const toolCall of chunk.message.tool_calls) {
             const vsCodeId = this.generateToolCallId();
-            this.mapToolCallId(vsCodeId, vsCodeId);
+            const upstreamId =
+              typeof (toolCall as { id?: unknown }).id === 'string'
+                ? (toolCall as unknown as { id: string }).id
+                : vsCodeId;
+            this.mapToolCallId(vsCodeId, upstreamId);
 
             progress.report(
               new LanguageModelToolCallPart(

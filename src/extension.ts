@@ -297,7 +297,6 @@ export async function handleChatRequest(
           chatError.name === 'ResponseError' &&
           chatError.message.toLowerCase().includes('does not support thinking')
         ) {
-          shouldThink = false;
           response = await client.chat({
             model: modelId,
             messages: ollamaMessages,

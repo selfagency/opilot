@@ -1363,7 +1363,7 @@ describe('handleBuiltInOllamaConflict', () => {
 
     const ext = await import('./extension.js');
     await ext.handleBuiltInOllamaConflict(
-      { showWarningMessage, showInformationMessage: vi.fn() },
+      { showWarningMessage, showInformationMessage: vi.fn(), showErrorMessage: vi.fn() },
       { getConfiguration: vi.fn() },
       { selectChatModels },
     );
@@ -1378,7 +1378,7 @@ describe('handleBuiltInOllamaConflict', () => {
 
     const ext = await import('./extension.js');
     await ext.handleBuiltInOllamaConflict(
-      { showWarningMessage, showInformationMessage: vi.fn() },
+      { showWarningMessage, showInformationMessage: vi.fn(), showErrorMessage: vi.fn() },
       { getConfiguration: vi.fn() },
       { selectChatModels },
     );
@@ -1398,7 +1398,7 @@ describe('handleBuiltInOllamaConflict', () => {
 
     const ext = await import('./extension.js');
     await ext.handleBuiltInOllamaConflict(
-      { showWarningMessage, showInformationMessage },
+      { showWarningMessage, showInformationMessage, showErrorMessage: vi.fn() },
       { getConfiguration },
       { selectChatModels },
     );
@@ -1418,7 +1418,7 @@ describe('handleBuiltInOllamaConflict', () => {
 
     const ext = await import('./extension.js');
     await ext.handleBuiltInOllamaConflict(
-      { showWarningMessage, showInformationMessage },
+      { showWarningMessage, showInformationMessage, showErrorMessage: vi.fn() },
       { getConfiguration },
       { selectChatModels },
       { executeCommand },
