@@ -50,11 +50,19 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    * Provide information about available chat models
    */
   async provideLanguageModelChatInformation(
-    _options: { silent: boolean },
+    options: { silent: boolean },
     _token: CancellationToken,
   ): Promise<LanguageModelChatInformation[]> {
+    // Interactive model picker requests should bypass the short list cache so
+    // newly pulled models appear immediately without requiring a reload.
+    const forceRefresh = !options.silent;
+
     const now = Date.now();
-    if (this.cachedModelList.length > 0 && now - this.lastModelListRefreshMs < MODEL_LIST_REFRESH_MIN_INTERVAL_MS) {
+    if (
+      !forceRefresh &&
+      this.cachedModelList.length > 0 &&
+      now - this.lastModelListRefreshMs < MODEL_LIST_REFRESH_MIN_INTERVAL_MS
+    ) {
       return this.cachedModelList;
     }
 
@@ -575,7 +583,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       this.client = await getOllamaClient(this.context);
       this.clearModelCache();
       this.modelsChangeEventEmitter.fire();
-    } else if (action.label === 'Set Ollama auth token') {
+    } else if (action.label === 'Set Token') {
       const token = await window.showInputBox({
         prompt: 'Enter Ollama authentication token (leave empty for anonymous)',
         password: true,

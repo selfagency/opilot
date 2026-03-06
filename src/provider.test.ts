@@ -114,6 +114,28 @@ describe('OllamaChatModelProvider caching', () => {
     expect(show).toHaveBeenCalledTimes(1);
   });
 
+  it('bypasses throttle for interactive (non-silent) model list requests', async () => {
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ models: [{ name: 'llama3' }] })
+      .mockResolvedValueOnce({ models: [{ name: 'llama3' }, { name: 'starcoder2' }] });
+    const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list, show } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+    );
+
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    // Second request is interactive (model picker), so it should force refresh
+    // even though we are still within the throttle window.
+    const models = await provider.provideLanguageModelChatInformation({ silent: false }, {} as any);
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(models.map(m => m.id)).toContain('starcoder2');
+  });
+
   it('reuses cached model details after refresh interval', async () => {
     const list = vi.fn().mockResolvedValue({ models: [{ name: 'llama3' }] });
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
