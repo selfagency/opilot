@@ -171,13 +171,19 @@
       {
         "command": "ollama-copilot.stopModel",
         "title": "Stop Ollama Model",
-        "icon": "$(stop-circle)",
+        "icon": "$(debug-stop)",
         "category": "Ollama"
       },
       {
         "command": "ollama-copilot.startModel",
         "title": "Start Ollama Model",
-        "icon": "$(play-circle)",
+        "icon": "$(debug-start)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.pullModelFromLibrary",
+        "title": "Pull Ollama Model",
+        "icon": "$(cloud-download)",
         "category": "Ollama"
       },
       {
@@ -207,13 +213,13 @@
       {
         "command": "ollama-copilot.startCloudModel",
         "title": "Run Ollama Cloud Model",
-        "icon": "$(play-circle)",
+        "icon": "$(debug-start)",
         "category": "Ollama"
       },
       {
         "command": "ollama-copilot.stopCloudModel",
         "title": "Stop Ollama Cloud Model",
-        "icon": "$(stop-circle)",
+        "icon": "$(debug-stop)",
         "category": "Ollama"
       },
       {
@@ -443,7 +449,7 @@
     "languageModelChatProviders": [
       {
         "vendor": "selfagency-ollama",
-        "displayName": "Ollama",
+        "displayName": "🦙 Ollama",
         "configuration": {
           "managementCommand": "ollama-copilot.manageAuthToken"
         }

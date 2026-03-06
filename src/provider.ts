@@ -138,10 +138,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     return {
       id: modelId,
       name: formatModelName(modelId),
-      family: 'Ollama',
+      family: '🦙 Ollama',
       version: '1.0.0',
-      detail: 'Ollama',
-      tooltip: `Ollama • ${modelId}`,
+      detail: '🦙 Ollama',
+      tooltip: `🦙 Ollama • ${modelId}`,
       maxInputTokens: contextLength,
       maxOutputTokens: contextLength,
       capabilities: {
@@ -220,10 +220,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       return {
         id: modelId,
         name: formatModelName(modelId),
-        family: 'Ollama',
+        family: '🦙 Ollama',
         version: '1.0.0',
-        detail: 'Ollama',
-        tooltip: `Ollama • ${modelId}`,
+        detail: '🦙 Ollama',
+        tooltip: `🦙 Ollama • ${modelId}`,
         maxInputTokens: contextLength,
         maxOutputTokens: contextLength,
         capabilities: {
