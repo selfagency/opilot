@@ -284,6 +284,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Detect and offer to disable Copilot's built-in Ollama provider (non-blocking)
   void handleBuiltInOllamaConflict();
+  const conflictCheckDelaysMs = [1_500, 5_000, 10_000];
+  const conflictCheckTimers = conflictCheckDelaysMs.map(delay =>
+    setTimeout(() => {
+      void handleBuiltInOllamaConflict();
+    }, delay),
+  );
+  context.subscriptions.push({
+    dispose: () => {
+      for (const timer of conflictCheckTimers) {
+        clearTimeout(timer);
+      }
+    },
+  });
 
   // Test connection to Ollama server on startup (non-blocking)
   void (async () => {

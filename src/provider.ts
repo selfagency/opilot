@@ -1,4 +1,4 @@
-import { Ollama } from 'ollama';
+import { Ollama, type ShowResponse } from 'ollama';
 import {
   CancellationToken,
   EventEmitter,
@@ -121,12 +121,32 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       const response = await this.client.show({ model: modelId });
 
       // Prefer the model's actual context window; fall back to the user override, then 0.
-      const modelinfo = (response as Record<string, unknown>).modelinfo as Record<string, unknown> | undefined;
-      const parameters = (response as Record<string, unknown>).parameters as string | undefined;
+      const typedResponse = response as ShowResponse & { modelinfo?: Map<string, unknown> | Record<string, unknown> };
+      const modelinfo =
+        (typedResponse.model_info as Map<string, unknown> | Record<string, unknown> | undefined) ??
+        typedResponse.modelinfo;
+      const parameters = typedResponse.parameters;
       let contextLength = getContextLengthOverride();
       if (!contextLength) {
-        // Ollama ≥0.3 exposes context_length in modelinfo
-        const infoCtx = modelinfo?.['llama.context_length'] ?? modelinfo?.['context_length'];
+        // Ollama exposes context_length in model_info using family-specific keys
+        // (e.g. llama.context_length, qwen2.context_length, gemma.context_length).
+        let infoCtx: unknown;
+        if (modelinfo instanceof Map) {
+          for (const [key, value] of modelinfo.entries()) {
+            if (key === 'context_length' || key.endsWith('.context_length')) {
+              infoCtx = value;
+              break;
+            }
+          }
+        } else if (modelinfo && typeof modelinfo === 'object') {
+          for (const [key, value] of Object.entries(modelinfo)) {
+            if (key === 'context_length' || key.endsWith('.context_length')) {
+              infoCtx = value;
+              break;
+            }
+          }
+        }
+
         if (typeof infoCtx === 'number' && infoCtx > 0) {
           contextLength = infoCtx;
         } else if (parameters) {
@@ -159,6 +179,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    */
   private isToolModel(modelResponse: unknown): boolean {
     const response = modelResponse as Record<string, unknown>;
+    const capabilities = response.capabilities;
+    if (Array.isArray(capabilities) && capabilities.some(cap => String(cap).toLowerCase().includes('tool'))) {
+      return true;
+    }
+
     const template = response.template as string | undefined;
     return template ? template.includes('{{ .Tools }}') : false;
   }
@@ -168,6 +193,15 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    */
   private isVisionModel(modelResponse: unknown): boolean {
     const response = modelResponse as Record<string, unknown>;
+    const capabilities = response.capabilities;
+    if (Array.isArray(capabilities) && capabilities.some(cap => String(cap).toLowerCase().includes('vision'))) {
+      return true;
+    }
+
+    if (response.projector_info) {
+      return true;
+    }
+
     const details = response.details as Record<string, unknown> | undefined;
     const families = details?.families as string[] | undefined;
     return families ? families.includes('clip') || families.includes('vision') : false;

@@ -173,6 +173,60 @@ describe('OllamaChatModelProvider model detection', () => {
     vi.restoreAllMocks();
   });
 
+  it('extracts context length from family-specific model_info keys', async () => {
+    const show = vi.fn().mockResolvedValue({
+      template: '',
+      details: { families: [] },
+      model_info: {
+        'qwen2.context_length': 131072,
+      },
+    });
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'qwen2.5-coder:latest' }] }), show } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    expect(models[0]?.maxInputTokens).toBe(131072);
+    expect(models[0]?.maxOutputTokens).toBe(131072);
+  });
+
+  it('detects tool support from capabilities array', async () => {
+    const show = vi.fn().mockResolvedValue({
+      template: '',
+      details: { families: [] },
+      capabilities: ['completion', 'tools'],
+    });
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'granite4:latest' }] }), show } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    expect(models[0]?.capabilities?.toolCalling).toBe(true);
+  });
+
+  it('detects vision support from capabilities array', async () => {
+    const show = vi.fn().mockResolvedValue({
+      template: '',
+      details: { families: [] },
+      capabilities: ['completion', 'vision'],
+    });
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'llava:latest' }] }), show } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    expect(models[0]?.capabilities?.imageInput).toBe(true);
+  });
+
   it('detects vision models with clip family', async () => {
     const show = vi.fn().mockResolvedValue({
       template: '',
