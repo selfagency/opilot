@@ -51,6 +51,9 @@ const minimalVscodeMock = () => ({
     withProgress: vi.fn(),
     registerTreeDataProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
   },
+  env: {
+    openExternal: vi.fn().mockResolvedValue(true),
+  },
   ProgressLocation: { Notification: 15 },
   commands: { registerCommand: vi.fn().mockReturnValue({ dispose: vi.fn() }), executeCommand: vi.fn() },
   languages: {
@@ -98,6 +101,20 @@ describe('getModelfilesFolder', () => {
     const { getModelfilesFolder } = await import('./modelfiles.js');
     const config = { get: vi.fn().mockReturnValue('/custom/modelfiles') };
     expect(getModelfilesFolder(config as any, '/home/user')).toBe('/custom/modelfiles');
+  });
+
+  it('expands ~/ prefix in configured path', async () => {
+    const { getModelfilesFolder } = await import('./modelfiles.js');
+    const config = { get: vi.fn().mockReturnValue('~/custom/modelfiles') };
+    expect(getModelfilesFolder(config as any, '/home/user')).toBe('/home/user/custom/modelfiles');
+  });
+
+  it('resolves relative configured path from workspace folder when available', async () => {
+    const { getModelfilesFolder } = await import('./modelfiles.js');
+    const config = { get: vi.fn().mockReturnValue('.ollama/modelfiles') };
+    expect(getModelfilesFolder(config as any, '/home/user', '/workspace/project')).toBe(
+      '/workspace/project/.ollama/modelfiles',
+    );
   });
 });
 
@@ -496,5 +513,73 @@ describe('handleBuildModelfile', () => {
     await handleBuildModelfile(item, mockClient as unknown as Ollama);
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('ollama-copilot.refreshLocalModels');
+  });
+});
+
+describe('handleOpenModelfilesFolder', () => {
+  beforeEach(() => {
+    vi.resetModules();
+
+    vi.doMock('node:fs/promises', () => ({
+      mkdir: vi.fn().mockResolvedValue(undefined),
+      readdir: vi.fn().mockResolvedValue([]),
+      readFile: vi.fn().mockResolvedValue(''),
+    }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        constructor(
+          public label: string,
+          public collapsibleState: number,
+        ) {}
+      },
+      TreeItemCollapsibleState: { None: 0 },
+      ThemeIcon: class {
+        constructor(public id: string) {}
+      },
+      RelativePattern: class {
+        constructor(
+          public base: string,
+          public pattern: string,
+        ) {}
+      },
+      Uri: { file: (fsPath: string) => ({ fsPath }) },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn().mockReturnValue('') })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        createFileSystemWatcher: vi.fn(() => ({
+          onDidCreate: vi.fn(),
+          onDidDelete: vi.fn(),
+          onDidChange: vi.fn(),
+          dispose: vi.fn(),
+        })),
+      },
+      window: {
+        showErrorMessage: vi.fn(),
+      },
+      env: {
+        openExternal: vi.fn().mockResolvedValue(true),
+      },
+      commands: {
+        executeCommand: vi.fn(),
+      },
+    }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('opens the provided modelfiles folder URI in OS', async () => {
+    const vscode = await import('vscode');
+    const { handleOpenModelfilesFolder } = await import('./modelfiles.js');
+
+    await handleOpenModelfilesFolder('/tmp/modelfiles');
+
+    expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ fsPath: '/tmp/modelfiles' }));
   });
 });

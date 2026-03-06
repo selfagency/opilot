@@ -575,7 +575,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       this.client = await getOllamaClient(this.context);
       this.clearModelCache();
       this.modelsChangeEventEmitter.fire();
-    } else if (action.label === 'Set Token') {
+    } else if (action.label === 'Set Ollama auth token') {
       const token = await window.showInputBox({
         prompt: 'Enter Ollama authentication token (leave empty for anonymous)',
         password: true,

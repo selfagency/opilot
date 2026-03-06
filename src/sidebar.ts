@@ -583,7 +583,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     const sortedNames = this.sortNames(names);
     const items = sortedNames.map(name => {
       const item = new ModelTreeItem(name, 'library-model');
-      item.tooltip = `Click to open ${name} on ollama.com`;
+      item.tooltip = `Library model: ${name}`;
       // Fetch description asynchronously
       void fetchModelPagePreview(name).then(
         preview => {
@@ -594,11 +594,6 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           item.tooltip = `Library model: ${name}`;
         },
       );
-      item.command = {
-        command: 'ollama-copilot.openLibraryModel',
-        title: 'Open Model',
-        arguments: [name],
-      };
       return item;
     });
 
@@ -873,7 +868,7 @@ export async function handleManageCloudApiKey(
 ): Promise<void> {
   const existing = await context.secrets.get('ollama-cloud-api-key');
   const entered = await window.showInputBox({
-    prompt: existing ? 'Update Ollama Cloud API key (leave empty to cancel)' : 'Enter Ollama Cloud API key',
+    prompt: existing ? 'Update Ollama Cloud API key' : 'Enter Ollama Cloud API key',
     password: true,
     ignoreFocusOut: true,
   });
@@ -887,13 +882,6 @@ export async function handleManageCloudApiKey(
   cloudProvider.refresh();
   libraryProvider.refresh();
   window.showInformationMessage('Ollama Cloud API key saved');
-}
-
-/**
- * Command handler: open library model page
- */
-export function handleOpenLibraryModel(modelName: string): void {
-  void env.openExternal(Uri.parse(getLibraryModelUrl(modelName)));
 }
 
 /**
@@ -1083,9 +1071,6 @@ export function registerSidebar(
     ),
     commands.registerCommand('ollama-copilot.manageCloudApiKey', async () =>
       handleManageCloudApiKey(context, cloudProvider, libraryProvider, logChannel),
-    ),
-    commands.registerCommand('ollama-copilot.openLibraryModel', (modelName: string) =>
-      handleOpenLibraryModel(modelName),
     ),
     commands.registerCommand('ollama-copilot.openCloudModel', (modelName: string) => handleOpenCloudModel(modelName)),
     commands.registerCommand('ollama-copilot.deleteModel', (item: ModelTreeItem) =>

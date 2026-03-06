@@ -159,7 +159,7 @@ describe('LocalModelsProvider', () => {
     expect(treeItem.description).toContain('GB');
   });
 
-  it('uses model details command when clicking library model items', async () => {
+  it('does not auto-open model details when selecting library model items', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -171,7 +171,7 @@ describe('LocalModelsProvider', () => {
     const libraryProvider = new LibraryModelsProvider(async () => new Set<string>(), undefined);
     const models = await libraryProvider.getChildren();
 
-    expect(models[0].command?.command).toBe('ollama-copilot.openLibraryModel');
+    expect(models[0].command).toBeUndefined();
     libraryProvider.dispose();
   });
 
@@ -688,15 +688,6 @@ describe('Extracted command handlers', () => {
     handleStopModel(item, mockProvider);
 
     expect(mockProvider.stopModel).toHaveBeenCalledWith('test-model');
-  });
-
-  it('handleOpenLibraryModel opens external URL', async () => {
-    const { handleOpenLibraryModel } = await import('./sidebar.js');
-
-    // Should not throw
-    handleOpenLibraryModel('mistral');
-
-    expect(handleOpenLibraryModel).toBeDefined();
   });
 
   it('handleOpenCloudModel opens cloud model URL', async () => {

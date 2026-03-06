@@ -1,8 +1,8 @@
 import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
+import type { CreateRequest, Ollama } from 'ollama';
 import * as vscode from 'vscode';
-import type { Ollama, CreateRequest } from 'ollama';
 import type { DiagnosticsLogger } from './diagnostics.js';
 
 // ---------------------------------------------------------------------------
@@ -22,8 +22,7 @@ const KEYWORD_DOCS: Record<string, string> = {
   LICENSE: '**LICENSE** — Legal license text for the model.\n\n```\nLICENSE """\nMIT License...\n"""\n```',
   MESSAGE:
     '**MESSAGE** — Adds a message to the conversation history to guide the model.\n\nRoles: `system`, `user`, `assistant`.\n\n```\nMESSAGE user "Hello"\nMESSAGE assistant "Hi there!"\n```',
-  REQUIRES:
-    '**REQUIRES** — Minimum Ollama version required by this Modelfile.\n\n```\nREQUIRES 0.14.0\n```',
+  REQUIRES: '**REQUIRES** — Minimum Ollama version required by this Modelfile.\n\n```\nREQUIRES 0.14.0\n```',
 };
 
 const PARAMETER_DOCS: Record<string, string> = {
@@ -51,8 +50,26 @@ const PARAMETER_DOCS: Record<string, string> = {
 export function getModelfilesFolder(
   config: Pick<vscode.WorkspaceConfiguration, 'get'>,
   home: string,
+  workspaceFolderPath?: string,
 ): string {
-  return config.get<string>('modelfilesPath') || join(home, '.ollama', 'modelfiles');
+  const configuredPath = (config.get<string>('modelfilesPath') || '').trim();
+  if (!configuredPath) {
+    return join(home, '.ollama', 'modelfiles');
+  }
+
+  const expandedHomePath = configuredPath.startsWith('~')
+    ? join(home, configuredPath.slice(1).replace(/^[/\\]/, ''))
+    : configuredPath;
+
+  if (isAbsolute(expandedHomePath)) {
+    return expandedHomePath;
+  }
+
+  if (workspaceFolderPath) {
+    return resolve(workspaceFolderPath, expandedHomePath);
+  }
+
+  return resolve(home, expandedHomePath);
 }
 
 export async function ensureModelfilesFolder(folderPath: string): Promise<void> {
@@ -87,7 +104,11 @@ export class ModelfilesProvider implements vscode.TreeDataProvider<ModelfileItem
     context: vscode.ExtensionContext,
     private readonly log?: DiagnosticsLogger,
   ) {
-    this.folderPath = getModelfilesFolder(vscode.workspace.getConfiguration('ollama'), homedir());
+    this.folderPath = getModelfilesFolder(
+      vscode.workspace.getConfiguration('ollama'),
+      homedir(),
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    );
 
     const watcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(this.folderPath, '{*.modelfile,Modelfile}'),
@@ -103,6 +124,7 @@ export class ModelfilesProvider implements vscode.TreeDataProvider<ModelfileItem
           this.folderPath = getModelfilesFolder(
             vscode.workspace.getConfiguration('ollama'),
             homedir(),
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
           );
           this.refresh();
         }
@@ -164,9 +186,7 @@ export async function handleNewModelfile(folderPath: string, client: Ollama): Pr
   }
 
   const selectedModel = await vscode.window.showQuickPick(
-    modelItems.length > 0
-      ? modelItems
-      : [{ label: 'llama3.2:3b', description: 'default' }],
+    modelItems.length > 0 ? modelItems : [{ label: 'llama3.2:3b', description: 'default' }],
     {
       placeHolder: 'Select a base model',
       title: 'New Modelfile — choose base model',
@@ -244,6 +264,22 @@ export async function handleBuildModelfile(
       }
     },
   );
+}
+
+export async function handleOpenModelfilesFolder(folderPath: string, log?: DiagnosticsLogger): Promise<void> {
+  try {
+    await ensureModelfilesFolder(folderPath);
+    log?.info(`[Ollama] Opening modelfiles folder: ${folderPath}`);
+    const folderUri = vscode.Uri.file(folderPath);
+    const opened = await vscode.env.openExternal(folderUri);
+    if (!opened) {
+      await vscode.commands.executeCommand('revealFileInOS', folderUri);
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    log?.error(`[Ollama] Failed to open modelfiles folder: ${msg}`);
+    vscode.window.showErrorMessage(`Failed to open Modelfiles folder: ${msg}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -334,14 +370,10 @@ export function registerModelfileManager(
     vscode.commands.registerCommand('ollama-copilot.buildModelfile', (item: ModelfileItem) =>
       handleBuildModelfile(item, client, log),
     ),
-    vscode.commands.registerCommand('ollama-copilot.openModelfilesFolder', () =>
-      vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(provider.getFolderPath())),
+    vscode.commands.registerCommand('ollama-copilot.openModelfilesFolder', async () =>
+      handleOpenModelfilesFolder(provider.getFolderPath(), log),
     ),
     vscode.languages.registerHoverProvider({ language: 'modelfile' }, createHoverProvider()),
-    vscode.languages.registerCompletionItemProvider(
-      { language: 'modelfile' },
-      createCompletionProvider(),
-      ' ',
-    ),
+    vscode.languages.registerCompletionItemProvider({ language: 'modelfile' }, createCompletionProvider(), ' '),
   );
 }

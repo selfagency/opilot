@@ -189,7 +189,7 @@
       {
         "command": "ollama-copilot.openLibraryModelPage",
         "title": "Open Ollama Model Page",
-        "icon": "$(link-external)",
+        "icon": "$(link)",
         "category": "Ollama"
       },
       {
