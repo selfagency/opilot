@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "selfagency.beans-vscode",
+    "oxc.oxc-vscode",
+    "vitest.explorer",
+    "github.copilot-chat",
+    "davidanson.vscode-markdownlint",
+    "github.vscode-codeql",
+    "task.vscode-task",
+    "typescriptteam.native-preview"
+  ]
+}
