@@ -1641,4 +1641,76 @@ describe('Extracted command handlers', () => {
 
     expect(mockPull).not.toHaveBeenCalled();
   });
+
+  it('registerSidebar registers collapse commands for all three views', async () => {
+    vi.resetModules();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        constructor(label: string) { this.label = label; }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      window: {
+        createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
+        withProgress: vi.fn(),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+    }));
+
+    const vscode = await import('vscode');
+    const { registerSidebar } = await import('./sidebar.js');
+
+    const mockContext = {
+      subscriptions: { push: vi.fn() },
+      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
+      globalState: { get: vi.fn(), update: vi.fn() },
+    } as any;
+
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      generate: vi.fn(),
+    } as any;
+
+    registerSidebar(mockContext, mockClient);
+
+    const registerCommandMock = vi.mocked(vscode.commands.registerCommand);
+    const registeredIds = registerCommandMock.mock.calls.map(([id]) => id);
+
+    expect(registeredIds).toContain('ollama-copilot.collapseLocalModels');
+    expect(registeredIds).toContain('ollama-copilot.collapseCloudModels');
+    expect(registeredIds).toContain('ollama-copilot.collapseLibrary');
+
+    // Invoke each collapse command handler and verify it delegates to the built-in VS Code command
+    const executeCommandMock = vi.mocked(vscode.commands.executeCommand);
+    const callHandler = (id: string) => {
+      const entry = registerCommandMock.mock.calls.find(([cmd]) => cmd === id);
+      return (entry?.[1] as (() => void) | undefined)?.();
+    };
+
+    callHandler('ollama-copilot.collapseLocalModels');
+    expect(executeCommandMock).toHaveBeenCalledWith('workbench.actions.treeView.ollama-local-models.collapseAll');
+
+    callHandler('ollama-copilot.collapseCloudModels');
+    expect(executeCommandMock).toHaveBeenCalledWith('workbench.actions.treeView.ollama-cloud-models.collapseAll');
+
+    callHandler('ollama-copilot.collapseLibrary');
+    expect(executeCommandMock).toHaveBeenCalledWith('workbench.actions.treeView.ollama-library-models.collapseAll');
+  });
 });

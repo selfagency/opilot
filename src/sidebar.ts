@@ -1502,10 +1502,23 @@ export function registerSidebar(
 
   logChannel?.info('[Ollama] Sidebar providers initialized');
 
+  const localTreeView = window.createTreeView('ollama-local-models', { treeDataProvider: localProvider });
+  const libraryTreeView = window.createTreeView('ollama-library-models', { treeDataProvider: libraryProvider });
+  const cloudTreeView = window.createTreeView('ollama-cloud-models', { treeDataProvider: cloudProvider });
+
   context.subscriptions.push(
-    window.registerTreeDataProvider('ollama-local-models', localProvider),
-    window.registerTreeDataProvider('ollama-library-models', libraryProvider),
-    window.registerTreeDataProvider('ollama-cloud-models', cloudProvider),
+    localTreeView,
+    libraryTreeView,
+    cloudTreeView,
+    commands.registerCommand('ollama-copilot.collapseLocalModels', () =>
+      commands.executeCommand('workbench.actions.treeView.ollama-local-models.collapseAll'),
+    ),
+    commands.registerCommand('ollama-copilot.collapseCloudModels', () =>
+      commands.executeCommand('workbench.actions.treeView.ollama-cloud-models.collapseAll'),
+    ),
+    commands.registerCommand('ollama-copilot.collapseLibrary', () =>
+      commands.executeCommand('workbench.actions.treeView.ollama-library-models.collapseAll'),
+    ),
     commands.registerCommand('ollama-copilot.refreshSidebar', () => handleRefreshLocalModels(localProvider)),
     commands.registerCommand('ollama-copilot.refreshLocalModels', () => handleRefreshLocalModels(localProvider)),
     commands.registerCommand('ollama-copilot.refreshLibrary', () => handleRefreshLibrary(libraryProvider)),

@@ -108,6 +108,7 @@ export const window = {
   showWarningMessage: vi.fn(),
   showInformationMessage: vi.fn(),
   showErrorMessage: vi.fn(),
+  createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
 };
 
 export const lm = {
