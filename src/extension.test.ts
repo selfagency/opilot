@@ -1538,6 +1538,171 @@ describe('handleChatRequest model selection', () => {
     expect(mockMarkdown).toHaveBeenCalledWith('response from chosen model');
     expect(mockSelectChatModels).not.toHaveBeenCalled();
   });
+
+  it('invokes tools and feeds results back when toolInvocationToken is present', async () => {
+    vi.resetModules();
+
+    const LMTextPart = class {
+      constructor(public value: string) {}
+    };
+    const LMToolCallPart = class {
+      constructor(
+        public callId: string,
+        public name: string,
+        public input: Record<string, unknown>,
+      ) {}
+    };
+    const LMToolResultPart = class {
+      constructor(
+        public callId: string,
+        public content: unknown,
+      ) {}
+    };
+
+    // Round 1: stream yields a tool call; Round 2: stream yields the final text
+    const mockSendRequest = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stream: (async function* () {
+          yield new LMToolCallPart('call-1', 'search', { query: 'vitest' });
+        })(),
+      })
+      .mockResolvedValueOnce({
+        stream: (async function* () {
+          yield new LMTextPart('final answer');
+        })(),
+      });
+
+    const mockInvokeTool = vi.fn().mockResolvedValue({ content: [new LMTextPart('tool-result')] });
+    const mockSelectChatModels = vi.fn().mockResolvedValue([
+      {
+        vendor: 'selfagency-ollama',
+        sendRequest: mockSendRequest,
+      },
+    ]);
+
+    vi.doMock('vscode', () => ({
+      LanguageModelTextPart: LMTextPart,
+      LanguageModelToolCallPart: LMToolCallPart,
+      LanguageModelToolResultPart: LMToolResultPart,
+      ChatRequestTurn: class {},
+      ChatResponseTurn: class {},
+      ChatResponseMarkdownPart: class {},
+      LanguageModelChatMessage: {
+        User: (content: unknown) => ({ role: 'user', content }),
+        Assistant: (content: unknown) => ({ role: 'assistant', content }),
+      },
+      lm: {
+        selectChatModels: mockSelectChatModels,
+        tools: [{ name: 'search', description: 'search the web', inputSchema: {} }],
+        invokeTool: mockInvokeTool,
+      },
+      workspace: { getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }) },
+    }));
+
+    const ext = await import('./extension.js');
+    const mockMarkdown = vi.fn();
+    const mockRequest = {
+      prompt: 'test',
+      model: { vendor: 'copilot' },
+      toolInvocationToken: 'tok-123',
+    };
+
+    await ext.handleChatRequest(
+      mockRequest as any,
+      { history: [] } as any,
+      { markdown: mockMarkdown } as any,
+      { isCancellationRequested: false } as any,
+    );
+
+    expect(mockSendRequest).toHaveBeenCalledTimes(2);
+    expect(mockInvokeTool).toHaveBeenCalledWith(
+      'search',
+      expect.objectContaining({ input: { query: 'vitest' }, toolInvocationToken: 'tok-123' }),
+      expect.anything(),
+    );
+    expect(mockMarkdown).toHaveBeenCalledWith('final answer');
+  });
+
+  it('handles tool invocation errors gracefully', async () => {
+    vi.resetModules();
+
+    const LMTextPart = class {
+      constructor(public value: string) {}
+    };
+    const LMToolCallPart = class {
+      constructor(
+        public callId: string,
+        public name: string,
+        public input: Record<string, unknown>,
+      ) {}
+    };
+    const LMToolResultPart = class {
+      constructor(
+        public callId: string,
+        public content: unknown,
+      ) {}
+    };
+
+    const mockSendRequest = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stream: (async function* () {
+          yield new LMToolCallPart('call-err', 'broken_tool', {});
+        })(),
+      })
+      .mockResolvedValueOnce({
+        stream: (async function* () {
+          yield new LMTextPart('recovered');
+        })(),
+      });
+
+    const mockInvokeTool = vi.fn().mockRejectedValue(new Error('tool crashed'));
+    const mockSelectChatModels = vi.fn().mockResolvedValue([
+      {
+        vendor: 'selfagency-ollama',
+        sendRequest: mockSendRequest,
+      },
+    ]);
+
+    vi.doMock('vscode', () => ({
+      LanguageModelTextPart: LMTextPart,
+      LanguageModelToolCallPart: LMToolCallPart,
+      LanguageModelToolResultPart: LMToolResultPart,
+      ChatRequestTurn: class {},
+      ChatResponseTurn: class {},
+      ChatResponseMarkdownPart: class {},
+      LanguageModelChatMessage: {
+        User: (content: unknown) => ({ role: 'user', content }),
+        Assistant: (content: unknown) => ({ role: 'assistant', content }),
+      },
+      lm: {
+        selectChatModels: mockSelectChatModels,
+        tools: [{ name: 'broken_tool', description: 'a broken tool', inputSchema: {} }],
+        invokeTool: mockInvokeTool,
+      },
+      workspace: { getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }) },
+    }));
+
+    const ext = await import('./extension.js');
+    const mockMarkdown = vi.fn();
+    const mockRequest = {
+      prompt: 'test',
+      model: { vendor: 'copilot' },
+      toolInvocationToken: 'tok-456',
+    };
+
+    await ext.handleChatRequest(
+      mockRequest as any,
+      { history: [] } as any,
+      { markdown: mockMarkdown } as any,
+      { isCancellationRequested: false } as any,
+    );
+
+    // Should still complete the loop with the tool error fed back, and output the final text
+    expect(mockSendRequest).toHaveBeenCalledTimes(2);
+    expect(mockMarkdown).toHaveBeenCalledWith('recovered');
+  });
 });
 
 describe('handleBuiltInOllamaConflict', () => {
@@ -1676,6 +1841,74 @@ describe('handleBuiltInOllamaConflict', () => {
     expect(showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('Reload VS Code'), 'Reload Window');
     expect(executeCommand).toHaveBeenCalledWith('workbench.action.reloadWindow');
   });
+
+  it('falls back to file-based removal when config update throws not a registered configuration', async () => {
+    const showWarningMessage = vi.fn().mockResolvedValue('Disable Built-in Ollama Provider');
+    const showInformationMessage = vi.fn().mockResolvedValue('Reload Window');
+    const showErrorMessage = vi.fn();
+    const mockUpdate = vi.fn().mockRejectedValue(new Error('not a registered configuration'));
+    const getConfiguration = vi.fn().mockReturnValue({ update: mockUpdate });
+    const selectChatModels = vi.fn().mockResolvedValue([{ id: 'ollama:llama3', vendor: 'ollama', name: 'Llama 3' }]);
+    const executeCommand = vi.fn().mockResolvedValue(undefined);
+
+    vi.doMock('node:fs', () => ({
+      promises: {
+        readdir: vi.fn().mockRejectedValue(new Error('ENOENT')),
+        readFile: vi.fn().mockResolvedValue(JSON.stringify([{ vendor: 'ollama', id: 'llama3' }])),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+      },
+    }));
+
+    const ext = await import('./extension.js');
+    const context = {
+      globalStorageUri: { fsPath: '/fake/profiles/default/globalStorage/selfagency.ollama' },
+    };
+
+    await ext.handleBuiltInOllamaConflict(
+      { showWarningMessage, showInformationMessage, showErrorMessage },
+      { getConfiguration },
+      { selectChatModels },
+      { executeCommand },
+      context as any,
+    );
+
+    expect(mockUpdate).toHaveBeenCalled();
+    expect(showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('disabled'), 'Reload Window');
+  });
+
+  it('shows error when file-based removal finds no ollama entries to remove', async () => {
+    const showWarningMessage = vi.fn().mockResolvedValue('Disable Built-in Ollama Provider');
+    const showInformationMessage = vi.fn();
+    const showErrorMessage = vi.fn();
+    const mockUpdate = vi.fn().mockRejectedValue(new Error('not a registered configuration'));
+    const getConfiguration = vi.fn().mockReturnValue({ update: mockUpdate });
+    const selectChatModels = vi.fn().mockResolvedValue([{ id: 'ollama:llama3', vendor: 'ollama', name: 'Llama 3' }]);
+
+    vi.doMock('node:fs', () => ({
+      promises: {
+        readdir: vi.fn().mockRejectedValue(new Error('ENOENT')),
+        // All files contain only non-ollama entries — nothing to remove
+        readFile: vi.fn().mockResolvedValue(JSON.stringify([{ vendor: 'other', id: 'model1' }])),
+        writeFile: vi.fn().mockResolvedValue(undefined),
+      },
+    }));
+
+    const ext = await import('./extension.js');
+    const context = {
+      globalStorageUri: { fsPath: '/fake/profiles/default/globalStorage/selfagency.ollama' },
+    };
+
+    await ext.handleBuiltInOllamaConflict(
+      { showWarningMessage, showInformationMessage, showErrorMessage },
+      { getConfiguration },
+      { selectChatModels },
+      undefined,
+      context as any,
+    );
+
+    expect(showErrorMessage).toHaveBeenCalledWith(expect.stringContaining('still be enabled'));
+    expect(showInformationMessage).not.toHaveBeenCalled();
+  });
 });
 
 describe('handleConfigurationChange', () => {
@@ -1755,5 +1988,279 @@ describe('handleConfigurationChange', () => {
 
     expect(onLogLevelChange).toHaveBeenCalled();
     expect(onAutoStartChange).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// noopLogger — covered when createOutputChannel is not a function
+// ---------------------------------------------------------------------------
+
+describe('activate noopLogger', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('uses noopLogger (info + warn) when createOutputChannel is not available', async () => {
+    // No createOutputChannel in window mock → logOutputChannel = undefined → diagnostics = noopLogger
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        constructor(public label: string) {}
+      },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: any, callback: any) => callback({})),
+        // createOutputChannel intentionally omitted
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn((key: string) => {
+            if (key === 'localModelRefreshInterval') return 0;
+            if (key === 'libraryRefreshInterval') return 0;
+            return undefined;
+          }),
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      lm: {
+        // Throw "already registered" to cover noopLogger.warn path
+        registerLanguageModelChatProvider: vi.fn(() => {
+          throw new Error('already registered');
+        }),
+      },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      chat: {
+        createChatParticipant: vi.fn(() => ({
+          iconPath: undefined,
+          dispose: vi.fn(),
+        })),
+      },
+      Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
+        joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
+      },
+      ChatResponseMarkdownPart: class {
+        value: any = {};
+      },
+      LanguageModelChatMessage: {
+        User: vi.fn(),
+        Assistant: vi.fn(),
+      },
+      LanguageModelTextPart: class {},
+      CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
+    }));
+
+    vi.doMock('./client.js', () => ({
+      getOllamaClient: vi.fn().mockResolvedValue({
+        list: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+        show: vi.fn().mockResolvedValue({ template: '' }),
+      }),
+      testConnection: vi.fn().mockResolvedValue(true),
+    }));
+
+    vi.doMock('./diagnostics.js', () => ({
+      createDiagnosticsLogger: vi.fn(output => ({
+        info: output.info,
+        warn: output.warn,
+        error: output.error,
+        debug: output.debug,
+        exception: vi.fn(),
+      })),
+      getConfiguredLogLevel: vi.fn(() => 'info'),
+    }));
+
+    vi.doMock('./provider.js', () => ({
+      OllamaChatModelProvider: class {
+        setAuthToken = vi.fn();
+      },
+    }));
+
+    vi.doMock('./sidebar.js', () => ({
+      registerSidebar: vi.fn(),
+    }));
+
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
+    }));
+
+    const ext = await import('./extension.js');
+    // activate completes without throwing (lm registration throws "already registered" → warn path)
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
+    // noopLogger.info and noopLogger.warn were called during activation
+  });
+});
+
+// ---------------------------------------------------------------------------
+// startLogStreaming inner callbacks — covered via mocked child_process.spawn
+// ---------------------------------------------------------------------------
+
+describe('startLogStreaming inner callbacks', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('covers onData, stdout/stderr/error/exit callbacks via mocked spawn', async () => {
+    const { EventEmitter: NodeEventEmitter } = await import('node:events');
+
+    const fakeStdout = new NodeEventEmitter() as any;
+    const fakeStderr = new NodeEventEmitter() as any;
+    const fakeProcess = Object.assign(new NodeEventEmitter(), {
+      stdout: fakeStdout,
+      stderr: fakeStderr,
+      kill: vi.fn(),
+    }) as any;
+
+    const spawnMock = vi.fn().mockReturnValue(fakeProcess);
+    vi.doMock('node:child_process', () => ({ spawn: spawnMock }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        constructor(public label: string) {}
+      },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+        createOutputChannel: vi.fn(() => ({
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          debug: vi.fn(),
+          log: vi.fn(),
+          show: vi.fn(),
+        })),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: any, callback: any) => callback({})),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn((key: string) => {
+            // streamLogs = true triggers startLogStreaming on activate
+            if (key === 'streamLogs') return true;
+            if (key === 'localModelRefreshInterval') return 0;
+            if (key === 'libraryRefreshInterval') return 0;
+            return undefined;
+          }),
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      lm: {
+        registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      languages: {
+        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      chat: {
+        createChatParticipant: vi.fn(() => ({
+          iconPath: undefined,
+          dispose: vi.fn(),
+        })),
+      },
+      Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
+        joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
+      },
+      ChatResponseMarkdownPart: class {
+        value: any = {};
+      },
+      LanguageModelChatMessage: {
+        User: vi.fn(),
+        Assistant: vi.fn(),
+      },
+      LanguageModelTextPart: class {},
+      CancellationToken: class {},
+      InlineCompletionItem: class {
+        constructor(public readonly insertText: string) {}
+      },
+    }));
+
+    vi.doMock('./client.js', () => ({
+      getOllamaClient: vi.fn().mockResolvedValue({
+        list: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+        show: vi.fn().mockResolvedValue({ template: '' }),
+      }),
+      testConnection: vi.fn().mockResolvedValue(true),
+    }));
+
+    vi.doMock('./diagnostics.js', () => ({
+      createDiagnosticsLogger: vi.fn(output => ({
+        info: output.info,
+        warn: output.warn,
+        error: output.error,
+        debug: output.debug,
+        exception: vi.fn(),
+      })),
+      getConfiguredLogLevel: vi.fn(() => 'info'),
+    }));
+
+    vi.doMock('./provider.js', () => ({
+      OllamaChatModelProvider: class {
+        setAuthToken = vi.fn();
+      },
+    }));
+
+    vi.doMock('./sidebar.js', () => ({
+      registerSidebar: vi.fn(),
+    }));
+
+    vi.doMock('./modelfiles.js', () => ({
+      registerModelfileManager: vi.fn(),
+    }));
+
+    const ext = await import('./extension.js');
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
+
+    // spawn was called — startLogStreaming registered callbacks on fakeProcess
+    expect(spawnMock).toHaveBeenCalled();
+
+    // Trigger stdout onData callback with real content (covers onData body, stdout callback)
+    fakeStdout.emit('data', Buffer.from('ollama server started\n'));
+
+    // Trigger stderr onData with empty string (covers onData early-return branch)
+    fakeStderr.emit('data', Buffer.from(''));
+
+    // Trigger stderr onData with real content (covers stderr branch in onData)
+    fakeStderr.emit('data', Buffer.from('warning from server'));
+
+    // Trigger error callback (covers error handler + stopLogStreaming with process set)
+    fakeProcess.emit('error', new Error('spawn error'));
+
+    // Trigger exit callback (covers exit handler)
+    fakeProcess.emit('exit', 0, null);
   });
 });

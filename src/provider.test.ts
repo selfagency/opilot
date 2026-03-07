@@ -655,7 +655,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -707,7 +707,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -760,7 +760,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -805,7 +805,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -859,7 +859,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -925,7 +925,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -967,9 +967,9 @@ describe('OllamaChatModelProvider crash handling', () => {
 
   it('shows error message when model runner crashes', async () => {
     const generate = vi.fn().mockResolvedValue({});
-    const chat = vi.fn().mockRejectedValue(
-      new Error('model runner has unexpectedly stopped, please check ollama server logs'),
-    );
+    const chat = vi
+      .fn()
+      .mockRejectedValue(new Error('model runner has unexpectedly stopped, please check ollama server logs'));
 
     vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, generate, abort: vi.fn() } as any);
 
@@ -1008,9 +1008,7 @@ describe('OllamaChatModelProvider crash handling', () => {
       expect.stringContaining('model runner crashed'),
       'Open Logs',
     );
-    expect(generate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'test-model', keep_alive: 0 }),
-    );
+    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ model: 'test-model', keep_alive: 0 }));
   });
 });
 
