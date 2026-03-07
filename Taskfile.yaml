@@ -58,7 +58,7 @@ tasks:
   unit-test-coverage:
     desc: Run unit tests with coverage
     cmds:
-      - ./node_modules/.bin/vitest run --coverage {{.CLI_ARGS}}
+      - ./node_modules/.bin/vitest run src --coverage {{.CLI_ARGS}}
     silent: false
 
   extension-tests:
