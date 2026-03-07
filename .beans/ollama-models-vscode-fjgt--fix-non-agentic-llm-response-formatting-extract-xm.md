@@ -1,11 +1,12 @@
 ---
 # ollama-models-vscode-fjgt
 title: Fix non-agentic LLM response formatting — extract XML context into system message
-status: todo
+status: completed
 type: bug
 priority: medium
 created_at: 2026-03-07T17:18:02Z
 updated_at: 2026-03-07T17:30:17Z
+branch: fix/fjgt-xml-context-extraction
 ---
 
 VS Code Copilot injects `<environment_info>`, `<workspace_info>`, `<selection>`, and `<file_context>` XML blocks as raw text inside user messages. These are not extracted before sending to Ollama. Small/non-agentic models echo the raw XML back in their responses instead of treating it as context.

@@ -292,13 +292,81 @@ export async function handleChatRequest(
 
     try {
       // Convert VS Code messages to the plain Ollama format expected by the client.
-      const ollamaMessages: (Message & { tool_call_id?: string })[] = messages.map(msg => ({
-        role: (msg.role === vscode.LanguageModelChatMessageRole.User ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: (Array.isArray(msg.content) ? msg.content : [])
+      const XML_CONTEXT_TAG_RE = /<(environment_info|workspace_info|selection|file_context)[^>]*>[\s\S]*?<\/\1>/gi;
+      const systemContextParts: string[] = [];
+
+      const ollamaMessages: (Message & { tool_call_id?: string })[] = messages.map(msg => {
+        const isUser = msg.role === vscode.LanguageModelChatMessageRole.User;
+        let content = (Array.isArray(msg.content) ? msg.content : [])
           .filter((p): p is vscode.LanguageModelTextPart => p instanceof vscode.LanguageModelTextPart)
           .map(p => p.value)
-          .join(''),
-      }));
+          .join('');
+        if (isUser) {
+          let remainingText = content;
+          let hadLeadingContext = false;
+
+          if (remainingText.trimStart().startsWith('<')) {
+            remainingText = remainingText.trimStart();
+            // Iteratively consume XML_CONTEXT_TAG_RE matches only when they appear at the very start
+            // of the remaining text. As soon as a match is not at index 0, we stop extracting.
+            XML_CONTEXT_TAG_RE.lastIndex = 0;
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+              const match = XML_CONTEXT_TAG_RE.exec(remainingText);
+              if (!match || match.index !== 0) {
+                break;
+              }
+              const matchedText = match[0];
+              systemContextParts.push(matchedText.trim());
+              remainingText = remainingText.slice(matchedText.length).trimStart();
+              hadLeadingContext = true;
+              // Reset lastIndex because we've sliced the string.
+              XML_CONTEXT_TAG_RE.lastIndex = 0;
+            }
+          }
+
+          content = hadLeadingContext ? remainingText : content.trim();
+        }
+        return {
+          role: (isUser ? 'user' : 'assistant') as 'user' | 'assistant',
+          content,
+        };
+      });
+
+      // Deduplicate context blocks by tag type, keeping only the most recent occurrence
+      const latestByTag = new Map<string, string>();
+      for (let i = systemContextParts.length - 1; i >= 0; i--) {
+        const part = systemContextParts[i];
+        XML_CONTEXT_TAG_RE.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        // Use a loop in case a single part contains multiple context blocks
+        // (we still only keep the latest block per tag type).
+        while ((match = XML_CONTEXT_TAG_RE.exec(part)) !== null) {
+          const tagName = match[1];
+          if (!latestByTag.has(tagName)) {
+            latestByTag.set(tagName, match[0]);
+          }
+        }
+      }
+
+      const tagOrder: Array<'environment_info' | 'workspace_info' | 'selection' | 'file_context'> = [
+        'environment_info',
+        'workspace_info',
+        'selection',
+        'file_context',
+      ];
+
+      const dedupedContextParts: string[] = [];
+      for (const tag of tagOrder) {
+        const block = latestByTag.get(tag);
+        if (block) {
+          dedupedContextParts.push(block);
+        }
+      }
+
+      if (dedupedContextParts.length > 0) {
+        ollamaMessages.unshift({ role: 'system', content: dedupedContextParts.join('\n\n') });
+      }
 
       // Tool invocation loop — only when VS Code tools and an invocation token are available.
       const vscodeLmTools = vscode.lm.tools ?? [];
