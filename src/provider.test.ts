@@ -5,6 +5,7 @@ import {
   LanguageModelTextPart,
   LanguageModelToolCallPart,
   LanguageModelToolResultPart,
+  window,
 } from 'vscode';
 import { getOllamaClient } from './client.js';
 import { formatModelName, isThinkingModelId, OllamaChatModelProvider } from './provider.js';
@@ -12,6 +13,7 @@ import { formatModelName, isThinkingModelId, OllamaChatModelProvider } from './p
 vi.mock('./client.js', () => ({
   getContextLengthOverride: vi.fn(() => 0),
   getOllamaClient: vi.fn(),
+  getCloudOllamaClient: vi.fn(),
 }));
 
 // Mock vscode
@@ -42,6 +44,7 @@ vi.doMock('vscode', () => ({
   window: {
     showQuickPick: vi.fn(),
     showInputBox: vi.fn(),
+    showErrorMessage: vi.fn(),
   },
 }));
 
@@ -954,6 +957,60 @@ describe('OllamaChatModelProvider chat response', () => {
     // Total: 3 calls (1 failed + 1 retry + 1 second request without think)
     expect(chat).toHaveBeenCalledTimes(3);
     expect(chat.mock.calls[2]?.[0]?.think).toBeUndefined();
+  });
+});
+
+describe('OllamaChatModelProvider crash handling', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows error message when model runner crashes', async () => {
+    const generate = vi.fn().mockResolvedValue({});
+    const chat = vi.fn().mockRejectedValue(
+      new Error('model runner has unexpectedly stopped, please check ollama server logs'),
+    );
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, generate, abort: vi.fn() } as any);
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn(), show: vi.fn() } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+    const model = {
+      id: 'ollama:test-model',
+      name: 'Test',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: false },
+    };
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('hello')],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      model,
+      [message as any],
+      { tools: [], toolMode: 'auto' } as any,
+      progress as any,
+      token as any,
+    );
+
+    expect(vi.mocked(window.showErrorMessage)).toHaveBeenCalledWith(
+      expect.stringContaining('model runner crashed'),
+      'Open Logs',
+    );
+    expect(generate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', keep_alive: 0 }),
+    );
   });
 });
 

@@ -107,6 +107,7 @@ export const window = {
   showQuickPick: vi.fn(),
   showWarningMessage: vi.fn(),
   showInformationMessage: vi.fn(),
+  showErrorMessage: vi.fn(),
 };
 
 export const lm = {
