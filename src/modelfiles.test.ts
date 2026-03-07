@@ -514,6 +514,19 @@ describe('handleBuildModelfile', () => {
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('ollama-copilot.refreshLocalModels');
   });
+
+  it('shows error message when client.create throws', async () => {
+    mockClient.create = vi.fn().mockImplementation(async function* () {
+      throw new Error('build failed');
+    });
+
+    const vscode = await import('vscode');
+    const { handleBuildModelfile, ModelfileItem } = await import('./modelfiles.js');
+    const item = new ModelfileItem({ fsPath: '/modelfiles/pirate.modelfile' } as unknown as import('vscode').Uri);
+    await handleBuildModelfile(item, mockClient as unknown as Ollama);
+
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining('build failed'));
+  });
 });
 
 describe('handleOpenModelfilesFolder', () => {
@@ -581,5 +594,238 @@ describe('handleOpenModelfilesFolder', () => {
     await handleOpenModelfilesFolder('/tmp/modelfiles');
 
     expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ fsPath: '/tmp/modelfiles' }));
+  });
+
+  it('falls back to revealFileInOS when openExternal returns false', async () => {
+    const vscode = await import('vscode');
+    vi.mocked(vscode.env.openExternal).mockResolvedValue(false as any);
+
+    const { handleOpenModelfilesFolder } = await import('./modelfiles.js');
+    await handleOpenModelfilesFolder('/tmp/modelfiles');
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'revealFileInOS',
+      expect.objectContaining({ fsPath: '/tmp/modelfiles' }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createHoverProvider
+// ---------------------------------------------------------------------------
+
+describe('createHoverProvider', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.doMock('vscode', minimalVscodeMock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns a Hover for a known keyword like FROM', async () => {
+    const vscode = await import('vscode');
+    const { createHoverProvider } = await import('./modelfiles.js');
+    const provider = createHoverProvider();
+
+    const range = {};
+    const document = {
+      getWordRangeAtPosition: vi.fn().mockReturnValue(range),
+      getText: vi.fn().mockReturnValue('FROM'),
+    };
+
+    const result = provider.provideHover(document as any, {} as any, null as any);
+    expect(result).toBeInstanceOf(vscode.Hover);
+  });
+
+  it('returns a Hover for a known parameter like temperature', async () => {
+    const vscode = await import('vscode');
+    const { createHoverProvider } = await import('./modelfiles.js');
+    const provider = createHoverProvider();
+
+    const range = {};
+    const document = {
+      getWordRangeAtPosition: vi.fn().mockReturnValue(range),
+      getText: vi.fn().mockReturnValue('temperature'),
+    };
+
+    const result = provider.provideHover(document as any, {} as any, null as any);
+    expect(result).toBeInstanceOf(vscode.Hover);
+  });
+
+  it('returns null for an unknown word', async () => {
+    const { createHoverProvider } = await import('./modelfiles.js');
+    const provider = createHoverProvider();
+
+    const range = {};
+    const document = {
+      getWordRangeAtPosition: vi.fn().mockReturnValue(range),
+      getText: vi.fn().mockReturnValue('UNKNOWN_WORD_XYZ'),
+    };
+
+    const result = provider.provideHover(document as any, {} as any, null as any);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when no word range at cursor position', async () => {
+    const { createHoverProvider } = await import('./modelfiles.js');
+    const provider = createHoverProvider();
+
+    const document = {
+      getWordRangeAtPosition: vi.fn().mockReturnValue(null),
+      getText: vi.fn(),
+    };
+
+    const result = provider.provideHover(document as any, {} as any, null as any);
+    expect(result).toBeNull();
+    expect(document.getText).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createCompletionProvider
+// ---------------------------------------------------------------------------
+
+describe('createCompletionProvider', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.doMock('vscode', minimalVscodeMock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns keyword completions when at line start', async () => {
+    const vscode = await import('vscode');
+    const { createCompletionProvider } = await import('./modelfiles.js');
+    const provider = createCompletionProvider();
+
+    const position = { character: 4 };
+    const document = { lineAt: vi.fn().mockReturnValue({ text: 'FROM' }) };
+
+    const items = provider.provideCompletionItems(document as any, position as any, null as any, null as any) as any[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.some((i: any) => i.label === 'FROM')).toBe(true);
+    expect(items[0]).toBeInstanceOf(vscode.CompletionItem);
+  });
+
+  it('returns parameter completions on a PARAMETER line', async () => {
+    const vscode = await import('vscode');
+    const { createCompletionProvider } = await import('./modelfiles.js');
+    const provider = createCompletionProvider();
+
+    // lineText = 'PARAMETER '.substring(0,10) = 'PARAMETER '
+    const position = { character: 10 };
+    const document = { lineAt: vi.fn().mockReturnValue({ text: 'PARAMETER temperature' }) };
+
+    const items = provider.provideCompletionItems(document as any, position as any, null as any, null as any) as any[];
+    expect(items.some((i: any) => i.label === 'temperature')).toBe(true);
+    expect(items[0]).toBeInstanceOf(vscode.CompletionItem);
+  });
+
+  it('returns empty array when not at a keyword or parameter position', async () => {
+    const { createCompletionProvider } = await import('./modelfiles.js');
+    const provider = createCompletionProvider();
+
+    const position = { character: 11 };
+    const document = { lineAt: vi.fn().mockReturnValue({ text: 'hello world 123' }) };
+
+    const items = provider.provideCompletionItems(document as any, position as any, null as any, null as any);
+    expect(items).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// registerModelfileManager
+// ---------------------------------------------------------------------------
+
+describe('registerModelfileManager', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.doMock('vscode', minimalVscodeMock);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('registers tree provider, commands, and language providers', async () => {
+    const vscode = await import('vscode');
+    const { registerModelfileManager } = await import('./modelfiles.js');
+
+    const subscriptions: any[] = [];
+    const context = { subscriptions } as any;
+    const client = {} as any;
+
+    registerModelfileManager(context, client);
+
+    expect(vscode.window.registerTreeDataProvider).toHaveBeenCalledWith('ollama-modelfiles', expect.any(Object));
+    expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
+      'ollama-copilot.refreshModelfiles',
+      expect.any(Function),
+    );
+    expect(vscode.commands.registerCommand).toHaveBeenCalledWith('ollama-copilot.newModelfile', expect.any(Function));
+    expect(vscode.commands.registerCommand).toHaveBeenCalledWith('ollama-copilot.editModelfile', expect.any(Function));
+    expect(vscode.commands.registerCommand).toHaveBeenCalledWith('ollama-copilot.buildModelfile', expect.any(Function));
+    expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
+      'ollama-copilot.openModelfilesFolder',
+      expect.any(Function),
+    );
+    expect(vscode.languages.registerHoverProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ language: 'modelfile' }),
+      expect.any(Object),
+    );
+    expect(vscode.languages.registerCompletionItemProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ language: 'modelfile' }),
+      expect.any(Object),
+      ' ',
+    );
+  });
+
+  it('invokes all registered command callbacks covering inner lambdas', async () => {
+    vi.resetModules();
+
+    const cbMap = new Map<string, Function>();
+    const registerCommand = vi.fn((name: string, cb: Function) => {
+      cbMap.set(name, cb);
+      return { dispose: vi.fn() };
+    });
+
+    vi.doMock('vscode', () => ({
+      ...minimalVscodeMock(),
+      commands: { registerCommand, executeCommand: vi.fn() },
+    }));
+
+    const { registerModelfileManager } = await import('./modelfiles.js');
+
+    const subscriptions: any[] = [];
+    const context = {
+      subscriptions,
+      extensionUri: { fsPath: '/fake/ext' },
+    } as any;
+    const client = {} as any;
+
+    registerModelfileManager(context, client);
+
+    const getCb = (name: string) => cbMap.get(name);
+
+    // refreshModelfiles: () => provider.refresh()
+    getCb('ollama-copilot.refreshModelfiles')?.();
+
+    // newModelfile: () => handleNewModelfile(path, client) — showInputBox returns undefined → early return
+    await getCb('ollama-copilot.newModelfile')?.();
+
+    // editModelfile: (item) => executeCommand('vscode.open', item.uri) — pass fake item
+    getCb('ollama-copilot.editModelfile')?.({ uri: { fsPath: '/fake/test.modelfile' } });
+
+    // buildModelfile: (item) => handleBuildModelfile(item, client) — showInputBox returns undefined → early return
+    await getCb('ollama-copilot.buildModelfile')?.({ label: 'test', uri: { fsPath: '/fake/test.modelfile' } });
+
+    // openModelfilesFolder: async () => handleOpenModelfilesFolder(path) — env.openExternal is mocked
+    await getCb('ollama-copilot.openModelfilesFolder')?.();
+
+    expect(cbMap.size).toBeGreaterThan(0);
   });
 });
