@@ -1008,7 +1008,9 @@ describe('OllamaChatModelProvider crash handling', () => {
       expect.stringContaining('model runner crashed'),
       'Open Logs',
     );
-    expect(generate).toHaveBeenCalledWith(expect.objectContaining({ model: 'test-model', keep_alive: 0 }));
+    expect(generate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', keep_alive: 0 }),
+    );
   });
 });
 

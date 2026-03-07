@@ -50,7 +50,9 @@ describe('getOllamaClient', () => {
     const { getOllamaClient } = await import('./client.js');
     await getOllamaClient(context);
 
-    expect(OllamaClass).toHaveBeenCalledWith(expect.objectContaining({ host: 'http://myserver:11434' }));
+    expect(OllamaClass).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'http://myserver:11434' }),
+    );
   });
 
   it('falls back to localhost when host setting is empty', async () => {
@@ -75,7 +77,9 @@ describe('getOllamaClient', () => {
     const { getOllamaClient } = await import('./client.js');
     await getOllamaClient(context);
 
-    expect(OllamaClass).toHaveBeenCalledWith(expect.objectContaining({ host: 'http://localhost:11434' }));
+    expect(OllamaClass).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'http://localhost:11434' }),
+    );
   });
 
   it('adds Authorization header when auth token is stored', async () => {
@@ -91,7 +95,10 @@ describe('getOllamaClient', () => {
       },
     }));
 
-    const OllamaClass = vi.fn().mockImplementation(function (this: { config: unknown }, config: unknown) {
+    const OllamaClass = vi.fn().mockImplementation(function (
+      this: { config: unknown },
+      config: unknown,
+    ) {
       this.config = config;
     });
     vi.doMock('ollama', () => ({ Ollama: OllamaClass }));
