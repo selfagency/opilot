@@ -3,7 +3,7 @@
 [![Tests](https://github.com/selfagency/ollama-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/selfagency/ollama-copilot/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/selfagency/ollama-copilot/graph/badge.svg?token=W9kOrFPSQ1)](https://codecov.io/gh/selfagency/ollama-copilot)
 
 <p align="center">
-  <img src="logo.png" alt="Ollama Logo" width="128" height="128">
+  <img src="logo.png" alt="Ollama Copilot" width="128" height="128">
 </p>
 
 <p align="center">
@@ -27,6 +27,7 @@
 - 🖼️ **Vision Support** - Image input for models with vision capabilities
 - 🏠 **Local Execution** - Local models run on your machine with full privacy—no data leaves your computer
 - ⚡ **Streaming** - Real-time response streaming for faster interactions
+
 ## 🔧 Requirements
 
 - **VS Code** 1.109.0 or higher

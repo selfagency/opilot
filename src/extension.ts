@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promises as fsPromises } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { ChatResponse, Ollama } from 'ollama';
+import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
 import { getOllamaClient, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
@@ -41,21 +41,37 @@ async function removeBuiltInOllamaFromChatLanguageModels(
   const profileDir = dirname(dirname(context.globalStorageUri.fsPath));
   candidatePaths.add(join(profileDir, 'chatLanguageModels.json'));
 
-  // Standard VS Code user folder on macOS where profile data lives.
-  const userDir = join(homedir(), 'Library', 'Application Support', 'Code', 'User');
-  candidatePaths.add(join(userDir, 'chatLanguageModels.json'));
+  // Standard VS Code user folders per platform where profile data lives.
+  const userDirs: string[] = [];
+  if (process.platform === 'darwin') {
+    userDirs.push(join(homedir(), 'Library', 'Application Support', 'Code', 'User'));
+  } else if (process.platform === 'win32') {
+    const appData = process.env['APPDATA'];
+    if (appData) {
+      userDirs.push(join(appData, 'Code', 'User'));
+    }
+  } else {
+    // Linux (and other POSIX)
+    const xdgConfig = process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config');
+    userDirs.push(join(xdgConfig, 'Code', 'User'));
+  }
+  for (const userDir of userDirs) {
+    candidatePaths.add(join(userDir, 'chatLanguageModels.json'));
+  }
 
   // Profile-scoped files: User/profiles/<id>/chatLanguageModels.json
-  try {
-    const profilesDir = join(userDir, 'profiles');
-    const entries = await fsPromises.readdir(profilesDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        candidatePaths.add(join(profilesDir, entry.name, 'chatLanguageModels.json'));
+  for (const userDir of userDirs) {
+    try {
+      const profilesDir = join(userDir, 'profiles');
+      const entries = await fsPromises.readdir(profilesDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          candidatePaths.add(join(profilesDir, entry.name, 'chatLanguageModels.json'));
+        }
       }
+    } catch {
+      // profiles directory may not exist
     }
-  } catch {
-    // profiles directory may not exist
   }
 
   let changed = false;
@@ -135,7 +151,7 @@ export function setupChatParticipant(
   const chat = chatApi || vscode.chat;
 
   const participant = chat.createChatParticipant('ollama-copilot.ollama', participantHandler);
-  participant.iconPath = (vscode.Uri as any).joinPath(context.extensionUri, 'logo.png');
+  participant.iconPath = vscode.Uri.file(join(context.extensionUri.fsPath, 'logo.png'));
   return participant;
 }
 
@@ -276,13 +292,78 @@ export async function handleChatRequest(
 
     try {
       // Convert VS Code messages to the plain Ollama format expected by the client.
-      const ollamaMessages = messages.map(msg => ({
+      const ollamaMessages: (Message & { tool_call_id?: string })[] = messages.map(msg => ({
         role: (msg.role === vscode.LanguageModelChatMessageRole.User ? 'user' : 'assistant') as 'user' | 'assistant',
         content: (Array.isArray(msg.content) ? msg.content : [])
           .filter((p): p is vscode.LanguageModelTextPart => p instanceof vscode.LanguageModelTextPart)
           .map(p => p.value)
           .join(''),
       }));
+
+      // Tool invocation loop — only when VS Code tools and an invocation token are available.
+      const vscodeLmTools = vscode.lm.tools ?? [];
+      if (vscodeLmTools.length > 0 && request.toolInvocationToken) {
+        const ollamaTools: Tool[] = vscodeLmTools.map(t => ({
+          type: 'function',
+          function: {
+            name: t.name,
+            description: t.description ?? '',
+            parameters: t.inputSchema as Tool['function']['parameters'],
+          },
+        }));
+
+        const MAX_TOOL_ROUNDS = 10;
+        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+          if (token.isCancellationRequested) {
+            return;
+          }
+
+          const roundResponse = await client.chat({
+            model: modelId,
+            messages: ollamaMessages as Message[],
+            stream: false,
+            tools: ollamaTools,
+          });
+
+          const toolCalls = roundResponse.message.tool_calls;
+          if (!toolCalls?.length) {
+            // No tool invocations needed — render the response text and exit.
+            if (roundResponse.message.content) {
+              stream.markdown(roundResponse.message.content);
+            }
+            return;
+          }
+
+          // Append the assistant message (with its tool_calls) to the conversation.
+          ollamaMessages.push({
+            role: 'assistant',
+            content: roundResponse.message.content ?? '',
+            tool_calls: toolCalls,
+          });
+
+          // Invoke each tool via VS Code's tool API and append result messages.
+          for (const toolCall of toolCalls) {
+            const toolName = toolCall.function.name;
+            const toolInput = toolCall.function.arguments;
+            let resultText: string;
+            try {
+              const result = await vscode.lm.invokeTool(
+                toolName,
+                { input: toolInput, toolInvocationToken: request.toolInvocationToken! },
+                token,
+              );
+              resultText = result.content
+                .filter((c): c is vscode.LanguageModelTextPart => c instanceof vscode.LanguageModelTextPart)
+                .map(c => c.value)
+                .join('');
+            } catch (invokeError) {
+              resultText = invokeError instanceof Error ? invokeError.message : 'Tool execution failed';
+            }
+            ollamaMessages.push({ role: 'tool', content: resultText, tool_name: toolName } as never);
+          }
+        }
+        // MAX_TOOL_ROUNDS reached — fall through to the streaming pass below.
+      }
 
       const shouldThinkInitial = isThinkingModelId(modelId);
 
@@ -292,7 +373,7 @@ export async function handleChatRequest(
       try {
         response = await client.chat({
           model: modelId,
-          messages: ollamaMessages,
+          messages: ollamaMessages as Message[],
           stream: true,
           ...(shouldThink ? { think: true } : {}),
         });
@@ -305,7 +386,7 @@ export async function handleChatRequest(
         ) {
           response = await client.chat({
             model: modelId,
-            messages: ollamaMessages,
+            messages: ollamaMessages as Message[],
             stream: true,
           });
         } else {
@@ -338,11 +419,11 @@ export async function handleChatRequest(
           stream.markdown(chunk.message.content);
         }
 
-        if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+        if (chunk.message?.tool_calls?.length) {
           for (const toolCall of chunk.message.tool_calls) {
-            const name = toolCall.function?.name ?? 'unknown';
-            const args = JSON.stringify(toolCall.function?.arguments ?? {}, null, 2);
-            stream.markdown(`\n\n**Tool call:** \`${name}\`\n\`\`\`json\n${args}\n\`\`\`\n\n`);
+            stream.markdown(
+              `\n\`\`\`json\n${JSON.stringify({ tool: toolCall.function.name, arguments: toolCall.function.arguments }, null, 2)}\n\`\`\`\n`,
+            );
           }
         }
 
@@ -372,11 +453,51 @@ export async function handleChatRequest(
   }
 
   try {
-    const response = await model.sendRequest(messages, {}, token);
-    for await (const chunk of response.stream) {
-      if (chunk instanceof vscode.LanguageModelTextPart) {
-        stream.markdown(chunk.value);
+    const tools = vscode.lm.tools ?? [];
+    const conversationMessages = [...messages];
+    const MAX_TOOL_ROUNDS = 10;
+
+    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+      const response = await model.sendRequest(
+        conversationMessages,
+        tools.length && request.toolInvocationToken
+          ? { tools: tools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })) }
+          : {},
+        token,
+      );
+
+      const pendingToolCalls: vscode.LanguageModelToolCallPart[] = [];
+      for await (const chunk of response.stream) {
+        if (chunk instanceof vscode.LanguageModelTextPart) {
+          stream.markdown(chunk.value);
+        } else if (chunk instanceof vscode.LanguageModelToolCallPart) {
+          pendingToolCalls.push(chunk);
+        }
       }
+
+      if (pendingToolCalls.length === 0 || !request.toolInvocationToken) {
+        break;
+      }
+
+      conversationMessages.push(vscode.LanguageModelChatMessage.Assistant(pendingToolCalls));
+
+      const toolResults: vscode.LanguageModelToolResultPart[] = [];
+      for (const toolCall of pendingToolCalls) {
+        try {
+          const result = await vscode.lm.invokeTool(
+            toolCall.name,
+            { input: toolCall.input as Record<string, unknown>, toolInvocationToken: request.toolInvocationToken },
+            token,
+          );
+          toolResults.push(new vscode.LanguageModelToolResultPart(toolCall.callId, result.content));
+        } catch (invokeError) {
+          const errMsg = invokeError instanceof Error ? invokeError.message : 'Tool execution failed';
+          toolResults.push(
+            new vscode.LanguageModelToolResultPart(toolCall.callId, [new vscode.LanguageModelTextPart(errMsg)]),
+          );
+        }
+      }
+      conversationMessages.push(vscode.LanguageModelChatMessage.User(toolResults));
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

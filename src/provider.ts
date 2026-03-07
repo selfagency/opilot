@@ -570,12 +570,19 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             },
           });
         } else if (part instanceof LanguageModelToolResultPart) {
-          // Tool results become separate messages
-          // Note: Ollama's Message type doesn't have tool_call_id field, so we only send role and content
+          // Tool results become separate messages.
+          // VS Code LanguageModelToolResultPart.content items are class instances
+          // whose value property is non-enumerable, so JSON.stringify produces "[{}]".
+          // Extract text values explicitly and include tool_call_id for Ollama.
+          const toolContent = part.content
+            .filter((c): c is LanguageModelTextPart => c instanceof LanguageModelTextPart)
+            .map(c => c.value)
+            .join('');
           ollamaMessages.push({
             role: 'tool',
-            content: JSON.stringify(part.content),
-          });
+            content: toolContent,
+            tool_call_id: this.getOllamaToolCallId(part.callId),
+          } as never);
         }
       }
 
@@ -623,7 +630,14 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   }
 
   /**
-   * Clear tool call ID mappings
+   * Clear tool call ID mappings at the start of each request.
+   *
+   * Safety in multi-turn conversations: VS Code passes the complete conversation
+   * history on every call to provideLanguageModelChatResponse. When toOllamaMessages
+   * reconstructs that history it reaches historical LanguageModelToolCallPart and
+   * LanguageModelToolResultPart entries; both use the same vsCode call ID as the
+   * fallback (getOllamaToolCallId returns vsCodeId when no mapping exists), so the
+   * IDs match each other within the reconstructed context and Ollama accepts them.
    */
   public clearToolCallIdMappings(): void {
     this.toolCallIdMap.clear();

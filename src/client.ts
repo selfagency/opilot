@@ -68,22 +68,40 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
       imageInput = true;
     }
 
-    // Calculate max tokens from model details if available
-    // Ollama doesn't provide explicit max input/output token counts via the API,
-    // so we use reasonable defaults based on parameter_size
-    const paramSize = modelInfo.details?.parameter_size || '';
-    let maxInputTokens = 4096; // Conservative default
-    let maxOutputTokens = 4096;
+    // Detect the actual context window from model_info (family-specific keys like
+    // llama.context_length, qwen2.context_length, etc.) with a num_ctx fallback,
+    // mirroring the logic in OllamaChatModelProvider.getChatModelInfo().
+    const typedInfo = modelInfo as typeof modelInfo & { model_info?: Record<string, unknown> | Map<string, unknown>; modelinfo?: Record<string, unknown> | Map<string, unknown> };
+    const modelInfoData = typedInfo.model_info ?? typedInfo.modelinfo;
+    const parameters = (modelInfo as typeof modelInfo & { parameters?: string }).parameters;
+    let contextLength = 4096; // Conservative default
 
-    // Parse parameter size and adjust context window
-    // e.g., "7B", "13B", "70B"
-    if (paramSize.includes('7B')) {
-      maxInputTokens = 2048;
-    } else if (paramSize.includes('13B') || paramSize.includes('20B')) {
-      maxInputTokens = 4096;
-    } else if (paramSize.includes('70B')) {
-      maxInputTokens = 8192;
+    let infoCtx: unknown;
+    if (modelInfoData instanceof Map) {
+      for (const [key, value] of modelInfoData.entries()) {
+        if (key === 'context_length' || key.endsWith('.context_length')) {
+          infoCtx = value;
+          break;
+        }
+      }
+    } else if (modelInfoData && typeof modelInfoData === 'object') {
+      for (const [key, value] of Object.entries(modelInfoData)) {
+        if (key === 'context_length' || key.endsWith('.context_length')) {
+          infoCtx = value;
+          break;
+        }
+      }
     }
+
+    if (typeof infoCtx === 'number' && infoCtx > 0) {
+      contextLength = infoCtx;
+    } else if (typeof parameters === 'string') {
+      const match = /^num_ctx\s+(\d+)/m.exec(parameters);
+      if (match) contextLength = parseInt(match[1], 10);
+    }
+
+    const maxInputTokens = contextLength;
+    const maxOutputTokens = contextLength;
 
     return {
       toolCalling,

@@ -69,6 +69,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -109,7 +110,7 @@ describe('activate', () => {
     }));
 
     const ext = await import('./extension.js');
-    await ext.activate({ subscriptions: [], extensionUri: {} } as any);
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
 
     expect(registerLanguageModelChatProvider).toHaveBeenCalledWith('selfagency-ollama', expect.anything());
   });
@@ -177,6 +178,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -218,7 +220,7 @@ describe('activate', () => {
 
     const ext = await import('./extension.js');
 
-    await expect(ext.activate({ subscriptions: [], extensionUri: {} } as any)).resolves.toBeUndefined();
+    await expect(ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any)).resolves.toBeUndefined();
   });
 
   it('handles connection test success', async () => {
@@ -289,6 +291,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -334,7 +337,7 @@ describe('activate', () => {
     }));
 
     const ext = await import('./extension.js');
-    await ext.activate({ subscriptions: [], extensionUri: {} } as any);
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
 
     // Wait for async connection test
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -414,6 +417,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -459,7 +463,7 @@ describe('activate', () => {
     }));
 
     const ext = await import('./extension.js');
-    await ext.activate({ subscriptions: [], extensionUri: {} } as any);
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
 
     // Wait for async connection test
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -528,6 +532,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -579,7 +584,7 @@ describe('activate', () => {
     }));
 
     const ext = await import('./extension.js');
-    await ext.activate({ subscriptions: [], extensionUri: {} } as any);
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
 
     expect(createOutputChannel).toHaveBeenCalledWith('Ollama for Copilot', expect.any(Object));
   });
@@ -647,6 +652,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -688,7 +694,7 @@ describe('activate', () => {
 
     const ext = await import('./extension.js');
 
-    await expect(ext.activate({ subscriptions: [], extensionUri: {} } as any)).rejects.toThrow(unhandledError);
+    await expect(ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any)).rejects.toThrow(unhandledError);
   });
 
   it('registers command for managing auth tokens', async () => {
@@ -751,6 +757,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -791,7 +798,7 @@ describe('activate', () => {
     }));
 
     const ext = await import('./extension.js');
-    await ext.activate({ subscriptions: [], extensionUri: {} } as any);
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
 
     expect(registerCommand).toHaveBeenCalledWith('ollama-copilot.manageAuthToken', expect.any(Function));
   });
@@ -863,6 +870,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -914,7 +922,7 @@ describe('activate', () => {
     }));
 
     const ext = await import('./extension.js');
-    await ext.activate({ subscriptions: [], extensionUri: {} } as any);
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
 
     // Simulate streamLogs configuration change
     if (configChangeCallback) {
@@ -986,6 +994,7 @@ describe('activate', () => {
         })),
       },
       Uri: {
+        file: vi.fn((path: string) => ({ fsPath: path })),
         joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
       },
       ChatResponseMarkdownPart: class {
@@ -1026,7 +1035,7 @@ describe('activate', () => {
     }));
 
     const ext = await import('./extension.js');
-    await ext.activate({ subscriptions: [], extensionUri: {} } as any);
+    await ext.activate({ subscriptions: [], extensionUri: { fsPath: '' } } as any);
 
     expect(registerInlineCompletionItemProvider).toHaveBeenCalledOnce();
     expect(registerInlineCompletionItemProvider).toHaveBeenCalledWith(
@@ -1154,7 +1163,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
       },
       lm: { selectChatModels: vi.fn().mockResolvedValue([]) },
       workspace: { getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }) },
-      Uri: { joinPath: vi.fn((_base: any, p: string) => ({ fsPath: p })) },
+      Uri: { file: vi.fn((path: string) => ({ fsPath: path })), joinPath: vi.fn((_base: any, p: string) => ({ fsPath: p })) },
       chat: { createChatParticipant: vi.fn(() => ({ iconPath: undefined, dispose: vi.fn() })) },
       commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
     }));
@@ -1215,7 +1224,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
       },
       lm: { selectChatModels: vi.fn().mockResolvedValue([]) },
       workspace: { getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }) },
-      Uri: { joinPath: vi.fn((_base: any, p: string) => ({ fsPath: p })) },
+      Uri: { file: vi.fn((path: string) => ({ fsPath: path })), joinPath: vi.fn((_base: any, p: string) => ({ fsPath: p })) },
       chat: { createChatParticipant: vi.fn(() => ({ iconPath: undefined, dispose: vi.fn() })) },
       commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
     }));
@@ -1291,7 +1300,7 @@ describe('setupChatParticipant', () => {
 
     const ext = await import('./extension.js');
     const mockHandler = vi.fn() as any;
-    const mockContext = { extensionUri: '/test' };
+    const mockContext = { extensionUri: { fsPath: '/test' } };
 
     const result = ext.setupChatParticipant(mockContext as any, mockHandler, { createChatParticipant } as any);
 

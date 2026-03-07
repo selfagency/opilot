@@ -175,12 +175,6 @@
         "category": "Ollama"
       },
       {
-        "command": "ollama-copilot.pullModelFromLibrary",
-        "title": "Pull Ollama Model",
-        "icon": "$(cloud-download)",
-        "category": "Ollama"
-      },
-      {
         "command": "ollama-copilot.openLibraryModelPage",
         "title": "Open Ollama Model Page",
         "icon": "$(link)",

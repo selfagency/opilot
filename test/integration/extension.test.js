@@ -5,16 +5,16 @@ const vscode = require('vscode');
 
 suite('Extension Integration', () => {
   suiteSetup(async () => {
-    // The activation event ('onLanguageModelChatProvider:mistral') doesn't fire
+    // The activation event ('onLanguageModelChatProvider:selfagency-ollama') doesn't fire
     // automatically in the test harness, so force-activate the extension.
-    const ext = vscode.extensions.getExtension('selfagency.mistral-models-vscode');
+    const ext = vscode.extensions.getExtension('selfagency.ollama-copilot');
     if (ext && !ext.isActive) {
       await ext.activate();
     }
   });
 
-  test('manageApiKey command is registered', async () => {
+  test('manageAuthToken command is registered', async () => {
     const commands = await vscode.commands.getCommands(true);
-    assert.ok(commands.includes('mistral-chat.manageApiKey'), 'mistral-chat.manageApiKey command not registered');
+    assert.ok(commands.includes('ollama-copilot.manageAuthToken'), 'ollama-copilot.manageAuthToken command not registered');
   });
 });

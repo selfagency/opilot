@@ -151,6 +151,7 @@ export class ChatResponseMarkdownPart {
 }
 
 export const Uri = {
+  file: vi.fn((path: string) => ({ fsPath: path })),
   joinPath: vi.fn().mockReturnValue(undefined),
 };
 
