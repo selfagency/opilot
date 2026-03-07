@@ -558,7 +558,9 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       await window.withProgress(
         { location: ProgressLocation.Notification, title: `Stopping ${modelName}…`, cancellable: false },
         async () => {
-          await this.client.generate({ model: modelName, prompt: '', stream: false, keep_alive: 0 });
+          const isCloudModel = this.isCloudTaggedModel(modelName);
+          const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.client;
+          await activeClient.generate({ model: modelName, prompt: '', stream: false, keep_alive: 0 });
           // Poll until the model disappears from the running process list (max 30 s)
           for (let i = 0; i < 30; i++) {
             await new Promise<void>(resolve => setTimeout(resolve, 1000));
@@ -1307,10 +1309,14 @@ export function handleOpenCloudModel(item: ModelTreeItem): void {
  */
 export async function handleDeleteModel(item: ModelTreeItem, localProvider: LocalModelsProvider): Promise<void> {
   if (item && (item.type === 'local-running' || item.type === 'cloud-running')) {
-    void window.showWarningMessage('Stop the model before deleting it.');
+    void window.showErrorMessage('Stop the model before deleting it.');
     return;
   }
-  if (item && (item.type === 'local-stopped' || item.type === 'cloud-stopped')) {
+  if (
+    item &&
+    (item.type === 'local-stopped' ||
+      item.type === 'cloud-stopped')
+  ) {
     const answer = await window.showWarningMessage(`Delete model "${item.label}"?`, 'Delete', 'Cancel');
     if (answer === 'Delete') {
       void localProvider.deleteModel(item.label);

@@ -403,6 +403,80 @@ describe('LocalModelsProvider', () => {
     localProvider.dispose();
   });
 
+  it('stopModel uses cloud-authenticated client for cloud-tagged model', async () => {
+    vi.resetModules();
+
+    const cloudGenerate = vi.fn().mockResolvedValue(undefined);
+    const regularGenerate = vi.fn().mockResolvedValue(undefined);
+
+    vi.doMock('./client.js', () => ({
+      getCloudOllamaClient: vi.fn().mockResolvedValue({
+        generate: cloudGenerate,
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+      }),
+      fetchModelCapabilities: vi.fn().mockResolvedValue({
+        toolCalling: false,
+        imageInput: false,
+        maxInputTokens: 2048,
+        maxOutputTokens: 2048,
+      }),
+    }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
+          return callback({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+        }),
+      },
+      workspace: {
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn((key: string) => {
+            if (key === 'localModelRefreshInterval') return 0;
+            return undefined;
+          }),
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { LocalModelsProvider } = await import('./sidebar.js');
+
+    const mockRegularClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] }),
+      generate: regularGenerate,
+    } as any;
+
+    const mockContext = {
+      secrets: {
+        get: vi.fn().mockResolvedValue('test-cloud-api-key'),
+      },
+    } as any;
+
+    const localProvider = new LocalModelsProvider(mockRegularClient, mockContext);
+    await localProvider.stopModel('llama2:cloud');
+
+    expect(cloudGenerate).toHaveBeenCalledWith({ model: 'llama2:cloud', prompt: '', stream: false, keep_alive: 0 });
+    expect(regularGenerate).not.toHaveBeenCalled();
+
+    localProvider.dispose();
+  });
+
   it('cloud provider handles empty API key', async () => {
     const cloudProvider = new CloudModelsProvider(
       {

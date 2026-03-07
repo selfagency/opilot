@@ -762,17 +762,11 @@ describe('registerModelfileManager', () => {
     registerModelfileManager(context, client);
 
     expect(vscode.window.registerTreeDataProvider).toHaveBeenCalledWith('ollama-modelfiles', expect.any(Object));
-    expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
-      'ollama-copilot.refreshModelfiles',
-      expect.any(Function),
-    );
+    expect(vscode.commands.registerCommand).toHaveBeenCalledWith('ollama-copilot.refreshModelfiles', expect.any(Function));
     expect(vscode.commands.registerCommand).toHaveBeenCalledWith('ollama-copilot.newModelfile', expect.any(Function));
     expect(vscode.commands.registerCommand).toHaveBeenCalledWith('ollama-copilot.editModelfile', expect.any(Function));
     expect(vscode.commands.registerCommand).toHaveBeenCalledWith('ollama-copilot.buildModelfile', expect.any(Function));
-    expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
-      'ollama-copilot.openModelfilesFolder',
-      expect.any(Function),
-    );
+    expect(vscode.commands.registerCommand).toHaveBeenCalledWith('ollama-copilot.openModelfilesFolder', expect.any(Function));
     expect(vscode.languages.registerHoverProvider).toHaveBeenCalledWith(
       expect.objectContaining({ language: 'modelfile' }),
       expect.any(Object),
