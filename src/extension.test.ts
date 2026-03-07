@@ -1464,6 +1464,99 @@ describe('handleChatRequest model selection', () => {
     expect(mockMarkdown).toHaveBeenCalledWith('response from chosen model');
     expect(mockSelectChatModels).not.toHaveBeenCalled();
   });
+
+  it('flushes final-round text when MAX_TOOL_ROUNDS is exhausted', async () => {
+    const LMTextPart = class {
+      constructor(public value: string) {}
+    };
+    const LMToolCallPart = class {
+      constructor(
+        public callId: string,
+        public name: string,
+        public input: Record<string, unknown>,
+      ) {}
+    };
+    const LMToolResultPart = class {
+      constructor(
+        public callId: string,
+        public content: unknown,
+      ) {}
+    };
+
+    // Every round returns a tool call AND a text part — so the loop never breaks early.
+    // After MAX_TOOL_ROUNDS (10) iterations the loop falls off the end; the last round's
+    // text must still be rendered.
+    let round = 0;
+    const mockSendRequest = vi.fn().mockImplementation(() => ({
+      stream: (async function* () {
+        round++;
+        yield new LMTextPart(`round-${round}-text`);
+        yield new LMToolCallPart(`call-${round}`, 'someTool', {});
+      })(),
+    }));
+
+    const mockInvokeTool = vi.fn().mockResolvedValue({ content: [] });
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        constructor(public label: string) {}
+      },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      ThemeIcon: class {
+        constructor(public id: string) {}
+      },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      Uri: { file: vi.fn(), joinPath: vi.fn().mockReturnValue(undefined), parse: vi.fn() },
+      LanguageModelTextPart: LMTextPart,
+      LanguageModelToolCallPart: LMToolCallPart,
+      LanguageModelToolResultPart: LMToolResultPart,
+      LanguageModelChatMessage: {
+        User: (content: unknown) => ({ role: 'user', content }),
+        Assistant: (content: unknown) => ({ role: 'assistant', content }),
+      },
+      ChatRequestTurn: class {},
+      ChatResponseTurn: class {},
+      ChatResponseMarkdownPart: class {},
+      window: {
+        createOutputChannel: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), show: vi.fn() })),
+        createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showInputBox: vi.fn(),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      lm: {
+        selectChatModels: vi.fn().mockResolvedValue([]),
+        tools: [],
+        invokeTool: mockInvokeTool,
+      },
+      workspace: { getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }) },
+    }));
+
+    const ext = await import('./extension.js');
+    const mockMarkdown = vi.fn();
+    const mockRequest = {
+      prompt: 'test',
+      model: { vendor: 'selfagency-ollama', sendRequest: mockSendRequest },
+      toolInvocationToken: 'tok',
+    };
+
+    await ext.handleChatRequest(
+      mockRequest as any,
+      { history: [] } as any,
+      { markdown: mockMarkdown } as any,
+      { isCancellationRequested: false } as any,
+    );
+
+    // The loop runs 11 rounds (0..10) all with tool calls; last-round text must be flushed.
+    expect(mockMarkdown).toHaveBeenCalledWith('round-11-text');
+  });
 });
 
 describe('handleBuiltInOllamaConflict', () => {

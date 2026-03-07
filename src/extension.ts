@@ -487,6 +487,7 @@ export async function handleChatRequest(
     const tools = vscode.lm.tools ?? [];
     const conversationMessages = [...messages];
     const MAX_TOOL_ROUNDS = 10;
+    let lastRoundTextParts: vscode.LanguageModelTextPart[] = [];
 
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const response = await model.sendRequest(
@@ -507,11 +508,14 @@ export async function handleChatRequest(
         }
       }
 
+      lastRoundTextParts = assistantTextParts;
+
       if (pendingToolCalls.length === 0 || !request.toolInvocationToken) {
         // No more tool calls — stream any buffered text and finish.
         for (const part of assistantTextParts) {
           stream.markdown(part.value);
         }
+        lastRoundTextParts = [];
         break;
       }
 
@@ -537,6 +541,12 @@ export async function handleChatRequest(
         }
       }
       conversationMessages.push(vscode.LanguageModelChatMessage.User(toolResults));
+    }
+
+    // Flush any text produced in the final round when all tool rounds were exhausted
+    // without a clean break (i.e. the model kept requesting tools for every round).
+    for (const part of lastRoundTextParts) {
+      stream.markdown(part.value);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
