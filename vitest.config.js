@@ -13,6 +13,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     restoreMocks: true,
-    exclude: ['node_modules/**', 'dist/**', 'out/**', 'scripts/**', 'test/integration/**']
+    exclude: ['node_modules/**', 'dist/**', 'out/**', 'scripts/**', 'test/integration/**'],
+    coverage: {
+      exclude: ['scripts/**', '**/test/**'],
+    }
   },
 });

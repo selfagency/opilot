@@ -5,6 +5,7 @@ import {
   LanguageModelTextPart,
   LanguageModelToolCallPart,
   LanguageModelToolResultPart,
+  window,
 } from 'vscode';
 import { getOllamaClient } from './client.js';
 import { formatModelName, isThinkingModelId, OllamaChatModelProvider } from './provider.js';
@@ -12,6 +13,7 @@ import { formatModelName, isThinkingModelId, OllamaChatModelProvider } from './p
 vi.mock('./client.js', () => ({
   getContextLengthOverride: vi.fn(() => 0),
   getOllamaClient: vi.fn(),
+  getCloudOllamaClient: vi.fn(),
 }));
 
 // Mock vscode
@@ -42,6 +44,7 @@ vi.doMock('vscode', () => ({
   window: {
     showQuickPick: vi.fn(),
     showInputBox: vi.fn(),
+    showErrorMessage: vi.fn(),
   },
 }));
 
@@ -957,6 +960,60 @@ describe('OllamaChatModelProvider chat response', () => {
   });
 });
 
+describe('OllamaChatModelProvider crash handling', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows error message when model runner crashes', async () => {
+    const generate = vi.fn().mockResolvedValue({});
+    const chat = vi
+      .fn()
+      .mockRejectedValue(new Error('model runner has unexpectedly stopped, please check ollama server logs'));
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, generate, abort: vi.fn() } as any);
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn(), show: vi.fn() } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+    const model = {
+      id: 'ollama:test-model',
+      name: 'Test',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: false },
+    };
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('hello')],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      model,
+      [message as any],
+      { tools: [], toolMode: 'auto' } as any,
+      progress as any,
+      token as any,
+    );
+
+    expect(vi.mocked(window.showErrorMessage)).toHaveBeenCalledWith(
+      expect.stringContaining('model runner crashed'),
+      'Open Logs',
+    );
+    expect(generate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-model', keep_alive: 0 }),
+    );
+  });
+});
+
 describe('isThinkingModelId', () => {
   it('returns true for qwen3 models', () => {
     expect(isThinkingModelId('qwen3:8b')).toBe(true);
@@ -989,5 +1046,221 @@ describe('isThinkingModelId', () => {
     expect(isThinkingModelId('mistral:7b')).toBe(false);
     expect(isThinkingModelId('gemma3:latest')).toBe(false);
     expect(isThinkingModelId('codellama:latest')).toBe(false);
+  });
+});
+
+describe('XML context extraction in message conversion', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('extracts XML context blocks from user messages into a system message', async () => {
+    const chat = vi.fn().mockImplementation(async function* () {
+      yield { message: { content: 'response' } };
+    });
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn(), show: vi.fn() } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+    const model = {
+      id: 'test-model',
+      name: 'Test',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: false },
+    };
+
+    const userText = '<environment_info>\nOS: macOS\n</environment_info>\nWhat is 2+2?';
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart(userText)],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      model,
+      [message as any],
+      { tools: [], toolMode: 'auto' } as any,
+      progress as any,
+      token as any,
+    );
+
+    const messages = chat.mock.calls[0]?.[0]?.messages;
+
+    expect(messages?.[0]?.role).toBe('system');
+    expect(messages?.[0]?.content).toContain('OS: macOS');
+
+    expect(messages?.[1]?.role).toBe('user');
+    expect(messages?.[1]?.content).not.toContain('<environment_info>');
+    expect(messages?.[1]?.content).toContain('What is 2+2?');
+  });
+
+  it('does not promote non-leading XML context tags to system message', async () => {
+    const chat = vi.fn().mockImplementation(async function* () {
+      yield { message: { content: 'response' } };
+    });
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn(), show: vi.fn() } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    // Context tag appears mid-message, not at the start — must NOT be promoted to system
+    const userText = 'What is 2+2? <environment_info>\nOS: macOS\n</environment_info>';
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart(userText)],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      {
+        id: 'test-model',
+        name: 'Test',
+        family: '🦙 Ollama',
+        version: '1.0.0',
+        maxInputTokens: 100,
+        maxOutputTokens: 100,
+        capabilities: { imageInput: false, toolCalling: false },
+      },
+      [message as any],
+      { tools: [], toolMode: 'auto' } as any,
+      { report: vi.fn() } as any,
+      { isCancellationRequested: false } as any,
+    );
+
+    const messages = chat.mock.calls[0]?.[0]?.messages;
+
+    // No system message should be injected
+    expect(messages?.[0]?.role).toBe('user');
+    // The user message content should be unchanged (including the tag)
+    expect(messages?.[0]?.content).toContain('<environment_info>');
+  });
+
+  it('deduplicates context blocks across turns, keeping only the most recent per tag', async () => {
+    const chat = vi.fn().mockImplementation(async function* () {
+      yield { message: { content: 'response' } };
+    });
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn(), show: vi.fn() } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    // Simulate a two-turn conversation where both turns inject an environment_info block
+    const turn1 = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('<environment_info>\nenv v1\n</environment_info>\nFirst question')],
+    };
+    const turn1Reply = {
+      role: LanguageModelChatMessageRole.Assistant,
+      name: undefined,
+      content: [new LanguageModelTextPart('First answer')],
+    };
+    const turn2 = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('<environment_info>\nenv v2\n</environment_info>\nSecond question')],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      {
+        id: 'test-model',
+        name: 'Test',
+        family: '🦙 Ollama',
+        version: '1.0.0',
+        maxInputTokens: 100,
+        maxOutputTokens: 100,
+        capabilities: { imageInput: false, toolCalling: false },
+      },
+      [turn1 as any, turn1Reply as any, turn2 as any],
+      { tools: [], toolMode: 'auto' } as any,
+      { report: vi.fn() } as any,
+      { isCancellationRequested: false } as any,
+    );
+
+    const messages = chat.mock.calls[0]?.[0]?.messages;
+
+    // There should be exactly one system message
+    const systemMessages = messages?.filter((m: { role: string }) => m.role === 'system');
+    expect(systemMessages).toHaveLength(1);
+
+    // The system message should contain only the most recent environment_info (v2)
+    expect(systemMessages?.[0]?.content).toContain('env v2');
+    expect(systemMessages?.[0]?.content).not.toContain('env v1');
+  });
+
+  it('strips all four known context tag types', async () => {
+    const chat = vi.fn().mockImplementation(async function* () {
+      yield { message: { content: 'ok' } };
+    });
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+
+    const provider = new OllamaChatModelProvider(
+      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
+      { list: vi.fn(), show: vi.fn() } as any,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() } as any,
+    );
+
+    const userText = [
+      '<environment_info>\nenv data\n</environment_info>',
+      '<workspace_info>\nws data\n</workspace_info>',
+      '<selection>\nsel data\n</selection>',
+      '<file_context>\nfile data\n</file_context>',
+      'User question',
+    ].join('\n');
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart(userText)],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      {
+        id: 'test-model',
+        name: 'Test',
+        family: '🦙 Ollama',
+        version: '1.0.0',
+        maxInputTokens: 100,
+        maxOutputTokens: 100,
+        capabilities: { imageInput: false, toolCalling: false },
+      },
+      [message as any],
+      { tools: [], toolMode: 'auto' } as any,
+      { report: vi.fn() } as any,
+      { isCancellationRequested: false } as any,
+    );
+
+    const messages = chat.mock.calls[0]?.[0]?.messages;
+
+    expect(messages?.[0]?.role).toBe('system');
+    expect(messages?.[0]?.content).toContain('env data');
+    expect(messages?.[0]?.content).toContain('ws data');
+    expect(messages?.[0]?.content).toContain('sel data');
+    expect(messages?.[0]?.content).toContain('file data');
+
+    expect(messages?.[1]?.content).not.toContain('<environment_info>');
+    expect(messages?.[1]?.content).not.toContain('<workspace_info>');
+    expect(messages?.[1]?.content).not.toContain('<selection>');
+    expect(messages?.[1]?.content).not.toContain('<file_context>');
+    expect(messages?.[1]?.content).toContain('User question');
   });
 });
