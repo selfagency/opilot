@@ -15,7 +15,7 @@ Add a toggle button per sidebar pane (Local Models, Cloud Models, Library) that 
 - **Parenting on** (default): models grouped by family/tag as they are now
 - **Parenting off**: all models shown as a flat, case-insensitive alphabetically sorted list with no group headers
 - Toggle state is persisted per pane in extension global state so it survives reloads
-- Toggle icon: `$(list-tree)` in both modes; the command label indicates grouped vs flat
+- Toggle icon: `$(list-tree)` when grouped, `$(list-flat)` when flat
 
 ## Todo
 
