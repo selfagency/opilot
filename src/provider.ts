@@ -532,6 +532,20 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       }
     } catch (error) {
       this.outputChannel.exception('[Ollama] Chat response failed', error);
+
+      const isCrashError =
+        error instanceof Error && error.message.includes('model runner has unexpectedly stopped');
+      if (isCrashError) {
+        // Best-effort unload so Ollama housekeeps the dead runner — ignore any failure
+        perRequestClient
+          .generate({ model: runtimeModelId, prompt: '', keep_alive: 0, stream: false })
+          .catch(() => {});
+        void window.showErrorMessage(
+          'The Ollama model runner crashed. Please check the Ollama server logs and restart if needed.',
+          'Open Logs',
+        );
+      }
+
       const isConnectionError = error instanceof TypeError && error.message.includes('fetch failed');
       const message = isConnectionError
         ? 'Cannot reach Ollama server — check that it is running and accessible.'

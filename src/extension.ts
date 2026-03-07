@@ -439,6 +439,14 @@ export async function handleChatRequest(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       outputChannel?.exception('[Ollama] Chat participant request failed', error);
+      const isCrashError =
+        error instanceof Error && error.message.includes('model runner has unexpectedly stopped');
+      if (isCrashError) {
+        void vscode.window.showErrorMessage(
+          'The Ollama model runner crashed. Please check the Ollama server logs and restart if needed.',
+          'Open Logs',
+        );
+      }
       stream.markdown(`Error: ${message}`);
     }
     return;
