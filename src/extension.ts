@@ -299,7 +299,7 @@ export async function handleChatRequest(
 
     try {
       // Convert VS Code messages to the plain Ollama format expected by the client.
-      const XML_CONTEXT_TAG_RE = /<(environment_info|workspace_info|selection|file_context)[^>]*>[\s\S]*?<\/\1>/gi;
+      const XML_CONTEXT_TAG_RE = /<([a-zA-Z_][a-zA-Z0-9_.-]*)[^>]*>[\s\S]*?<\/\1>/gi;
       const systemContextParts: string[] = [];
 
       const ollamaMessages: (Message & { tool_call_id?: string })[] = messages.map(msg => {
@@ -356,20 +356,8 @@ export async function handleChatRequest(
         }
       }
 
-      const tagOrder: Array<'environment_info' | 'workspace_info' | 'selection' | 'file_context'> = [
-        'environment_info',
-        'workspace_info',
-        'selection',
-        'file_context',
-      ];
-
-      const dedupedContextParts: string[] = [];
-      for (const tag of tagOrder) {
-        const block = latestByTag.get(tag);
-        if (block) {
-          dedupedContextParts.push(block);
-        }
-      }
+      // Preserve insertion order (latest occurrence of each tag wins, collected in reverse above)
+      const dedupedContextParts = [...latestByTag.values()].reverse();
 
       if (dedupedContextParts.length > 0) {
         ollamaMessages.unshift({ role: 'system', content: dedupedContextParts.join('\n\n') });

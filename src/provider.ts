@@ -575,7 +575,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     messages: readonly LanguageModelChatRequestMessage[],
   ): Parameters<typeof this.client.chat>[0]['messages'] {
     const ollamaMessages: Parameters<typeof this.client.chat>[0]['messages'] = [];
-    const XML_CONTEXT_TAG_RE = /<(environment_info|workspace_info|selection|file_context)[^>]*>[\s\S]*?<\/\1>/gi;
+    const XML_CONTEXT_TAG_RE = /<([a-zA-Z_][a-zA-Z0-9_.-]*)[^>]*>[\s\S]*?<\/\1>/gi;
     const systemContextParts: string[] = [];
 
     for (const msg of messages) {
@@ -590,7 +590,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         if (part instanceof LanguageModelTextPart) {
           textContent += part.value;
         } else if (part instanceof LanguageModelDataPart) {
-          const base64Data = typeof part.data === 'string' ? part.data : Buffer.from(part.data).toString('base64');
+          const base64Data = Buffer.from(part.data).toString('base64');
           images.push(base64Data);
         } else if (part instanceof LanguageModelToolCallPart) {
           ollamaMsg.tool_calls = ollamaMsg.tool_calls || [];
@@ -675,20 +675,8 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       }
     }
 
-    const tagOrder: Array<'environment_info' | 'workspace_info' | 'selection' | 'file_context'> = [
-      'environment_info',
-      'workspace_info',
-      'selection',
-      'file_context',
-    ];
-
-    const dedupedContextParts: string[] = [];
-    for (const tag of tagOrder) {
-      const block = latestByTag.get(tag);
-      if (block) {
-        dedupedContextParts.push(block);
-      }
-    }
+    // Preserve insertion order (latest occurrence of each tag wins, collected in reverse above)
+    const dedupedContextParts = [...latestByTag.values()].reverse();
 
     if (dedupedContextParts.length > 0) {
       ollamaMessages.unshift({
