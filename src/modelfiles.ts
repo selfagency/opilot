@@ -80,11 +80,16 @@ export async function ensureModelfilesFolder(folderPath: string): Promise<void> 
 // Tree item
 // ---------------------------------------------------------------------------
 
+function createThemeIcon(id: string): vscode.ThemeIcon {
+  const ThemeIconCtor = vscode.ThemeIcon as unknown as { new (iconId: string): vscode.ThemeIcon };
+  return new ThemeIconCtor(id);
+}
+
 export class ModelfileItem extends vscode.TreeItem {
   constructor(public readonly uri: vscode.Uri) {
     super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'modelfile';
-    this.iconPath = { id: 'file-code' } as unknown as vscode.ThemeIcon;
+    this.iconPath = createThemeIcon('file-code');
     this.tooltip = uri.fsPath;
     this.command = { command: 'vscode.open', title: 'Open Modelfile', arguments: [uri] };
   }
