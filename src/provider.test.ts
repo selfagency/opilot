@@ -652,7 +652,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -704,7 +704,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -757,7 +757,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -802,7 +802,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -856,7 +856,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {
@@ -922,7 +922,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: true },
+      capabilities: { imageInput: false, toolCalling: false },
     };
 
     const message = {

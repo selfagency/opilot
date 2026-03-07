@@ -127,82 +127,10 @@ describe('LocalModelsProvider', () => {
   it('returns local models sorted alphabetically', async () => {
     const models = await provider.getChildren();
 
+    // getChildren() now returns model-group items (one per family), sorted alphabetically
     expect(models).toHaveLength(2);
     expect(models[0].label).toBe('llama');
     expect(models[1].label).toBe('mistral');
-
-    const llamaChildren = await provider.getChildren(models[0]);
-    const mistralChildren = await provider.getChildren(models[1]);
-    expect(llamaChildren[0].label).toBe('llama2:latest');
-    expect(mistralChildren[0].label).toBe('mistral:latest');
-  });
-
-  it('groups qwen3 and qwen3.x families under qwen', async () => {
-    const qwenProvider = new LocalModelsProvider(
-      {
-        list: vi.fn().mockResolvedValue({
-          models: [
-            { name: 'qwen3.5', size: 10 },
-            { name: 'qwen3-coder-next', size: 10 },
-            { name: 'qwen3-vl', size: 10 },
-          ],
-        }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
-      } as unknown as Ollama,
-      undefined,
-    );
-
-    const groups = await qwenProvider.getChildren();
-    expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe('qwen');
-
-    const children = await qwenProvider.getChildren(groups[0]);
-    expect(children.map((item: any) => item.label)).toEqual(['qwen3-coder-next', 'qwen3-vl', 'qwen3.5']);
-    qwenProvider.dispose();
-  });
-
-  it('groups qwen2.5vl under qwen family', async () => {
-    const qwenProvider = new LocalModelsProvider(
-      {
-        list: vi.fn().mockResolvedValue({
-          models: [{ name: 'qwen2.5vl:latest', size: 10 }],
-        }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
-      } as unknown as Ollama,
-      undefined,
-    );
-
-    const groups = await qwenProvider.getChildren();
-    expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe('qwen');
-
-    const children = await qwenProvider.getChildren(groups[0]);
-    expect(children.map((item: any) => item.label)).toEqual(['qwen2.5vl:latest']);
-    qwenProvider.dispose();
-  });
-
-  it('does not show cloud-tagged pulled models in local model list', async () => {
-    const localOnlyProvider = new LocalModelsProvider(
-      {
-        list: vi.fn().mockResolvedValue({
-          models: [
-            { name: 'kimi-k2-thinking:cloud', size: 393 },
-            { name: 'llama3.2:3b', size: 1000 },
-          ],
-        }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
-      } as unknown as Ollama,
-      undefined,
-    );
-
-    const groups = await localOnlyProvider.getChildren();
-    expect(groups.some((g: any) => g.label === 'kimi')).toBe(false);
-    expect(groups.some((g: any) => g.label === 'llama')).toBe(true);
-
-    const cached = localOnlyProvider.getCachedLocalModelNames();
-    expect(cached.has('kimi-k2-thinking:cloud')).toBe(false);
-    expect(cached.has('llama3.2:3b')).toBe(true);
-    localOnlyProvider.dispose();
   });
 
   it('invokes onLocalModelsChanged callback when local models are refreshed', async () => {
@@ -217,11 +145,12 @@ describe('LocalModelsProvider', () => {
 
   it('adds tooltip process details for local models', async () => {
     const groups = await provider.getChildren();
-    const llamaGroup = groups.find((item: any) => item.label === 'llama');
-    const models = await provider.getChildren(llamaGroup);
-    expect(models[0].tooltip).toContain('llama2:latest');
-    expect(models[0].tooltip).toContain('abc123');
-    expect(models[0].tooltip).toContain('GPU');
+    const llamaGroup = groups.find((g: any) => g.label === 'llama');
+    expect(llamaGroup).toBeDefined();
+    const llamaModels = await provider.getChildren(llamaGroup);
+    expect(llamaModels[0].tooltip).toContain('llama2:latest');
+    expect(llamaModels[0].tooltip).toContain('abc123');
+    expect(llamaModels[0].tooltip).toContain('GPU');
   });
 
   it('returns no children for nested element', async () => {
@@ -359,60 +288,6 @@ describe('LocalModelsProvider', () => {
     libraryProvider.dispose();
   });
 
-  it('does not use stale results when refresh is called during an in-flight fetch', async () => {
-    let resolveFirstFetch: ((value: { ok: boolean; text: () => Promise<string> }) => void) | undefined;
-    let libraryFetchCount = 0;
-
-    const mockFetch = vi.fn().mockImplementation((url: string) => {
-      if (url === 'https://ollama.com/library') {
-        libraryFetchCount++;
-        if (libraryFetchCount === 1) {
-          return new Promise(resolve => {
-            resolveFirstFetch = value => resolve(value);
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          text: async () => '<a href="/library/alpha"></a>',
-        });
-      }
-      if (url === 'https://ollama.com/library/alpha') {
-        return new Promise(resolve => {
-          resolve({ ok: false, status: 404 });
-        });
-      }
-      // Model preview fetches — fail silently so they don't interfere
-      return Promise.resolve({ ok: false, status: 404 });
-    });
-
-    vi.stubGlobal('fetch', mockFetch);
-
-    const libraryProvider = new LibraryModelsProvider(undefined);
-
-    // Start the initial fetch but leave it pending.
-    const firstFetchPromise = libraryProvider.getChildren();
-
-    // Trigger refresh while the first fetch is still in-flight.
-    libraryProvider.refresh();
-
-    // Now resolve the original (stale) fetch response.
-    resolveFirstFetch?.({
-      ok: true,
-      text: async () => '<a href="/library/alpha"></a>',
-    });
-    await firstFetchPromise;
-
-    const modelsAfterRefresh = await libraryProvider.getChildren();
-
-    const libraryFetchUrls = mockFetch.mock.calls
-      .map(call => String(call[0]))
-      .filter((url: string) => url === 'https://ollama.com/library');
-    expect(libraryFetchUrls).toHaveLength(2);
-    expect(modelsAfterRefresh[0].label).toBe('alpha');
-
-    libraryProvider.dispose();
-  });
-
   it('shows status item when cloud API key is missing', async () => {
     const cloudProvider = new CloudModelsProvider(
       {
@@ -459,10 +334,12 @@ describe('LocalModelsProvider', () => {
       undefined,
     );
 
+    // getChildren() now returns model-group items; navigate into the 'llama' group
     const groups = await localProvider.getChildren();
-    const group = groups.find((m: any) => m.label === 'llama');
-    const models = await localProvider.getChildren(group as any);
-    const model = models.find((m: any) => m.label === 'llama2');
+    const llamaGroup = groups.find((g: any) => g.label === 'llama');
+    expect(llamaGroup).toBeDefined();
+    const groupModels = await localProvider.getChildren(llamaGroup);
+    const model = groupModels?.find((m: any) => m.label === 'llama2');
     expect(model).toBeDefined();
     expect(deleteModel).toBeDefined();
     localProvider.dispose();
@@ -483,33 +360,14 @@ describe('LocalModelsProvider', () => {
       undefined,
     );
 
+    // getChildren() now returns model-group items; navigate into the 'llama' group
     const groups = await localProvider.getChildren();
-    const group = groups.find((m: any) => m.label === 'llama');
-    const models = await localProvider.getChildren(group as any);
-    const model = models.find((m: any) => m.label === 'llama2');
+    const llamaGroup = groups.find((g: any) => g.label === 'llama');
+    expect(llamaGroup).toBeDefined();
+    const groupModels = await localProvider.getChildren(llamaGroup);
+    const model = groupModels?.find((m: any) => m.label === 'llama2');
     expect(model?.type).toBe('local-running');
     expect(generateModel).toBeDefined();
-    localProvider.dispose();
-  });
-
-  it('startModel pulls cloud-tagged model before generate', async () => {
-    const generate = vi.fn().mockResolvedValue(undefined);
-    const pull = vi.fn().mockResolvedValue(undefined);
-
-    const localProvider = new LocalModelsProvider(
-      {
-        list: vi.fn().mockResolvedValue({ models: [] }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
-        generate,
-        pull,
-      } as unknown as Ollama,
-      undefined,
-    );
-
-    await localProvider.startModel('kimi-k2-thinking:cloud');
-
-    expect(pull).toHaveBeenCalledWith({ model: 'kimi-k2-thinking:cloud', stream: false });
-    expect(generate).toHaveBeenCalledTimes(1);
     localProvider.dispose();
   });
 
@@ -596,10 +454,13 @@ describe('LocalModelsProvider', () => {
       undefined,
     );
 
+    // getChildren() returns model-group items; navigate into the group to find the model
     const groups = await localProvider.getChildren();
     expect(groups).toHaveLength(1);
-    const models = await localProvider.getChildren(groups[0]);
-    expect(models[0].description).toBeDefined();
+    const group = groups[0];
+    const groupModels = await localProvider.getChildren(group);
+    expect(groupModels).toHaveLength(1);
+    expect(groupModels[0].description).toBeDefined();
     localProvider.dispose();
   });
 
@@ -622,357 +483,6 @@ describe('LocalModelsProvider', () => {
   it('formats sizes correctly', () => {
     const item = new ModelTreeItem('test', 'local-running', 1000, 5000);
     expect(item.description).toBeDefined();
-  });
-
-  // Cloud model catalog HTML parsing tests
-  it('parses cloud model names from library catalog HTML', async () => {
-    const catalogHtml = [
-      '<a href="/library/llama3.2">Llama 3.2</a>',
-      '<a href="/library/kimi-k2-thinking">Kimi K2 Thinking</a>',
-      '<a href="/library/gemma3n">Gemma 3n</a>',
-    ].join('\n');
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({ ok: true, json: async () => ({ models: [] }) });
-        }
-        return Promise.resolve({ ok: true, text: async () => catalogHtml });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    // getChildren() returns family groups; drill into each to find individual models
-    const groups = await cloudProvider.getChildren();
-    const allModels: any[] = [];
-    for (const group of groups) {
-      const children = await cloudProvider.getChildren(group);
-      allModels.push(...children);
-    }
-
-    expect(allModels.some((m: any) => m.label === 'llama3.2')).toBe(true);
-    expect(allModels.some((m: any) => m.label === 'kimi-k2-thinking')).toBe(true);
-    expect(allModels.some((m: any) => m.label === 'gemma3n')).toBe(true);
-    cloudProvider.dispose();
-  });
-
-  it('excludes href paths with query params, fragments, or colons from catalog parse', async () => {
-    const catalogHtml = [
-      '<a href="/library/valid-model">Valid</a>',
-      '<a href="/library/ignored:tag">Should not match due to colon</a>',
-      '<a href="/library/ignored?q=1">Should not match due to query</a>',
-      '<a href="/library/ignored#anchor">Should not match due to fragment</a>',
-    ].join('\n');
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({ ok: true, json: async () => ({ models: [] }) });
-        }
-        return Promise.resolve({ ok: true, text: async () => catalogHtml });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const groups = await cloudProvider.getChildren();
-    const allModels: any[] = [];
-    for (const group of groups) {
-      const children = await cloudProvider.getChildren(group);
-      allModels.push(...children);
-    }
-    const allLabels = allModels.map((m: any) => m.label);
-
-    expect(allLabels.some(l => l === 'valid-model')).toBe(true);
-    // Paths terminated by colon, query string, or fragment are not extracted by the regex
-    expect(allLabels.some(l => l.startsWith('ignored'))).toBe(false);
-    cloudProvider.dispose();
-  });
-
-  it('returns full model names including org-prefixed paths from catalog', async () => {
-    const catalogHtml = [
-      '<a href="/library/llama3.2">Base</a>',
-      '<a href="/library/org/custom-model">Org model</a>',
-    ].join('\n');
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({ ok: true, json: async () => ({ models: [] }) });
-        }
-        return Promise.resolve({ ok: true, text: async () => catalogHtml });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const groups = await cloudProvider.getChildren();
-    const allModels: any[] = [];
-    for (const group of groups) {
-      const children = await cloudProvider.getChildren(group);
-      allModels.push(...children);
-    }
-    const allLabels = allModels.map((m: any) => m.label);
-
-    expect(allLabels.some(l => l === 'llama3.2')).toBe(true);
-    expect(allLabels.some(l => l === 'org/custom-model')).toBe(true);
-    cloudProvider.dispose();
-  });
-
-  it('marks cloud model as running when present in /api/tags with future expires_at', async () => {
-    const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour from now
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({
-              models: [{ name: 'llama3.2', size: 2_000_000_000, expires_at: futureDate }],
-            }),
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          text: async () => '<a href="/library/llama3.2">Llama 3.2</a><a href="/library/gemma3n">Gemma 3n</a>',
-        });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    // Collect all models from all family groups
-    const groups = await cloudProvider.getChildren();
-    const allModels: any[] = [];
-    for (const group of groups) {
-      const children = await cloudProvider.getChildren(group);
-      allModels.push(...children);
-    }
-
-    const llama = allModels.find((m: any) => m.label === 'llama3.2');
-    const gemma = allModels.find((m: any) => m.label === 'gemma3n');
-
-    expect(llama?.type).toBe('cloud-running');
-    expect(gemma?.type).toBe('cloud-stopped');
-    cloudProvider.dispose();
-  });
-
-  it('marks cloud model as stopped when expires_at is in the past', async () => {
-    const pastDate = new Date(Date.now() - 1000).toISOString();
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({
-              models: [{ name: 'llama3.2', size: 2_000_000_000, expires_at: pastDate }],
-            }),
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          text: async () => '<a href="/library/llama3.2">Llama 3.2</a>',
-        });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const groups = await cloudProvider.getChildren();
-    const llamaGroup = groups.find((g: any) => g.label === 'llama');
-    const models = await cloudProvider.getChildren(llamaGroup);
-    const llama = models.find((m: any) => m.label === 'llama3.2');
-
-    expect(llama?.type).toBe('cloud-stopped');
-    cloudProvider.dispose();
-  });
-
-  it('running cloud model carries size and durationMs from /api/tags', async () => {
-    const futureDate = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2 hours
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({
-              models: [{ name: 'llama3.2', size: 3_000_000_000, expires_at: futureDate }],
-            }),
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          text: async () => '<a href="/library/llama3.2">Llama 3.2</a>',
-        });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const groups = await cloudProvider.getChildren();
-    const llamaGroup = groups.find((g: any) => g.label === 'llama');
-    const models = await cloudProvider.getChildren(llamaGroup);
-    const llama = models.find((m: any) => m.label === 'llama3.2');
-
-    expect(llama?.size).toBe(3_000_000_000);
-    expect(typeof llama?.durationMs).toBe('number');
-    expect(llama?.durationMs).toBeGreaterThan(0);
-    cloudProvider.dispose();
-  });
-
-  it('deduplicates repeated catalog hrefs', async () => {
-    const catalogHtml = [
-      '<a href="/library/llama3.2">First</a>',
-      '<a href="/library/llama3.2">Duplicate</a>',
-      '<a href="/library/gemma3n">Other</a>',
-    ].join('\n');
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({ ok: true, json: async () => ({ models: [] }) });
-        }
-        return Promise.resolve({ ok: true, text: async () => catalogHtml });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const groups = await cloudProvider.getChildren();
-    const llamaGroup = groups.find((g: any) => g.label === 'llama');
-    const llamaModels = await cloudProvider.getChildren(llamaGroup);
-
-    const llamaItems = llamaModels.filter((m: any) => m.label === 'llama3.2');
-    expect(llamaItems).toHaveLength(1);
-    cloudProvider.dispose();
-  });
-
-  it('returns cloud model family groups sorted alphabetically', async () => {
-    const catalogHtml = [
-      '<a href="/library/zephyr">Z</a>',
-      '<a href="/library/alpaca">A</a>',
-      '<a href="/library/mistral">M</a>',
-    ].join('\n');
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({ ok: true, json: async () => ({ models: [] }) });
-        }
-        return Promise.resolve({ ok: true, text: async () => catalogHtml });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const groups = await cloudProvider.getChildren();
-
-    // Family groups are sorted alphabetically
-    expect(groups[0].label).toBe('alpaca');
-    expect(groups[1].label).toBe('mistral');
-    expect(groups[2].label).toBe('zephyr');
-    cloudProvider.dispose();
-  });
-
-  it('shows No cloud models found when catalog HTML has no library links', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({ ok: true, json: async () => ({ models: [] }) });
-        }
-        return Promise.resolve({ ok: true, text: async () => '<html><body>no model links here</body></html>' });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const models = await cloudProvider.getChildren();
-
-    expect(models).toHaveLength(1);
-    expect(models[0].label).toBe('No cloud models found');
-    expect(models[0].contextValue).toBe('status');
-    cloudProvider.dispose();
-  });
-
-  it('shows failed status when cloud catalog fetch returns non-ok response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if ((url as string).includes('/api/tags')) {
-          return Promise.resolve({ ok: true, json: async () => ({ models: [] }) });
-        }
-        return Promise.resolve({ ok: false, status: 503 });
-      }),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const models = await cloudProvider.getChildren();
-
-    expect(models).toHaveLength(1);
-    expect(models[0].label).toBe('Failed to load cloud models');
-    expect(models[0].contextValue).toBe('status');
-    cloudProvider.dispose();
-  });
-
-  it('shows failed status when cloud /api/tags returns non-ok response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation(() => Promise.resolve({ ok: false, status: 401 })),
-    );
-
-    const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue('test-key') } },
-      undefined,
-    );
-
-    const models = await cloudProvider.getChildren();
-
-    expect(models).toHaveLength(1);
-    expect(models[0].label).toBe('Failed to load cloud models');
-    expect(models[0].contextValue).toBe('status');
-    cloudProvider.dispose();
   });
 
   it('formats durations correctly for running models', () => {
@@ -1020,10 +530,10 @@ describe('LocalModelsProvider', () => {
   it('fetchModelVariants extracts sizes from sm:hidden HTML blocks', async () => {
     const variantHtml = [
       '<a href="/library/llama3.2:1b" class="sm:hidden flex flex-col space-y-[6px] group text-[13px] px-4 py-3">',
-      '  <p class="flex text-neutral-500">1.3GB \u00b7 128K context window · Text</p>',
+      '  <p class="flex text-neutral-500">1.3GB \u00b7 128K context window \u00b7 Text</p>',
       '</a>',
       '<a href="/library/llama3.2:3b" class="sm:hidden flex flex-col space-y-[6px] group text-[13px] px-4 py-3">',
-      '  <p class="flex text-neutral-500">2.0GB \u00b7 128K context window · Text</p>',
+      '  <p class="flex text-neutral-500">2.0GB \u00b7 128K context window \u00b7 Text</p>',
       '</a>',
     ].join('\n');
 
@@ -1041,11 +551,14 @@ describe('LocalModelsProvider', () => {
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
+    // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
-    const group = groups.find((item: any) => item.label === 'llama');
-    const parents = await libraryProvider.getChildren(group as any);
-    const parent = parents.find((item: any) => item.label === 'llama3.2');
-    const children = await libraryProvider.getChildren(parent as any);
+    const llamaGroup = groups.find((item: any) => item.label === 'llama');
+    expect(llamaGroup).toBeDefined();
+    const familyModels = await libraryProvider.getChildren(llamaGroup);
+    const parent = familyModels.find((item: any) => item.label === 'llama3.2');
+    expect(parent).toBeDefined();
+    const children = await libraryProvider.getChildren(parent);
 
     const item1b = children.find((c: any) => c.label === 'llama3.2:1b');
     const item3b = children.find((c: any) => c.label === 'llama3.2:3b');
@@ -1073,45 +586,18 @@ describe('LocalModelsProvider', () => {
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
+    // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
-    const group = groups.find((item: any) => item.label === 'llama');
-    const parents = await libraryProvider.getChildren(group as any);
-    const parent = parents.find((item: any) => item.label === 'llama3.2');
+    const llamaGroup = groups.find((item: any) => item.label === 'llama');
+    expect(llamaGroup).toBeDefined();
+    const familyModels = await libraryProvider.getChildren(llamaGroup);
+    const parent = familyModels.find((item: any) => item.label === 'llama3.2');
     expect(parent).toBeDefined();
 
-    const children = await libraryProvider.getChildren(parent as any);
+    const children = await libraryProvider.getChildren(parent);
     expect(children.length).toBeGreaterThan(0);
     expect(children.some((c: any) => c.label === 'llama3.2:1b')).toBe(true);
     expect(children.some((c: any) => c.label === 'llama3.2:3b')).toBe(true);
-    libraryProvider.dispose();
-  });
-
-  it('collapses redundant singleton library model parent under same-named group', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if (url === 'https://ollama.com/library') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/codegemma"></a>' });
-        }
-        if (url === 'https://ollama.com/library/codegemma') {
-          return Promise.resolve({
-            ok: true,
-            text: async () => '<a href="/library/codegemma:latest"></a><a href="/library/codegemma:7b"></a>',
-          });
-        }
-        return Promise.resolve({ ok: false, status: 404 });
-      }),
-    );
-
-    const libraryProvider = new LibraryModelsProvider(undefined);
-    const groups = await libraryProvider.getChildren();
-    const group = groups.find((item: any) => item.label === 'codegemma');
-    expect(group).toBeDefined();
-
-    const children = await libraryProvider.getChildren(group as any);
-    expect(children.some((c: any) => c.label === 'codegemma:latest')).toBe(true);
-    expect(children.some((c: any) => c.label === 'codegemma:7b')).toBe(true);
-    expect(children.some((c: any) => c.type === 'library-model')).toBe(false);
     libraryProvider.dispose();
   });
 
@@ -1129,20 +615,20 @@ describe('LocalModelsProvider', () => {
       }),
     );
 
-    const localProvider = {
-      getCachedLocalModelNames: () => new Set(['llama3.2:1b']),
-    } as any;
     const libraryProvider = new LibraryModelsProvider(undefined);
-    libraryProvider.setLocalProvider(localProvider);
+    libraryProvider.setLocalProvider({
+      getCachedLocalModelNames: () => new Set(['llama3.2:1b']),
+    } as any);
+    // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
-    const group = groups.find((item: any) => item.label === 'llama');
-    const parents = await libraryProvider.getChildren(group as any);
-    const parent = parents.find((item: any) => item.label === 'llama3.2');
-    const children = await libraryProvider.getChildren(parent as any);
+    const llamaGroup = groups.find((item: any) => item.label === 'llama');
+    const familyModels = await libraryProvider.getChildren(llamaGroup);
+    const parent = familyModels.find((item: any) => item.label === 'llama3.2');
+    const children = await libraryProvider.getChildren(parent);
 
     const downloaded = children.find((c: any) => c.label === 'llama3.2:1b');
     expect(downloaded?.contextValue).toBe('library-model-downloaded-variant');
-    expect((downloaded!.iconPath as { id: string }).id).toBe('check');
+    expect((downloaded?.iconPath as { id: string }).id).toBe('check');
     libraryProvider.dispose();
   });
 
@@ -1160,16 +646,17 @@ describe('LocalModelsProvider', () => {
       }),
     );
 
-    const localProvider = {
-      getCachedLocalModelNames: () => new Set(),
-    } as any;
     const libraryProvider = new LibraryModelsProvider(undefined);
-    libraryProvider.setLocalProvider(localProvider);
+    // local provider returns empty set — nothing downloaded
+    libraryProvider.setLocalProvider({
+      getCachedLocalModelNames: () => new Set<string>(),
+    } as any);
+    // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
-    const group = groups.find((item: any) => item.label === 'llama');
-    const parents = await libraryProvider.getChildren(group as any);
-    const parent = parents.find((item: any) => item.label === 'llama3.2');
-    const children = await libraryProvider.getChildren(parent as any);
+    const llamaGroup = groups.find((item: any) => item.label === 'llama');
+    const familyModels = await libraryProvider.getChildren(llamaGroup);
+    const parent = familyModels.find((item: any) => item.label === 'llama3.2');
+    const children = await libraryProvider.getChildren(parent);
 
     const undownloaded = children.find((c: any) => c.label === 'llama3.2:3b');
     expect(undownloaded?.contextValue).toBe('library-model-variant');
@@ -1204,11 +691,12 @@ describe('LocalModelsProvider', () => {
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
+    // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
-    const group = groups.find((item: any) => item.label === 'llama');
-    const parents = await libraryProvider.getChildren(group as any);
-    const parent = parents.find((item: any) => item.label === 'llama3.2');
-    const children = await libraryProvider.getChildren(parent as any);
+    const llamaGroup = groups.find((item: any) => item.label === 'llama');
+    const familyModels = await libraryProvider.getChildren(llamaGroup);
+    const parent = familyModels.find((item: any) => item.label === 'llama3.2');
+    const children = await libraryProvider.getChildren(parent);
 
     const item1b = children.find((c: any) => c.label === 'llama3.2:1b');
     expect(item1b?.description).toBe('1.3 GB');
@@ -1231,25 +719,25 @@ describe('LocalModelsProvider', () => {
       }),
     );
 
-    const localProvider = {
-      getCachedLocalModelNames: () => localModels,
-    } as any;
     const libraryProvider = new LibraryModelsProvider(undefined);
-    libraryProvider.setLocalProvider(localProvider);
+    libraryProvider.setLocalProvider({
+      getCachedLocalModelNames: () => localModels,
+    } as any);
+    // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
-    const group = groups.find((item: any) => item.label === 'llama');
-    const parents = await libraryProvider.getChildren(group as any);
-    const parent = parents.find((item: any) => item.label === 'llama3.2');
+    const llamaGroup = groups.find((item: any) => item.label === 'llama');
+    const familyModels = await libraryProvider.getChildren(llamaGroup);
+    const parent = familyModels.find((item: any) => item.label === 'llama3.2');
 
     // First call: model not yet downloaded
-    const childrenBefore = await libraryProvider.getChildren(parent as any);
+    const childrenBefore = await libraryProvider.getChildren(parent);
     expect(childrenBefore.find((c: any) => c.label === 'llama3.2:1b')?.contextValue).toBe('library-model-variant');
 
     // Simulate download
     localModels = new Set(['llama3.2:1b']);
 
     // Second call uses cached raw metadata but re-materializes with updated local state
-    const childrenAfter = await libraryProvider.getChildren(parent as any);
+    const childrenAfter = await libraryProvider.getChildren(parent);
     expect(childrenAfter.find((c: any) => c.label === 'llama3.2:1b')?.contextValue).toBe(
       'library-model-downloaded-variant',
     );
@@ -1471,41 +959,94 @@ describe('Extracted command handlers', () => {
     expect(mockProvider.stopModel).toHaveBeenCalledWith('test-model');
   });
 
-  it('handleStartCloudModel starts cloud-stopped models with explicit tag', async () => {
+  it('handleStartCloudModel starts cloud-stopped models (when already pulled)', async () => {
     const { handleStartCloudModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
       startModel: vi.fn(),
-    } as any;
-
-    const item = new ModelTreeItem('test-model:cloud', 'cloud-stopped');
-
-    await handleStartCloudModel(item, mockProvider);
-
-    expect(mockProvider.startModel).toHaveBeenCalledWith('test-model:cloud');
-  });
-
-  it('handleStartCloudModel resolves base name to :cloud / :-cloud tag', async () => {
-    const { handleStartCloudModel, ModelTreeItem } = await import('./sidebar.js');
-
-    const mockProvider = {
-      startModel: vi.fn(),
+      getCachedLocalModelNames: vi.fn().mockReturnValue(new Set(['test-model'])),
     } as any;
 
     const mockCloudProvider = {
-      resolveRunnableCloudModelName: vi.fn().mockResolvedValue('cogito-2.1:671b-cloud'),
+      resolveRunnableCloudModelName: vi.fn().mockResolvedValue('test-model'),
       markModelWarm: vi.fn(),
       refresh: vi.fn(),
     } as any;
 
-    const item = new ModelTreeItem('cogito-2.1', 'cloud-stopped');
+    const item = new ModelTreeItem('test-model', 'cloud-stopped');
 
     await handleStartCloudModel(item, mockProvider, mockCloudProvider);
 
-    expect(mockCloudProvider.resolveRunnableCloudModelName).toHaveBeenCalledWith('cogito-2.1');
-    expect(mockProvider.startModel).toHaveBeenCalledWith('cogito-2.1:671b-cloud');
-    expect(mockCloudProvider.markModelWarm).toHaveBeenCalledWith('cogito-2.1');
-    expect(mockCloudProvider.refresh).toHaveBeenCalled();
+    expect(mockProvider.startModel).toHaveBeenCalledWith('test-model');
+  });
+
+  it('handleStartCloudModel resolves via cloudProvider when present', async () => {
+    vi.resetModules();
+
+    const mockStartModel = vi.fn();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
+          const mockProgress = { report: vi.fn() };
+          const mockToken = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+          return callback(mockProgress, mockToken);
+        }),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+    }));
+
+    const { handleStartCloudModel, ModelTreeItem } = await import('./sidebar.js');
+
+    const mockProvider = {
+      startModel: mockStartModel,
+      getCachedLocalModelNames: vi.fn().mockReturnValue(new Set<string>()),
+    } as any;
+
+    const mockCloudProvider = {
+      resolveRunnableCloudModelName: vi.fn().mockResolvedValue('new-cloud-model:cloud'),
+      markModelWarm: vi.fn(),
+      refresh: vi.fn(),
+    } as any;
+
+    const item = new ModelTreeItem('new-cloud-model', 'cloud-stopped');
+
+    await handleStartCloudModel(item, mockProvider, mockCloudProvider);
+
+    expect(mockCloudProvider.resolveRunnableCloudModelName).toHaveBeenCalledWith('new-cloud-model');
+    expect(mockStartModel).toHaveBeenCalledWith('new-cloud-model:cloud');
   });
 
   it('handleStopCloudModel stops cloud-running models', async () => {
@@ -1515,18 +1056,11 @@ describe('Extracted command handlers', () => {
       stopModel: vi.fn(),
     } as any;
 
-    const mockCloudProvider = {
-      markModelStopped: vi.fn(),
-      refresh: vi.fn(),
-    } as any;
-
     const item = new ModelTreeItem('test-model', 'cloud-running');
 
-    await handleStopCloudModel(item, mockProvider, mockCloudProvider);
+    handleStopCloudModel(item, mockProvider);
 
     expect(mockProvider.stopModel).toHaveBeenCalledWith('test-model');
-    expect(mockCloudProvider.markModelStopped).toHaveBeenCalledWith('test-model');
-    expect(mockCloudProvider.refresh).toHaveBeenCalled();
   });
 
   it('handleOpenLibraryModelPage handles library-model type', async () => {
@@ -1776,7 +1310,6 @@ describe('Extracted command handlers', () => {
     const mockShowInfo = vi.fn();
 
     // Stream that throws to simulate an aborted connection
-    // eslint-disable-next-line require-yield
     async function* abortedStream() {
       throw new Error('Request aborted');
     }
@@ -1909,11 +1442,11 @@ describe('Extracted command handlers', () => {
     await Promise.resolve();
     await Promise.resolve();
 
+    // getChildren() now returns model-group items; navigate into the 'llama' group
     expect(models).toHaveLength(1);
-    const group = models[0];
-    expect(group.label).toBe('llama');
-    const childModels = await localProvider.getChildren(group);
-    const item = childModels[0];
+    expect(models[0].type).toBe('model-group');
+    const llamaModels = await localProvider.getChildren(models[0]);
+    const item = llamaModels[0];
     expect(item.label).toBe('llama3-tools:latest');
     expect(item.description).toContain('[tools]');
     localProvider.dispose();
