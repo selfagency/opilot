@@ -263,14 +263,14 @@ export async function handleChatRequest(
       // Prefer BYOK models (in-process), fall back to our custom provider.
       const byokModels = await vscode.lm.selectChatModels({ vendor: 'ollama' });
       if (byokModels.length) {
-        modelId = byokModels[0].id;
+        modelId = toRuntimeModelId(byokModels[0].id);
       } else {
         const ourModels = await vscode.lm.selectChatModels({ vendor: LANGUAGE_MODEL_VENDOR });
         if (!ourModels.length) {
           stream.markdown('No Ollama models available. Pull a model first using the Ollama sidebar.');
           return;
         }
-        modelId = ourModels[0].id;
+        modelId = toRuntimeModelId(ourModels[0].id);
       }
     }
 

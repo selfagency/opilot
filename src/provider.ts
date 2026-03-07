@@ -132,6 +132,9 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       if (!activeModelNames.has(modelName)) {
         this.modelInfoCache.delete(modelName);
         this.models.delete(modelName);
+        // Prune both the runtime ID and the provider-prefixed ID to prevent stale entries.
+        this.nativeToolCallingByModelId.delete(modelName);
+        this.nativeToolCallingByModelId.delete(this.toProviderModelId(modelName));
       }
     }
   }
@@ -197,15 +200,23 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
   /**
    * VS Code can omit lower-context models from the active chat-mode picker.
-   * Keep runtime behavior unchanged, but advertise a conservative minimum for
-   * non-tool models so they are available under Ask.
+   * Advertise the real context length when known, and only fall back to a
+   * conservative minimum when the context length is unknown or zero so that
+   * non-tool models remain available under Ask without overstating their
+   * capabilities.
    */
   private getAdvertisedContextLength(contextLength: number, supportsTools: boolean): number {
     if (supportsTools) {
       return contextLength;
     }
 
-    return Math.max(contextLength, NON_TOOL_MODEL_MIN_PICKER_CONTEXT_TOKENS);
+    // For non-tool models, only use the picker minimum when the context length
+    // is unknown or not set — never inflate a real known context length.
+    if (contextLength && contextLength > 0) {
+      return contextLength;
+    }
+
+    return NON_TOOL_MODEL_MIN_PICKER_CONTEXT_TOKENS;
   }
 
   /**
@@ -414,7 +425,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     // Build tools array if supported
     let tools: Parameters<typeof this.client.chat>[0]['tools'] | undefined;
     const supportsNativeToolCalling =
-      this.nativeToolCallingByModelId.get(model.id) ?? Boolean(model.capabilities.toolCalling);
+      this.nativeToolCallingByModelId.get(model.id) ?? this.nativeToolCallingByModelId.get(runtimeModelId) ?? false;
     if (options.tools && options.tools.length > 0 && supportsNativeToolCalling) {
       tools = options.tools.map(tool => ({
         type: 'function' as const,
@@ -433,7 +444,8 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     const perRequestClient = await getOllamaClient(this.context);
 
     let shouldThink =
-      (this.thinkingModels.has(model.id) || isThinkingModelId(model.id)) && !this.nonThinkingModels.has(model.id);
+      (this.thinkingModels.has(runtimeModelId) || isThinkingModelId(runtimeModelId)) &&
+      !this.nonThinkingModels.has(runtimeModelId);
 
     try {
       let response: AsyncIterable<ChatResponse>;
@@ -448,8 +460,8 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         });
       } catch (innerError) {
         if (shouldThink && this.isThinkingNotSupportedError(innerError)) {
-          this.thinkingModels.delete(model.id);
-          this.nonThinkingModels.add(model.id);
+          this.thinkingModels.delete(runtimeModelId);
+          this.nonThinkingModels.add(runtimeModelId);
           response = await perRequestClient.chat({
             model: runtimeModelId,
             messages: ollamaMessages,
