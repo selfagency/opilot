@@ -127,6 +127,42 @@
         "category": "Ollama"
       },
       {
+        "command": "ollama-copilot.filterLocalModels",
+        "title": "Filter Local Models",
+        "icon": "$(filter)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.clearLocalFilter",
+        "title": "Clear Local Models Filter",
+        "icon": "$(clear-all)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.filterCloudModels",
+        "title": "Filter Cloud Models",
+        "icon": "$(filter)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.clearCloudFilter",
+        "title": "Clear Cloud Models Filter",
+        "icon": "$(clear-all)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.filterLibraryModels",
+        "title": "Filter Library Models",
+        "icon": "$(filter)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.clearLibraryFilter",
+        "title": "Clear Library Models Filter",
+        "icon": "$(clear-all)",
+        "category": "Ollama"
+      },
+      {
         "command": "ollama-copilot.collapseLocalModels",
         "title": "Collapse All Local Models",
         "icon": "$(collapse-all)",
@@ -267,6 +303,16 @@
           "group": "navigation@0"
         },
         {
+          "command": "ollama-copilot.filterLocalModels",
+          "when": "view == ollama-local-models && !ollama.localFilterActive",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ollama-copilot.clearLocalFilter",
+          "when": "view == ollama-local-models && ollama.localFilterActive",
+          "group": "navigation@1"
+        },
+        {
           "command": "ollama-copilot.refreshLocalModels",
           "when": "view == ollama-local-models",
           "group": "navigation"
@@ -282,6 +328,16 @@
           "group": "navigation@0"
         },
         {
+          "command": "ollama-copilot.filterLibraryModels",
+          "when": "view == ollama-library-models && !ollama.libraryFilterActive",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ollama-copilot.clearLibraryFilter",
+          "when": "view == ollama-library-models && ollama.libraryFilterActive",
+          "group": "navigation@1"
+        },
+        {
           "command": "ollama-copilot.refreshLibrary",
           "when": "view == ollama-library-models",
           "group": "navigation"
@@ -290,6 +346,16 @@
           "command": "ollama-copilot.collapseCloudModels",
           "when": "view == ollama-cloud-models",
           "group": "navigation@0"
+        },
+        {
+          "command": "ollama-copilot.filterCloudModels",
+          "when": "view == ollama-cloud-models && !ollama.cloudFilterActive",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ollama-copilot.clearCloudFilter",
+          "when": "view == ollama-cloud-models && ollama.cloudFilterActive",
+          "group": "navigation@1"
         },
         {
           "command": "ollama-copilot.refreshCloudModels",

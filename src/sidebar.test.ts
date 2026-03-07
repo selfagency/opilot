@@ -1713,4 +1713,134 @@ describe('Extracted command handlers', () => {
     callHandler('ollama-copilot.collapseLibrary');
     expect(executeCommandMock).toHaveBeenCalledWith('workbench.actions.treeView.ollama-library-models.collapseAll');
   });
+
+  it('registerSidebar registers filter and clear-filter commands for all three views', async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => ({
+      TreeItem: class { label: string; constructor(label: string) { this.label = label; } },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      window: {
+        createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
+        withProgress: vi.fn(),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+    }));
+
+    const vscode = await import('vscode');
+    const { registerSidebar } = await import('./sidebar.js');
+
+    const mockContext = {
+      subscriptions: { push: vi.fn() },
+      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
+      globalState: { get: vi.fn(), update: vi.fn() },
+    } as any;
+    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as any;
+
+    registerSidebar(mockContext, mockClient);
+
+    const registeredIds = vi.mocked(vscode.commands.registerCommand).mock.calls.map(([id]) => id);
+    expect(registeredIds).toContain('ollama-copilot.filterLocalModels');
+    expect(registeredIds).toContain('ollama-copilot.clearLocalFilter');
+    expect(registeredIds).toContain('ollama-copilot.filterCloudModels');
+    expect(registeredIds).toContain('ollama-copilot.clearCloudFilter');
+    expect(registeredIds).toContain('ollama-copilot.filterLibraryModels');
+    expect(registeredIds).toContain('ollama-copilot.clearLibraryFilter');
+  });
+});
+
+describe('LocalModelsProvider filter', () => {
+  let LocalModelsProvider: any;
+  let mockClient: any;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        iconPath?: unknown;
+        tooltip?: string;
+        constructor(label: string) { this.label = label; }
+      },
+      ThemeIcon: class { constructor(public id: string) {} },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      window: {
+        registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+      },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+    }));
+
+    const mod = await import('./sidebar.js');
+    LocalModelsProvider = mod.LocalModelsProvider;
+
+    mockClient = {
+      list: vi.fn().mockResolvedValue({
+        models: [
+          { name: 'llama2:latest', size: 1000, digest: 'a1', details: {} },
+          { name: 'llama3:latest', size: 1000, digest: 'a2', details: {} },
+          { name: 'mistral:latest', size: 1000, digest: 'b1', details: {} },
+        ],
+      }),
+      ps: vi.fn().mockResolvedValue({ models: [] }),
+    };
+  });
+
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('returns all family groups when filterText is empty', async () => {
+    const provider = new LocalModelsProvider(mockClient);
+    const children = await provider.getChildren();
+    const labels = children.map((c: any) => c.label);
+    expect(labels).toContain('llama');
+    expect(labels).toContain('mistral');
+  });
+
+  it('filters family groups to only matching families when filterText is set', async () => {
+    const provider = new LocalModelsProvider(mockClient);
+    provider.filterText = 'llama';
+    const children = await provider.getChildren();
+    const labels = children.map((c: any) => c.label);
+    expect(labels).toContain('llama');
+    expect(labels).not.toContain('mistral');
+  });
+
+  it('clears filter when filterText is set to empty string', async () => {
+    const provider = new LocalModelsProvider(mockClient);
+    provider.filterText = 'llama';
+    provider.filterText = '';
+    const children = await provider.getChildren();
+    const labels = children.map((c: any) => c.label);
+    expect(labels).toContain('llama');
+    expect(labels).toContain('mistral');
+  });
 });
