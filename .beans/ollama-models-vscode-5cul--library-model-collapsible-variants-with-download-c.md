@@ -1,11 +1,11 @@
 ---
 # ollama-models-vscode-5cul
 title: Library model collapsible variants with download children
-status: in-progress
+status: completed
 type: feature
-branch: feat/5cul-library-collapsible-variants
+priority: normal
 created_at: 2026-03-06T16:00:08Z
-updated_at: 2026-03-06T16:00:08Z
+updated_at: 2026-03-07T02:17:28Z
 ---
 
 Library items show multiple model variants under them in a collapsible tree. Parent node shows the model name with a link button. Children show each downloadable variant (e.g., llama3.2:1b, llama3.2:3b) with a download button. Downloaded variants show a check icon. Variants are lazily fetched by scraping the model's library page HTML.

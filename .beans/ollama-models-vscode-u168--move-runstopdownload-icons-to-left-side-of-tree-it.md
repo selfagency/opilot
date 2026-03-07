@@ -1,12 +1,11 @@
 ---
 # ollama-models-vscode-u168
 title: Add running/stopped icons to left side of running models
-status: in-progress
+status: completed
 type: fix
 priority: medium
-branch: fix/168-running-stopped-icons
 created_at: 2026-03-05T22:02:56Z
-updated_at: 2026-03-06T14:42:56Z
+updated_at: 2026-03-07T02:17:32Z
 ---
 
 Use circle-play and stop-circle for the icons and stop and play for the clickable actions

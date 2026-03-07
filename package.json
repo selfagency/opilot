@@ -349,6 +349,11 @@
           "group": "inline@1"
         },
         {
+          "command": "ollama-copilot.openLibraryModelPage",
+          "when": "view == ollama-library-models && viewItem == cloud-library-model",
+          "group": "inline@1"
+        },
+        {
           "command": "ollama-copilot.openCloudModel",
           "when": "view == ollama-cloud-models && viewItem == cloud-stopped",
           "group": "inline@1"
@@ -359,6 +364,11 @@
           "group": "inline@2"
         },
         {
+          "command": "ollama-copilot.deleteModel",
+          "when": "view == ollama-cloud-models && viewItem == cloud-stopped",
+          "group": "inline@3"
+        },
+        {
           "command": "ollama-copilot.openCloudModel",
           "when": "view == ollama-cloud-models && viewItem == cloud-running",
           "group": "inline@1"
@@ -367,6 +377,11 @@
           "command": "ollama-copilot.stopCloudModel",
           "when": "view == ollama-cloud-models && viewItem == cloud-running",
           "group": "inline@2"
+        },
+        {
+          "command": "ollama-copilot.deleteModel",
+          "when": "view == ollama-cloud-models && viewItem == cloud-running",
+          "group": "inline@3"
         },
         {
           "command": "ollama-copilot.editModelfile",

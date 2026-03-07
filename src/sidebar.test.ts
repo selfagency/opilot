@@ -42,7 +42,11 @@ describe('LocalModelsProvider', () => {
       },
       window: {
         registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
-        withProgress: vi.fn(async (_options: unknown, callback: () => Promise<void>) => callback()),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
+          const mockProgress = { report: vi.fn() };
+          const mockToken = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+          return callback(mockProgress, mockToken);
+        }),
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
@@ -1004,10 +1008,11 @@ describe('Extracted command handlers', () => {
   });
 
   it('handleOpenCloudModel opens cloud model URL', async () => {
-    const { handleOpenCloudModel } = await import('./sidebar.js');
+    const { handleOpenCloudModel, ModelTreeItem } = await import('./sidebar.js');
 
     // Should not throw
-    handleOpenCloudModel('claude');
+    const item = new ModelTreeItem('claude', 'cloud-stopped');
+    handleOpenCloudModel(item);
 
     expect(handleOpenCloudModel).toBeDefined();
   });
@@ -1053,16 +1058,19 @@ describe('Extracted command handlers', () => {
     expect(mockProvider.stopModel).toHaveBeenCalledWith('test-model');
   });
 
-  it('handleStartCloudModel starts cloud-stopped models', async () => {
+  it('handleStartCloudModel starts cloud-stopped models (when already pulled)', async () => {
     const { handleStartCloudModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
       startModel: vi.fn(),
+      getCachedLocalModelNames: vi.fn().mockReturnValue(new Set(['test-model'])),
     } as any;
+
+    const mockClient = {} as any;
 
     const item = new ModelTreeItem('test-model', 'cloud-stopped');
 
-    handleStartCloudModel(item, mockProvider);
+    await handleStartCloudModel(item, mockProvider, mockClient);
 
     expect(mockProvider.startModel).toHaveBeenCalledWith('test-model');
   });
