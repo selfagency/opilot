@@ -502,7 +502,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       this.logChannel?.debug(`[Ollama] Starting local model: ${modelName}`);
       await window.withProgress({ location: 15, title: `Starting ${modelName}...` }, async () => {
         const isCloudModel = this.isCloudTaggedModel(modelName);
-        const activeClient = (isCloudModel && this.context) ? await getCloudOllamaClient(this.context) : this.client;
+        const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.client;
         if (isCloudModel) {
           // Cloud models should be pulled first (same behavior as `ollama run`).
           this.logChannel?.info(`[Ollama] Pulling cloud model before start: ${modelName}`);
@@ -558,7 +558,9 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       await window.withProgress(
         { location: ProgressLocation.Notification, title: `Stopping ${modelName}…`, cancellable: false },
         async () => {
-          await this.client.generate({ model: modelName, prompt: '', stream: false, keep_alive: 0 });
+          const isCloudModel = this.isCloudTaggedModel(modelName);
+          const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.client;
+          await activeClient.generate({ model: modelName, prompt: '', stream: false, keep_alive: 0 });
           // Poll until the model disappears from the running process list (max 30 s)
           for (let i = 0; i < 30; i++) {
             await new Promise<void>(resolve => setTimeout(resolve, 1000));
