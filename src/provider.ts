@@ -16,7 +16,7 @@ import {
   ProvideLanguageModelChatResponseOptions,
   window,
 } from 'vscode';
-import { getContextLengthOverride, getOllamaClient } from './client';
+import { getCloudOllamaClient, getContextLengthOverride, getOllamaClient } from './client';
 import type { DiagnosticsLogger } from './diagnostics.js';
 
 const MODEL_LIST_REFRESH_MIN_INTERVAL_MS = 5_000;
@@ -441,7 +441,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     // Do NOT call abort() on cancellation — abruptly closing the HTTP connection
     // mid-generation destabilises Ollama. The isCancellationRequested check in the
     // loop below provides safe cooperative cancellation instead.
-    const perRequestClient = await getOllamaClient(this.context);
+    const cloudModelTag = runtimeModelId.split(':')[1] ?? '';
+    const isCloudModel = cloudModelTag === 'cloud' || cloudModelTag.endsWith('-cloud');
+    const perRequestClient = isCloudModel
+      ? await getCloudOllamaClient(this.context)
+      : await getOllamaClient(this.context);
 
     let shouldThink =
       (this.thinkingModels.has(runtimeModelId) || isThinkingModelId(runtimeModelId)) &&

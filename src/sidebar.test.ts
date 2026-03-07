@@ -207,7 +207,7 @@ describe('LocalModelsProvider', () => {
 
   it('invokes onLocalModelsChanged callback when local models are refreshed', async () => {
     const onLocalModelsChanged = vi.fn();
-    const callbackProvider = new LocalModelsProvider(mockClient, undefined, onLocalModelsChanged);
+    const callbackProvider = new LocalModelsProvider(mockClient, undefined, undefined, onLocalModelsChanged);
 
     callbackProvider.refresh();
 
