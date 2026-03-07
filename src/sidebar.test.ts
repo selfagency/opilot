@@ -1946,7 +1946,7 @@ describe('registerSidebar grouped/flat toggle commands', () => {
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
-        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0), update: vi.fn() })),
         onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
       },
     }));

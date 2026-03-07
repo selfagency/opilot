@@ -1621,24 +1621,39 @@ export function registerSidebar(
       void commands.executeCommand('setContext', 'ollama.libraryFilterActive', false);
       libraryProvider.refresh();
     }),
-    commands.registerCommand('ollama-copilot.toggleLocalGrouping', () => {
-      localProvider.grouped = !localProvider.grouped;
-      void context.globalState.update('ollama.localGrouped', localProvider.grouped);
-      void commands.executeCommand('setContext', 'ollama.localGrouped', localProvider.grouped);
-      localProvider.refresh();
-    }),
-    commands.registerCommand('ollama-copilot.toggleCloudGrouping', () => {
-      cloudProvider.grouped = !cloudProvider.grouped;
-      void context.globalState.update('ollama.cloudGrouped', cloudProvider.grouped);
-      void commands.executeCommand('setContext', 'ollama.cloudGrouped', cloudProvider.grouped);
-      cloudProvider.refresh();
-    }),
-    commands.registerCommand('ollama-copilot.toggleLibraryGrouping', () => {
-      libraryProvider.grouped = !libraryProvider.grouped;
-      void context.globalState.update('ollama.libraryGrouped', libraryProvider.grouped);
-      void commands.executeCommand('setContext', 'ollama.libraryGrouped', libraryProvider.grouped);
-      libraryProvider.refresh();
-    }),
+    (() => {
+      const initialLocalGrouped = context.globalState.get<boolean>('ollama.localGrouped', true);
+      localProvider.grouped = initialLocalGrouped;
+      void commands.executeCommand('setContext', 'ollama.localGrouped', initialLocalGrouped);
+      return commands.registerCommand('ollama-copilot.toggleLocalGrouping', () => {
+        localProvider.grouped = !localProvider.grouped;
+        void context.globalState.update('ollama.localGrouped', localProvider.grouped);
+        void commands.executeCommand('setContext', 'ollama.localGrouped', localProvider.grouped);
+        localProvider.refresh();
+      });
+    })(),
+    (() => {
+      const initialCloudGrouped = context.globalState.get<boolean>('ollama.cloudGrouped', true);
+      cloudProvider.grouped = initialCloudGrouped;
+      void commands.executeCommand('setContext', 'ollama.cloudGrouped', initialCloudGrouped);
+      return commands.registerCommand('ollama-copilot.toggleCloudGrouping', () => {
+        cloudProvider.grouped = !cloudProvider.grouped;
+        void context.globalState.update('ollama.cloudGrouped', cloudProvider.grouped);
+        void commands.executeCommand('setContext', 'ollama.cloudGrouped', cloudProvider.grouped);
+        cloudProvider.refresh();
+      });
+    })(),
+    (() => {
+      const initialLibraryGrouped = context.globalState.get<boolean>('ollama.libraryGrouped', true);
+      libraryProvider.grouped = initialLibraryGrouped;
+      void commands.executeCommand('setContext', 'ollama.libraryGrouped', initialLibraryGrouped);
+      return commands.registerCommand('ollama-copilot.toggleLibraryGrouping', () => {
+        libraryProvider.grouped = !libraryProvider.grouped;
+        void context.globalState.update('ollama.libraryGrouped', libraryProvider.grouped);
+        void commands.executeCommand('setContext', 'ollama.libraryGrouped', libraryProvider.grouped);
+        libraryProvider.refresh();
+      });
+    })(),
     commands.registerCommand('ollama-copilot.refreshSidebar', () => handleRefreshLocalModels(localProvider)),
     commands.registerCommand('ollama-copilot.refreshLocalModels', () => handleRefreshLocalModels(localProvider)),
     commands.registerCommand('ollama-copilot.refreshLibrary', () => handleRefreshLibrary(libraryProvider)),

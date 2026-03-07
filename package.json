@@ -164,19 +164,19 @@
       },
       {
         "command": "ollama-copilot.toggleLocalGrouping",
-        "title": "Toggle Grouping",
+        "title": "Toggle Local Models Grouping",
         "icon": "$(list-tree)",
         "category": "Ollama"
       },
       {
         "command": "ollama-copilot.toggleCloudGrouping",
-        "title": "Toggle Grouping",
+        "title": "Toggle Cloud Models Grouping",
         "icon": "$(list-tree)",
         "category": "Ollama"
       },
       {
         "command": "ollama-copilot.toggleLibraryGrouping",
-        "title": "Toggle Grouping",
+        "title": "Toggle Library Models Grouping",
         "icon": "$(list-tree)",
         "category": "Ollama"
       },
