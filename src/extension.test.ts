@@ -1472,14 +1472,22 @@ describe('handleChatRequest model selection', () => {
       constructor(public value: string) {}
     };
     const LMToolCallPart = class {
-      constructor(public callId: string, public name: string, public input: Record<string, unknown>) {}
+      constructor(
+        public callId: string,
+        public name: string,
+        public input: Record<string, unknown>,
+      ) {}
     };
     const LMToolResultPart = class {
-      constructor(public callId: string, public content: unknown) {}
+      constructor(
+        public callId: string,
+        public content: unknown,
+      ) {}
     };
 
     // Round 1: stream yields a tool call; Round 2: stream yields the final text
-    const mockSendRequest = vi.fn()
+    const mockSendRequest = vi
+      .fn()
       .mockResolvedValueOnce({
         stream: (async function* () {
           yield new LMToolCallPart('call-1', 'search', { query: 'vitest' });
@@ -1492,10 +1500,12 @@ describe('handleChatRequest model selection', () => {
       });
 
     const mockInvokeTool = vi.fn().mockResolvedValue({ content: [new LMTextPart('tool-result')] });
-    const mockSelectChatModels = vi.fn().mockResolvedValue([{
-      vendor: 'selfagency-ollama',
-      sendRequest: mockSendRequest,
-    }]);
+    const mockSelectChatModels = vi.fn().mockResolvedValue([
+      {
+        vendor: 'selfagency-ollama',
+        sendRequest: mockSendRequest,
+      },
+    ]);
 
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: LMTextPart,
@@ -1547,13 +1557,21 @@ describe('handleChatRequest model selection', () => {
       constructor(public value: string) {}
     };
     const LMToolCallPart = class {
-      constructor(public callId: string, public name: string, public input: Record<string, unknown>) {}
+      constructor(
+        public callId: string,
+        public name: string,
+        public input: Record<string, unknown>,
+      ) {}
     };
     const LMToolResultPart = class {
-      constructor(public callId: string, public content: unknown) {}
+      constructor(
+        public callId: string,
+        public content: unknown,
+      ) {}
     };
 
-    const mockSendRequest = vi.fn()
+    const mockSendRequest = vi
+      .fn()
       .mockResolvedValueOnce({
         stream: (async function* () {
           yield new LMToolCallPart('call-err', 'broken_tool', {});
@@ -1566,10 +1584,12 @@ describe('handleChatRequest model selection', () => {
       });
 
     const mockInvokeTool = vi.fn().mockRejectedValue(new Error('tool crashed'));
-    const mockSelectChatModels = vi.fn().mockResolvedValue([{
-      vendor: 'selfagency-ollama',
-      sendRequest: mockSendRequest,
-    }]);
+    const mockSelectChatModels = vi.fn().mockResolvedValue([
+      {
+        vendor: 'selfagency-ollama',
+        sendRequest: mockSendRequest,
+      },
+    ]);
 
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: LMTextPart,

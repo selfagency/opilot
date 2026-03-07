@@ -16,4 +16,3 @@ branch: feat/7not-increase-unit-test-coverage-to-85
 - [x] Add `src/provider.test.ts` `setAuthToken` and capability tests
 - [x] Add `src/extension.test.ts` tool loop and logger tests
 - [x] Fix `src/sidebar.test.ts` — remove deleted `setSortMode`/`handleSortLibraryByRecency`/`handleSortLibraryByName` tests; fix grouping navigation for family-tree layout; fix `LibraryModelsProvider` constructor calls; fix `handleStartCloudModel` mocks
-
