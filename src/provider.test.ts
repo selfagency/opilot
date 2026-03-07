@@ -133,7 +133,7 @@ describe('OllamaChatModelProvider caching', () => {
     const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
 
     expect(list).toHaveBeenCalledTimes(2);
-    expect(models.map(m => m.id)).toContain('starcoder2');
+    expect(models.map(m => m.id)).toContain('ollama:starcoder2');
   });
 
   it('reuses cached model details after refresh interval', async () => {
@@ -214,6 +214,7 @@ describe('OllamaChatModelProvider model detection', () => {
     const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
     expect(models[0]?.maxInputTokens).toBe(131072);
     expect(models[0]?.maxOutputTokens).toBe(131072);
+    expect((models[0] as unknown as { category?: { label?: string } })?.category?.label).toBe('Ask');
   });
 
   it('detects tool support from capabilities array', async () => {
@@ -355,7 +356,7 @@ describe('OllamaChatModelProvider error handling', () => {
     expect(models).toHaveLength(2);
     expect(models[0]?.name).toBe('Llama2');
     expect(models[0]?.detail).toBe('🦙 Ollama');
-    expect(models[0]?.capabilities?.toolCalling).toBe(false);
+    expect(models[0]?.capabilities?.toolCalling).toBe(true);
   });
 
   it('prunes cache when models are removed', async () => {
@@ -421,7 +422,7 @@ describe('OllamaChatModelProvider error handling', () => {
     await firstFetch;
     const models = await secondFetch;
 
-    expect(models.map((m: { id: string }) => m.id)).toContain('newmodel');
+    expect(models.map((m: { id: string }) => m.id)).toContain('ollama:newmodel');
   });
 });
 
@@ -541,7 +542,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: true, toolCalling: false },
+      capabilities: { imageInput: true, toolCalling: true },
     };
 
     const message = {
@@ -651,7 +652,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: false },
+      capabilities: { imageInput: false, toolCalling: true },
     };
 
     const message = {
@@ -703,7 +704,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: false },
+      capabilities: { imageInput: false, toolCalling: true },
     };
 
     const message = {
@@ -756,7 +757,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: false },
+      capabilities: { imageInput: false, toolCalling: true },
     };
 
     const message = {
@@ -801,7 +802,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: false },
+      capabilities: { imageInput: false, toolCalling: true },
     };
 
     const message = {
@@ -855,7 +856,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: false },
+      capabilities: { imageInput: false, toolCalling: true },
     };
 
     const message = {
@@ -921,7 +922,7 @@ describe('OllamaChatModelProvider chat response', () => {
       version: '1.0.0',
       maxInputTokens: 100,
       maxOutputTokens: 100,
-      capabilities: { imageInput: false, toolCalling: false },
+      capabilities: { imageInput: false, toolCalling: true },
     };
 
     const message = {

@@ -22,6 +22,16 @@ import type { DiagnosticsLogger } from './diagnostics.js';
 const MODEL_LIST_REFRESH_MIN_INTERVAL_MS = 5_000;
 const MODEL_INFO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const MODEL_SHOW_TIMEOUT_MS = 2_000;
+const NON_TOOL_MODEL_MIN_PICKER_CONTEXT_TOKENS = 131_072;
+const ASK_PICKER_CATEGORY = { label: 'Ask', order: 1 } as const;
+const MODEL_ID_PREFIX = 'ollama:';
+type LanguageModelChatInformationWithPicker = LanguageModelChatInformation & {
+  category?: {
+    label: string;
+    order: number;
+  };
+  isUserSelectable?: boolean;
+};
 
 /**
  * Ollama Chat Model Provider
@@ -37,6 +47,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   private modelsChangeEventEmitter: EventEmitter<void> = new EventEmitter();
   private toolCallIdMap: Map<string, string> = new Map();
   private reverseToolCallIdMap: Map<string, string> = new Map();
+  private nativeToolCallingByModelId: Map<string, boolean> = new Map();
   private thinkingModels = new Set<string>();
   private nonThinkingModels = new Set<string>();
 
@@ -121,6 +132,9 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       if (!activeModelNames.has(modelName)) {
         this.modelInfoCache.delete(modelName);
         this.models.delete(modelName);
+        // Prune both the runtime ID and the provider-prefixed ID to prevent stale entries.
+        this.nativeToolCallingByModelId.delete(modelName);
+        this.nativeToolCallingByModelId.delete(this.toProviderModelId(modelName));
       }
     }
   }
@@ -128,6 +142,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   private clearModelCache(): void {
     this.modelInfoCache.clear();
     this.models.clear();
+    this.nativeToolCallingByModelId.clear();
     this.cachedModelList = [];
     this.lastModelListRefreshMs = 0;
   }
@@ -151,21 +166,95 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    * Build lightweight model information when detailed metadata is unavailable.
    */
   private getBaseChatModelInfo(modelId: string): LanguageModelChatInformation {
+    const providerModelId = this.toProviderModelId(modelId);
     const contextLength = getContextLengthOverride();
-    return {
-      id: modelId,
-      name: formatModelName(modelId),
-      family: '🦙 Ollama',
-      version: '1.0.0',
-      detail: '🦙 Ollama',
-      tooltip: `🦙 Ollama • ${modelId}`,
-      maxInputTokens: contextLength,
-      maxOutputTokens: contextLength,
-      capabilities: {
-        imageInput: false,
-        toolCalling: false,
+    const nativeToolCalling = false;
+    this.nativeToolCallingByModelId.set(modelId, nativeToolCalling);
+    this.nativeToolCallingByModelId.set(providerModelId, nativeToolCalling);
+    return this.withModelPickerMetadata(
+      {
+        id: providerModelId,
+        name: formatModelName(modelId),
+        family: '🦙 Ollama',
+        version: '1.0.0',
+        detail: '🦙 Ollama',
+        tooltip: `🦙 Ollama • ${modelId}`,
+        maxInputTokens: this.getAdvertisedContextLength(contextLength, false),
+        maxOutputTokens: this.getAdvertisedContextLength(contextLength, false),
+        capabilities: {
+          imageInput: false,
+          toolCalling: this.getAdvertisedToolCalling(nativeToolCalling),
+        },
       },
-    };
+      nativeToolCalling,
+    );
+  }
+
+  private toProviderModelId(modelId: string): string {
+    return `${MODEL_ID_PREFIX}${modelId}`;
+  }
+
+  private toRuntimeModelId(modelId: string): string {
+    return modelId.startsWith(MODEL_ID_PREFIX) ? modelId.slice(MODEL_ID_PREFIX.length) : modelId;
+  }
+
+  /**
+   * VS Code can omit lower-context models from the active chat-mode picker.
+   * Advertise the real context length when known, and only fall back to a
+   * conservative minimum when the context length is unknown or zero so that
+   * non-tool models remain available under Ask without overstating their
+   * capabilities.
+   */
+  private getAdvertisedContextLength(contextLength: number, supportsTools: boolean): number {
+    if (supportsTools) {
+      return contextLength;
+    }
+
+    // For non-tool models, only use the picker minimum when the context length
+    // is unknown or not set — never inflate a real known context length.
+    if (contextLength && contextLength > 0) {
+      return contextLength;
+    }
+
+    return NON_TOOL_MODEL_MIN_PICKER_CONTEXT_TOKENS;
+  }
+
+  /**
+   * VS Code's chat model pickers filter out models with `toolCalling: false`,
+   * even when `isUserSelectable: true` and category are correctly set.
+   *
+   * Workaround: Advertise `toolCalling: true` for ALL models to pass picker
+   * filters. At runtime, non-tool models will ignore tool parameters (Ollama
+   * SDK behavior), ensuring correct operation while maintaining picker visibility.
+   *
+   * Native capability is still tracked separately via `nativeToolCallingByModelId`
+   * for internal reference.
+   */
+  private getAdvertisedToolCalling(nativeToolCalling: boolean): boolean {
+    // Always advertise true to pass VS Code's picker filtering
+    return true;
+  }
+
+  /**
+   * Hint VS Code's model picker to group non-tool models under Ask.
+   */
+  private withModelPickerMetadata(
+    info: LanguageModelChatInformation,
+    nativeToolCalling: boolean,
+  ): LanguageModelChatInformation {
+    const selectable = {
+      ...info,
+      isUserSelectable: true,
+    } as LanguageModelChatInformationWithPicker;
+
+    if (nativeToolCalling) {
+      return selectable;
+    }
+
+    return {
+      ...selectable,
+      category: ASK_PICKER_CATEGORY,
+    } as LanguageModelChatInformationWithPicker;
   }
 
   /**
@@ -193,6 +282,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   private async getChatModelInfo(modelId: string): Promise<LanguageModelChatInformation | undefined> {
     try {
       const response = await this.client.show({ model: modelId });
+      const providerModelId = this.toProviderModelId(modelId);
 
       // Prefer the model's actual context window; fall back to the user override, then 0.
       const typedResponse = response as ShowResponse & { modelinfo?: Map<string, unknown> | Record<string, unknown> };
@@ -234,20 +324,28 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         this.thinkingModels.add(modelId);
       }
 
-      return {
-        id: modelId,
-        name: formatModelName(modelId),
-        family: '🦙 Ollama',
-        version: '1.0.0',
-        detail: '🦙 Ollama',
-        tooltip: `🦙 Ollama • ${modelId}`,
-        maxInputTokens: contextLength,
-        maxOutputTokens: contextLength,
-        capabilities: {
-          imageInput: this.isVisionModel(response),
-          toolCalling: this.isToolModel(response),
+      const nativeToolCalling = this.isToolModel(response);
+      this.nativeToolCallingByModelId.set(modelId, nativeToolCalling);
+      this.nativeToolCallingByModelId.set(providerModelId, nativeToolCalling);
+      const advertisedContextLength = this.getAdvertisedContextLength(contextLength, nativeToolCalling);
+
+      return this.withModelPickerMetadata(
+        {
+          id: providerModelId,
+          name: formatModelName(modelId),
+          family: '🦙 Ollama',
+          version: '1.0.0',
+          detail: '🦙 Ollama',
+          tooltip: `🦙 Ollama • ${modelId}`,
+          maxInputTokens: advertisedContextLength,
+          maxOutputTokens: advertisedContextLength,
+          capabilities: {
+            imageInput: this.isVisionModel(response),
+            toolCalling: this.getAdvertisedToolCalling(nativeToolCalling),
+          },
         },
-      };
+        nativeToolCalling,
+      );
     } catch (error) {
       this.outputChannel.exception(`[Ollama] Failed to get model info for ${modelId}`, error);
       return undefined;
@@ -319,13 +417,16 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     token: CancellationToken,
   ): Promise<void> {
     this.clearToolCallIdMappings();
+    const runtimeModelId = this.toRuntimeModelId(model.id);
 
     // Convert VS Code messages to Ollama format
     const ollamaMessages = this.toOllamaMessages(messages);
 
     // Build tools array if supported
     let tools: Parameters<typeof this.client.chat>[0]['tools'] | undefined;
-    if (options.tools && options.tools.length > 0 && model.capabilities.toolCalling) {
+    const supportsNativeToolCalling =
+      this.nativeToolCallingByModelId.get(model.id) ?? this.nativeToolCallingByModelId.get(runtimeModelId) ?? false;
+    if (options.tools && options.tools.length > 0 && supportsNativeToolCalling) {
       tools = options.tools.map(tool => ({
         type: 'function' as const,
         function: {
@@ -343,14 +444,15 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     const perRequestClient = await getOllamaClient(this.context);
 
     let shouldThink =
-      (this.thinkingModels.has(model.id) || isThinkingModelId(model.id)) && !this.nonThinkingModels.has(model.id);
+      (this.thinkingModels.has(runtimeModelId) || isThinkingModelId(runtimeModelId)) &&
+      !this.nonThinkingModels.has(runtimeModelId);
 
     try {
       let response: AsyncIterable<ChatResponse>;
 
       try {
         response = await perRequestClient.chat({
-          model: model.id,
+          model: runtimeModelId,
           messages: ollamaMessages,
           stream: true,
           tools,
@@ -358,10 +460,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         });
       } catch (innerError) {
         if (shouldThink && this.isThinkingNotSupportedError(innerError)) {
-          this.thinkingModels.delete(model.id);
-          this.nonThinkingModels.add(model.id);
+          this.thinkingModels.delete(runtimeModelId);
+          this.nonThinkingModels.add(runtimeModelId);
           response = await perRequestClient.chat({
-            model: model.id,
+            model: runtimeModelId,
             messages: ollamaMessages,
             stream: true,
             tools,
