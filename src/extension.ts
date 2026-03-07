@@ -12,7 +12,12 @@ import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { registerSidebar } from './sidebar.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-ollama';
+const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
 let builtInOllamaConflictPromptInProgress = false;
+
+function toRuntimeModelId(modelId: string): string {
+  return modelId.startsWith(PROVIDER_MODEL_ID_PREFIX) ? modelId.slice(PROVIDER_MODEL_ID_PREFIX.length) : modelId;
+}
 
 function isSelectedAction(selection: unknown, actionLabel: string): boolean {
   if (typeof selection === 'string') {
@@ -253,7 +258,7 @@ export async function handleChatRequest(
     // Direct Ollama path: completely IPC-free, per-token streaming for the @ollama participant.
     let modelId: string;
     if (request.model.vendor === 'ollama' || request.model.vendor === LANGUAGE_MODEL_VENDOR) {
-      modelId = request.model.id;
+      modelId = toRuntimeModelId(request.model.id);
     } else {
       // Prefer BYOK models (in-process), fall back to our custom provider.
       const byokModels = await vscode.lm.selectChatModels({ vendor: 'ollama' });

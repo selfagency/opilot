@@ -455,12 +455,7 @@
       {
         "vendor": "selfagency-ollama",
         "displayName": "🦙 Ollama",
-        "configuration": {
-          "managementCommand": "ollama-copilot.manageAuthToken"
-        },
-        "canCreateWith": {
-          "toolCalling": false
-        }
+        "managementCommand": "ollama-copilot.manageAuthToken"
       }
     ],
     "chatParticipants": [
