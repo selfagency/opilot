@@ -469,12 +469,13 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           tools,
           ...(shouldThink ? { think: true } : {}),
         });
-        this.outputChannel.debug?.(`[Ollama] Chat response stream started`);
+        this.outputChannel.debug?.(`[Ollama] Chat response stream started for ${runtimeModelId}`);
       } catch (innerError) {
-        this.outputChannel.exception('[Ollama] Chat request failed', innerError);
+        this.outputChannel.exception(`[Ollama] Chat request failed for model ${runtimeModelId}`, innerError);
         if (shouldThink && this.isThinkingNotSupportedError(innerError)) {
           this.thinkingModels.delete(runtimeModelId);
           this.nonThinkingModels.add(runtimeModelId);
+          this.outputChannel.debug?.(`[Ollama] Retrying without thinking support for ${runtimeModelId}`);
           response = await perRequestClient.chat({
             model: runtimeModelId,
             messages: ollamaMessages,
