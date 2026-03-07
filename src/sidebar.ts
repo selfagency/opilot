@@ -671,9 +671,22 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         throw new Error('No model names parsed from library page');
       }
 
-      // Combine regular library models and unpulled cloud models
-      const combinedNames = [...filteredNames, ...unpulledCloudModels];
-      const limitedNames = combinedNames.slice(0, 200);
+      // Combine regular library models and unpulled cloud models, deduplicating while preserving order
+      const seen = new Set<string>();
+      const dedupedNames: string[] = [];
+      for (const name of filteredNames) {
+        if (!seen.has(name)) {
+          seen.add(name);
+          dedupedNames.push(name);
+        }
+      }
+      for (const name of unpulledCloudModels) {
+        if (!seen.has(name)) {
+          seen.add(name);
+          dedupedNames.push(name);
+        }
+      }
+      const limitedNames = dedupedNames.slice(0, 200);
       this.logChannel?.info(
         `[Ollama] Library loaded with ${limitedNames.length} models (${unpulledCloudModels.length} unpulled cloud models)`,
       );
@@ -1096,7 +1109,7 @@ export async function handleManageCloudApiKey(
  */
 export function handleOpenCloudModel(item: ModelTreeItem): void {
   if (item && (item.type === 'cloud-running' || item.type === 'cloud-stopped')) {
-    void env.openExternal(Uri.parse(`https://ollama.com/library/${encodeURIComponent(item.label)}`));
+    void env.openExternal(Uri.parse(getLibraryModelUrl(item.label)));
   }
 }
 
@@ -1219,7 +1232,7 @@ export async function handlePullModelFromLibrary(
  * Command handler: open library model page
  */
 export function handleOpenLibraryModelPage(item: ModelTreeItem): void {
-  if (item && item.type === 'library-model') {
+  if (item && (item.type === 'library-model' || item.type === 'cloud-library-model')) {
     void env.openExternal(Uri.parse(getLibraryModelUrl(item.label)));
   }
 }

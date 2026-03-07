@@ -1075,6 +1075,79 @@ describe('Extracted command handlers', () => {
     expect(mockProvider.startModel).toHaveBeenCalledWith('test-model');
   });
 
+  it('handleStartCloudModel pulls model first when not present locally', async () => {
+    vi.resetModules();
+
+    async function* makePullStream() {
+      yield { status: 'pulling manifest', digest: '', total: 0, completed: 0 };
+      yield { status: 'downloading', digest: 'sha256:abc', total: 1000, completed: 1000 };
+    }
+
+    const mockPull = vi.fn().mockReturnValue(makePullStream());
+    const mockStartModel = vi.fn();
+    const mockRefresh = vi.fn();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
+          const mockProgress = { report: vi.fn() };
+          const mockToken = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+          return callback(mockProgress, mockToken);
+        }),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+    }));
+
+    const { handleStartCloudModel, ModelTreeItem } = await import('./sidebar.js');
+
+    const mockProvider = {
+      startModel: mockStartModel,
+      getCachedLocalModelNames: vi.fn().mockReturnValue(new Set<string>()),
+      refresh: mockRefresh,
+    } as any;
+
+    const mockClient = { pull: mockPull } as any;
+
+    const item = new ModelTreeItem('new-cloud-model', 'cloud-stopped');
+
+    await handleStartCloudModel(item, mockProvider, mockClient);
+
+    expect(mockPull).toHaveBeenCalledWith({ model: 'new-cloud-model', stream: true });
+    expect(mockStartModel).toHaveBeenCalledWith('new-cloud-model');
+  });
+
   it('handleStopCloudModel stops cloud-running models', async () => {
     const { handleStopCloudModel, ModelTreeItem } = await import('./sidebar.js');
 
