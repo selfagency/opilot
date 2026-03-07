@@ -163,6 +163,24 @@
         "category": "Ollama"
       },
       {
+        "command": "ollama-copilot.toggleLocalGrouping",
+        "title": "Toggle Local Models Grouping",
+        "icon": "$(list-tree)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.toggleCloudGrouping",
+        "title": "Toggle Cloud Models Grouping",
+        "icon": "$(list-tree)",
+        "category": "Ollama"
+      },
+      {
+        "command": "ollama-copilot.toggleLibraryGrouping",
+        "title": "Toggle Library Models Grouping",
+        "icon": "$(list-tree)",
+        "category": "Ollama"
+      },
+      {
         "command": "ollama-copilot.collapseLocalModels",
         "title": "Collapse All Local Models",
         "icon": "$(collapse-all)",
@@ -313,6 +331,11 @@
           "group": "navigation@1"
         },
         {
+          "command": "ollama-copilot.toggleLocalGrouping",
+          "when": "view == ollama-local-models",
+          "group": "navigation@2"
+        },
+        {
           "command": "ollama-copilot.refreshLocalModels",
           "when": "view == ollama-local-models",
           "group": "navigation"
@@ -338,6 +361,11 @@
           "group": "navigation@1"
         },
         {
+          "command": "ollama-copilot.toggleLibraryGrouping",
+          "when": "view == ollama-library-models",
+          "group": "navigation@2"
+        },
+        {
           "command": "ollama-copilot.refreshLibrary",
           "when": "view == ollama-library-models",
           "group": "navigation"
@@ -356,6 +384,11 @@
           "command": "ollama-copilot.clearCloudFilter",
           "when": "view == ollama-cloud-models && ollama.cloudFilterActive",
           "group": "navigation@1"
+        },
+        {
+          "command": "ollama-copilot.toggleCloudGrouping",
+          "when": "view == ollama-cloud-models",
+          "group": "navigation@2"
         },
         {
           "command": "ollama-copilot.refreshCloudModels",
