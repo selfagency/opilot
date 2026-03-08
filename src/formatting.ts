@@ -18,6 +18,11 @@ export interface XmlStreamFilter {
  * Create a streaming XML filter that removes context tags as they are parsed.
  * Uses SAX parsing to handle incomplete tags across chunk boundaries.
  * Only complete non-context tags are passed through to the output.
+ *
+ * Performance: `buffer` is cleared after every `write()` call so peak memory
+ * stays proportional to the largest single output chunk, not the total response
+ * length. The SAX parser's own internal state (partial-tag lookahead) is
+ * separate from `buffer` and is unaffected by the clear.
  */
 export function createXmlStreamFilter(): XmlStreamFilter {
   const contextTagNames = new Set([
@@ -39,7 +44,6 @@ export function createXmlStreamFilter(): XmlStreamFilter {
   const parser = new Saxophone();
   let skipDepth = 0;
   let buffer = '';
-  let flushedLength = 0; // Track how many bytes have been returned by write()
 
   parser.on('tagopen', (tag: SaxophoneTag) => {
     if (contextTagNames.has(tag.name)) {
@@ -82,16 +86,18 @@ export function createXmlStreamFilter(): XmlStreamFilter {
 
   return {
     write(chunk: string): string {
-      const prevLength = buffer.length;
+      // SAX events fire synchronously into `buffer` during parser.write().
+      // Capturing and clearing `buffer` immediately releases the allocated
+      // string instead of accumulating the entire response for the session lifetime.
       parser.write(chunk);
-      const delta = buffer.substring(prevLength);
-      flushedLength = buffer.length; // Track that we've returned content up to this point
+      const delta = buffer;
+      buffer = '';
       return delta;
     },
     end(): string {
+      // SAX flushes any internally-buffered trailing plain text on end().
       parser.end();
-      // Only return content that hasn't been flushed yet
-      return buffer.substring(flushedLength);
+      return buffer;
     },
   };
 }
