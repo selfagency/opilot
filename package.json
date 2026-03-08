@@ -1,7 +1,7 @@
 {
   "name": "opilot",
   "displayName": "Opilot",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "description": "Run Ollama models with full tool and vision support in GitHub Copilot Chat. Manage local and remote Ollama instances directly from VS Code.",
   "categories": [
     "AI",
