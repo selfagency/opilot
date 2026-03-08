@@ -18,7 +18,7 @@
 
 ## ✨ Features
 
-- 🧠 **All Models** - Use any model from the [Ollama Library](https://ollama.ai/library), including Cloud models (requires API key), within the Copilot chat interface
+- 🧠 **All Models** - Use any model from the [Ollama Library](https://ollama.ai/library), including Cloud models (after `ollama login`), within the Copilot chat interface
 - 🛠️ **Model Management** - Pull, run, inspect, stop, and delete models from a custom Ollama sidebar
 - 💬 **Chat Participant** - Invoke `@ollama` directly in Copilot Chat for a dedicated, history-aware conversation with your local model
 - 📝 **Modelfile Management** - Create, edit, and build custom Ollama modelfiles with syntax highlighting, hover docs, and autocomplete
@@ -37,9 +37,10 @@
 ## 🚀 Installation
 
 1. **Install Ollama** - Download and install from [ollama.ai](https://ollama.ai/download)
-2. **Start Ollama** - Run `ollama serve` (or use the system app)
-3. **Install Extension** - Install from VS Code Marketplace (or install the `.vsix` file)
-4. **Pull a Model** - Use the sidebar to pull a model, or run `ollama pull llama2` from terminal
+2. **Start Ollama** - Start the Ollama app or run `ollama serve` from the terminal
+3. **Login to Ollama Cloud** - Login through the app or run `ollama login` from the terminal (required for cloud models)
+4. **Install Extension** - Install from VS Code Marketplace (or install the `.vsix` file)
+5. **Pull a Model** - Use the sidebar to pull a model, or run `ollama pull llama2` from terminal
 
 The extension will auto-detect your local Ollama instance at `http://localhost:11434` by default.
 

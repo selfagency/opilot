@@ -172,6 +172,15 @@ function makeStatusItem(label: string): ModelTreeItem {
   return new ModelTreeItem(label, 'status');
 }
 
+function makeStatusActionItem(label: string, commandId: string, title?: string): ModelTreeItem {
+  const item = new ModelTreeItem(label, 'status');
+  item.command = {
+    command: commandId,
+    title: title ?? label,
+  };
+  return item;
+}
+
 type RunningProcessInfo = {
   id?: string;
   durationMs?: number;
@@ -1062,7 +1071,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
 }
 
 /**
- * Cloud models view provider (requires dedicated Ollama Cloud API key)
+ * Cloud models view provider (login-first via `ollama login`)
  */
 export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Disposable {
   private treeChangeEmitter = new EventEmitter<ModelTreeItem | null>();
@@ -1271,11 +1280,6 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   }
 
   private async getCloudModels(): Promise<ModelTreeItem[]> {
-    const cloudApiKey = await this.context.secrets.get('ollama-cloud-api-key');
-    if (!cloudApiKey) {
-      return [makeStatusItem('Add Ollama Cloud API key to view cloud models')];
-    }
-
     const cacheTtlMs = 5 * 60 * 1000;
     if (this.cache.length > 0 && Date.now() - this.cacheTimeMs < cacheTtlMs) {
       return this.cache;
@@ -1285,7 +1289,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       return this.loadPromise;
     }
 
-    this.loadPromise = this.fetchCloudModels(cloudApiKey, 12000)
+    this.loadPromise = this.fetchCloudModels(12000)
       .then(items => {
         this.cache = items;
         this.cacheTimeMs = Date.now();
@@ -1294,7 +1298,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       })
       .catch(error => {
         this.logChannel?.exception('[Ollama] Cloud models fetch failed', error);
-        return [makeStatusItem('Failed to load cloud models')];
+        return [makeStatusActionItem('Login to Ollama Cloud', 'ollama-copilot.loginCloud')];
       })
       .finally(() => {
         this.loadPromise = null;
@@ -1303,45 +1307,31 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     return this.loadPromise;
   }
 
-  private async fetchCloudModels(apiKey: string, timeoutMs: number): Promise<ModelTreeItem[]> {
+  private async fetchCloudModels(timeoutMs: number): Promise<ModelTreeItem[]> {
     this.logChannel?.debug(`[Ollama] Fetching cloud models (timeout=${timeoutMs}ms)`);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      // Fetch running status and cloud catalog concurrently to minimize latency
-      const [statusResponse, libraryResponse] = await Promise.all([
-        fetch('https://ollama.com/api/tags', {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            Accept: 'application/json',
-          },
-          signal: controller.signal,
-        }),
+      const cloudClient = await getCloudOllamaClient(this.context);
+
+      // Fetch model status and cloud catalog concurrently to minimize latency.
+      const [listResponse, psResponse, libraryResponse] = await Promise.all([
+        cloudClient.list(),
+        cloudClient.ps(),
         fetch('https://ollama.com/search?c=cloud', {
           method: 'GET',
           signal: controller.signal,
         }),
       ]);
 
-      if (!statusResponse.ok) {
-        throw new Error(`HTTP ${statusResponse.status} from cloud models endpoint`);
-      }
-
-      if (!libraryResponse.ok) {
-        throw new Error(`HTTP ${libraryResponse.status} from library`);
-      }
-
-      const [statusJson, html] = await Promise.all([
-        statusResponse.json() as Promise<{ models?: Array<{ name: string; size?: number; expires_at?: string }> }>,
-        libraryResponse.text(),
-      ]);
-
-      // Build map of running models (API returns base names)
+      // Build map of running models
       const runningModels = new Map<string, { durationMs?: number; size?: number }>();
-      for (const model of statusJson.models ?? []) {
+      for (const model of psResponse.models ?? []) {
+        if (!this.isCloudTaggedModel(model.name)) {
+          continue;
+        }
         const baseName = model.name.split(':')[0];
         const durationMs = model.expires_at
           ? Math.max(0, new Date(model.expires_at).getTime() - Date.now())
@@ -1349,31 +1339,37 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         runningModels.set(baseName, { durationMs, size: model.size });
       }
 
-      // Parse cloud model families from catalog links.
-      const cloudMatches = [...html.matchAll(/href="\/library\/([^"?#:]+)"/gi)];
-
+      // Source cloud model names from authenticated local Ollama list() output.
       const cloudModelNames = [
         ...new Set(
-          cloudMatches
-            .map(match => (typeof match[1] === 'string' ? decodeURIComponent(match[1]).trim() : ''))
-            .filter(Boolean),
+          (listResponse.models ?? [])
+            .map(model => model.name)
+            .filter(name => this.isCloudTaggedModel(name))
+            .sort((a, b) => a.localeCompare(b)),
         ),
       ];
+
+      if (cloudModelNames.length === 0) {
+        return [makeStatusActionItem('Login to Ollama Cloud', 'ollama-copilot.loginCloud')];
+      }
 
       // Build a map of capabilities per model from the catalog HTML.
       // Each model card contains capability labels like "Tools", "Vision", etc.
       const cloudCapabilities = new Map<string, Set<string>>();
-      const capBlockRe = /href="\/library\/([^"?#:]+)"[\s\S]*?(?=href="\/library\/|$)/gi;
-      for (const block of html.matchAll(capBlockRe)) {
-        const name = typeof block[1] === 'string' ? decodeURIComponent(block[1]).trim() : '';
-        if (!name) continue;
-        const caps = new Set<string>();
-        const blockText = block[0];
-        if (/\bTools\b/i.test(blockText)) caps.add('tools');
-        if (/\bVision\b/i.test(blockText)) caps.add('vision');
-        if (/\bThinking\b/i.test(blockText)) caps.add('thinking');
-        if (/\bEmbedding\b/i.test(blockText)) caps.add('embedding');
-        cloudCapabilities.set(name, caps);
+      if (libraryResponse.ok) {
+        const html = await libraryResponse.text();
+        const capBlockRe = /href="\/library\/([^"?#:]+)"[\s\S]*?(?=href="\/library\/|$)/gi;
+        for (const block of html.matchAll(capBlockRe)) {
+          const name = typeof block[1] === 'string' ? decodeURIComponent(block[1]).trim() : '';
+          if (!name) continue;
+          const caps = new Set<string>();
+          const blockText = block[0];
+          if (/\bTools\b/i.test(blockText)) caps.add('tools');
+          if (/\bVision\b/i.test(blockText)) caps.add('vision');
+          if (/\bThinking\b/i.test(blockText)) caps.add('thinking');
+          if (/\bEmbedding\b/i.test(blockText)) caps.add('embedding');
+          cloudCapabilities.set(name, caps);
+        }
       }
 
       const items = cloudModelNames
@@ -1390,7 +1386,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
             runningInfo?.durationMs,
           );
           // Add capability emoji badges
-          const caps = cloudCapabilities.get(fullName);
+          const caps = cloudCapabilities.get(baseName);
           const isThinking = caps?.has('thinking') || isThinkingModelId(fullName);
           const hasTools = caps?.has('tools') ?? false;
           const hasVision = caps?.has('vision') ?? false;
@@ -1452,6 +1448,11 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     }
   }
 
+  private isCloudTaggedModel(modelName: string): boolean {
+    const tag = modelName.split(':')[1] ?? '';
+    return tag === 'cloud' || tag.endsWith('-cloud');
+  }
+
   private startAutoRefresh(): void {
     const cloudRefreshSecs = workspace.getConfiguration('ollama').get<number>('libraryRefreshInterval') || 21600;
     if (cloudRefreshSecs > 0) {
@@ -1498,30 +1499,25 @@ export function handleRefreshCloudModels(cloudProvider: CloudModelsProvider): vo
 }
 
 /**
- * Command handler: manage cloud API key
+ * Back-compat command handler: routes legacy API-key action to login flow.
  */
 export async function handleManageCloudApiKey(
-  context: ExtensionContext,
-  cloudProvider: CloudModelsProvider,
-  libraryProvider: LibraryModelsProvider,
-  logChannel?: DiagnosticsLogger,
+  _context: ExtensionContext,
+  _cloudProvider: CloudModelsProvider,
+  _libraryProvider: LibraryModelsProvider,
+  _logChannel?: DiagnosticsLogger,
 ): Promise<void> {
-  const existing = await context.secrets.get('ollama-cloud-api-key');
-  const entered = await window.showInputBox({
-    prompt: existing ? 'Update Ollama Cloud API key' : 'Enter Ollama Cloud API key',
-    password: true,
-    ignoreFocusOut: true,
-  });
+  // Back-compat shim: old command now routes to login flow.
+  handleLoginToCloud();
+}
 
-  if (!entered) {
-    return;
-  }
-
-  await context.secrets.store('ollama-cloud-api-key', entered.trim());
-  logChannel?.info('[Ollama] Cloud API key updated');
-  cloudProvider.refresh();
-  libraryProvider.refresh();
-  window.showInformationMessage('Ollama Cloud API key saved');
+/**
+ * Command handler: login to Ollama Cloud via terminal.
+ */
+export function handleLoginToCloud(): void {
+  const terminal = window.createTerminal({ name: 'Ollama Cloud Login' });
+  terminal.show(true);
+  terminal.sendText('ollama login', true);
 }
 
 /**
@@ -1837,6 +1833,7 @@ export function registerSidebar(
     commands.registerCommand('ollama-copilot.manageCloudApiKey', async () =>
       handleManageCloudApiKey(context, cloudProvider, libraryProvider, logChannel),
     ),
+    commands.registerCommand('ollama-copilot.loginCloud', () => handleLoginToCloud()),
     commands.registerCommand('ollama-copilot.openCloudModel', (item: ModelTreeItem) => handleOpenCloudModel(item)),
     commands.registerCommand('ollama-copilot.deleteModel', (item: ModelTreeItem) =>
       handleDeleteModel(item, localProvider),

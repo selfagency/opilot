@@ -253,9 +253,9 @@
         "category": "Ollama"
       },
       {
-        "command": "ollama-copilot.manageCloudApiKey",
-        "title": "Manage Ollama Cloud API Key",
-        "icon": "$(key)",
+        "command": "ollama-copilot.loginCloud",
+        "title": "Login to Ollama Cloud",
+        "icon": "$(account)",
         "category": "Ollama"
       },
       {
@@ -460,7 +460,7 @@
           "group": "navigation@3"
         },
         {
-          "command": "ollama-copilot.manageCloudApiKey",
+          "command": "ollama-copilot.loginCloud",
           "when": "view == ollama-cloud-models",
           "group": "navigation@0"
         },

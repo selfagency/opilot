@@ -206,26 +206,87 @@ describe('LocalModelsProvider', () => {
   });
 
   it('does not auto-open cloud models when clicked', async () => {
+    vi.resetModules();
+
+    vi.doMock('./client.js', () => ({
+      getCloudOllamaClient: vi.fn().mockResolvedValue({
+        list: vi.fn().mockResolvedValue({ models: [{ name: 'llama3:cloud', size: 1024 }] }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+      }),
+      fetchModelCapabilities: vi.fn().mockResolvedValue({
+        toolCalling: false,
+        imageInput: false,
+        maxInputTokens: 2048,
+        maxOutputTokens: 2048,
+      }),
+    }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
+          return callback({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+        }),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      env: {
+        openExternal: vi.fn(),
+      },
+      Uri: {
+        parse: vi.fn((value: string) => ({ value })),
+      },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn((key: string) => {
+            if (key === 'libraryRefreshInterval') return 0;
+            return undefined;
+          }),
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      Disposable: class {},
+    }));
+
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({
-          models: [{ name: 'cloud/llama3', size: 1024, expires_at: '2099-03-05T00:00:00Z' }],
-        }),
+        text: async () => '<a href="/library/llama3">llama3</a>',
       }),
     );
 
+    const { CloudModelsProvider } = await import('./sidebar.js');
     const cloudProvider = new CloudModelsProvider(
-      {
-        secrets: {
-          get: vi.fn().mockResolvedValue('test-api-key'),
-        },
-      },
+      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as any,
       undefined,
     );
-
+    cloudProvider.grouped = false;
     const models = await cloudProvider.getChildren();
+    expect(models[0].type).toBe('cloud-stopped');
     expect(models[0].command).toBeUndefined();
     cloudProvider.dispose();
   });
@@ -288,20 +349,91 @@ describe('LocalModelsProvider', () => {
     libraryProvider.dispose();
   });
 
-  it('shows status item when cloud API key is missing', async () => {
-    const cloudProvider = new CloudModelsProvider(
-      {
-        secrets: {
-          get: vi.fn().mockResolvedValue(undefined),
-        },
+  it('shows login status item when no cloud models are available', async () => {
+    vi.resetModules();
+
+    vi.doMock('./client.js', () => ({
+      getCloudOllamaClient: vi.fn().mockResolvedValue({
+        list: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+      }),
+      fetchModelCapabilities: vi.fn().mockResolvedValue({
+        toolCalling: false,
+        imageInput: false,
+        maxInputTokens: 2048,
+        maxOutputTokens: 2048,
+      }),
+    }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
       },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
+          return callback({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+        }),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      env: {
+        openExternal: vi.fn(),
+      },
+      Uri: {
+        parse: vi.fn((value: string) => ({ value })),
+      },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn((key: string) => {
+            if (key === 'libraryRefreshInterval') return 0;
+            return undefined;
+          }),
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      Disposable: class {},
+    }));
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => '<html></html>',
+      }),
+    );
+
+    const { CloudModelsProvider } = await import('./sidebar.js');
+    const cloudProvider = new CloudModelsProvider(
+      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as any,
       undefined,
     );
 
     const models = await cloudProvider.getChildren();
     expect(models).toHaveLength(1);
-    expect(models[0].label).toBe('Add Ollama Cloud API key to view cloud models');
+    expect(models[0].label).toBe('Login to Ollama Cloud');
     expect(models[0].contextValue).toBe('status');
+    expect(models[0].command).toBeDefined();
     cloudProvider.dispose();
   });
 
@@ -1278,6 +1410,12 @@ describe('Extracted command handlers', () => {
     const { handleManageCloudApiKey } = await import('./sidebar.js');
 
     expect(typeof handleManageCloudApiKey).toBe('function');
+  });
+
+  it('handleLoginToCloud function is callable', async () => {
+    const { handleLoginToCloud } = await import('./sidebar.js');
+
+    expect(typeof handleLoginToCloud).toBe('function');
   });
 
   it('handlePullModel reports streaming progress via withProgress', async () => {

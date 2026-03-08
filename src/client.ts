@@ -23,28 +23,13 @@ export async function getOllamaClient(context: ExtensionContext): Promise<Ollama
 }
 
 /**
- * Get an Ollama client configured with the cloud API key as the Bearer token.
- * Required for proxying requests to Ollama's cloud backend through the local server.
+ * Get an Ollama client for cloud model requests.
+ *
+ * Cloud usage is login-first (`ollama login`) and routed through the local
+ * Ollama server session; no dedicated cloud API key is required.
  */
 export async function getCloudOllamaClient(context: ExtensionContext): Promise<Ollama> {
-  const config = workspace.getConfiguration('ollama');
-  const host = config.get<string>('host') || 'http://localhost:11434';
-  const cloudApiKey = await context.secrets.get('ollama-cloud-api-key');
-
-  if (!cloudApiKey) {
-    throw new Error(
-      'Ollama Cloud API key not configured. Use the "Ollama: Manage Cloud API Key" command to set it up.',
-    );
-  }
-
-  const clientConfig: { host: string; headers: Record<string, string> } = {
-    host,
-    headers: {
-      Authorization: `Bearer ${cloudApiKey}`,
-    },
-  };
-
-  return new Ollama(clientConfig);
+  return getOllamaClient(context);
 }
 
 /**
