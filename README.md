@@ -1,14 +1,16 @@
 # Opilot — Ollama for GitHub Copilot VS Code Extension
 
-[![Tests](https://github.com/selfagency/opilot/actions/workflows/ci.yml/badge.svg)](https://github.com/selfagency/opilot/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/selfagency/opilot/graph/badge.svg?token=W9kOrFPSQ1)](https://codecov.io/gh/selfagency/opilot)
+[![Tests](https://github.com/selfagency/opilot/actions/workflows/ci.yml/badge.svg)](https://github.com/selfagency/opilot/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/selfagency/opilot/graph/badge.svg?token=W9kOrFPSQ1)](https://codecov.io/gh/selfagency/opilot) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <p align="center">
   <img src="logo.png" alt="Opilot" width="128" height="128">
 </p>
 
 <p align="center">
-  <strong>Run Ollama models locally and in the cloud within GitHub Copilot Chat</strong>
+  <strong>Run Ollama models with full tool and vision support inside GitHub Copilot Chat</strong>
 </p>
+
+**Opilot** integrates the full Ollama ecosystem — local models, cloud models, and the Ollama model library — directly into VS Code's Copilot Chat interface. Your conversations never leave your machine when using local models, and you can switch between models without leaving the editor.
 
 <p align="center">
   <a href="https://ollama.ai">🌐 Ollama</a> •
@@ -18,32 +20,33 @@
 
 ## ✨ Features
 
-- 🦙 **All Models** - Use any model from the [Ollama Library](https://ollama.ai/library), including Cloud models (after `ollama login`), within the Copilot chat interface
-- 🛠️ **Model Management** - Pull, run, inspect, stop, and delete models from a custom Ollama sidebar
-- 💬 **Chat Participant** - Invoke `@ollama` directly in Copilot Chat for a dedicated, history-aware conversation with your local model
-- 📝 **Modelfile Management** - Create, edit, and build custom Ollama modelfiles with syntax highlighting, hover docs, and autocomplete
-- 🤖 **Code Completions** - Use local models to provide inline code completions
-- 🔧 **Tool Calling** - Tool support for agentic workflows with compatible models (access IDE functions, MCP servers, custom skills, etc.)
-- 🖼️ **Vision Support** - Image input for models with vision capabilities
-- 💭 **Thinking Models** - Extended reasoning display with collapsible "Thinking" and "Response" sections for models that support it
-- 🏠 **Local Execution** - Local models run on your machine with full privacy—no data leaves your computer
-- ⚡ **Streaming** - Real-time response streaming for faster interactions
+- 🦙 **All Ollama Models** — Use any model from the [Ollama Library](https://ollama.ai/library), including Cloud models (after `ollama login`), as first-class Copilot chat models and as the `@ollama` participant
+- 🛠️ **Model Management Sidebar** — Pull, run, inspect, stop, and delete models from a dedicated Ollama activity bar panel with live status badges
+- 💬 **Chat Participant** — Invoke `@ollama` in Copilot Chat for a dedicated, history-aware conversation with your chosen local model
+- 📝 **Modelfile Manager** — Create, edit, and build custom Ollama modelfiles with syntax highlighting, hover documentation, and autocomplete
+- ⌨️ **Inline Code Completions** — Get fill-in-the-middle code suggestions powered by a local Ollama model as you type
+- 🔧 **Tool Calling** — Full tool/function-calling support for agentic workflows with compatible models (MCP servers, VS Code commands, custom skills)
+- 🖼️ **Vision Support** — Image input for models with vision capabilities; non-vision models automatically have images stripped to avoid prompt overflow
+- 💭 **Thinking Models** — Extended reasoning with collapsible "Thinking" and "Response" sections for models that expose chain-of-thought (e.g., DeepSeek-R1, Qwen QwQ, Kimi)
+- 🏠 **Local Execution & Privacy** — Local models run entirely on your machine; no data is sent to any external service
+- ⚡ **Streaming** — Real-time token streaming for low-latency responses in both the chat participant and provider paths
+- 🔒 **Secure Token Storage** — Authentication tokens for remote Ollama instances are stored in VS Code's encrypted secrets API
 
 ## 🔧 Requirements
 
 - **VS Code** 1.109.0 or higher
-- **GitHub Copilot Chat** extension installed
-- **Ollama** installed and running locally ([Download](https://ollama.ai/download)) OR access to a remote Ollama instance
+- **GitHub Copilot Chat** extension installed and active
+- **Ollama** installed locally ([Download](https://ollama.ai/download)) **or** a remote Ollama instance you control
 
-## 🚀 Installation
+## 🚀 Quick Start
 
-1. **Install Ollama** - Download and install from [ollama.ai](https://ollama.ai/download)
-2. **Start Ollama** - Start the Ollama app or run `ollama serve` from the terminal
-3. **Login to Ollama Cloud** - Login through the app or run `ollama login` from the terminal (required for cloud models)
-4. **Install Extension** - Install from VS Code Marketplace (or install the `.vsix` file)
-5. **Pull a Model** - Use the sidebar to pull a model, or run `ollama pull llama2` from terminal
+1. [Install Ollama](https://ollama.ai/download) and start it (`ollama serve` or open the app)
+2. Install **Opilot** from the VS Code Marketplace (or install the `.vsix` file)
+3. The Ollama icon appears in the activity bar — click it to open the sidebar
+4. Pull a model from the **Library** panel (e.g., `llama3.2:3b`)
+5. Open Copilot Chat, click the model picker, and select your Ollama model — or type `@ollama` to chat
 
-The extension will auto-detect your local Ollama instance at `http://localhost:11434` by default.
+The extension auto-detects your local Ollama instance at `http://localhost:11434`. To use cloud models, run `ollama login` first. To use a remote instance, set `ollama.host` in VS Code settings.
 
 ## ⚙️ Configuration
 
