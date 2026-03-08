@@ -7,8 +7,27 @@ import {
   LanguageModelToolResultPart,
   window,
 } from 'vscode';
+import type {
+  CancellationToken,
+  ExtensionContext,
+  LanguageModelChatInformation,
+  LanguageModelChatRequestMessage,
+  LanguageModelResponsePart,
+  Progress,
+  ProvideLanguageModelChatResponseOptions,
+} from 'vscode';
+import type { Ollama } from 'ollama';
+import type { DiagnosticsLogger } from './diagnostics.js';
 import { getCloudOllamaClient, getOllamaClient } from './client.js';
 import { formatModelName, isThinkingModelId, OllamaChatModelProvider } from './provider.js';
+
+function makeLogger(): DiagnosticsLogger {
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), exception: vi.fn() };
+}
+
+function makeContext(): ExtensionContext {
+  return { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as unknown as ExtensionContext;
+}
 
 vi.mock('./client.js', () => ({
   getContextLengthOverride: vi.fn(() => 0),
@@ -105,13 +124,13 @@ describe('OllamaChatModelProvider caching', () => {
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list, show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
 
     expect(list).toHaveBeenCalledTimes(1);
     expect(show).toHaveBeenCalledTimes(1);
@@ -125,15 +144,15 @@ describe('OllamaChatModelProvider caching', () => {
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list, show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     // Advance time past the 5-second throttle window so the next call re-fetches.
     vi.setSystemTime(new Date('2026-03-05T00:00:06.000Z'));
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
 
     expect(list).toHaveBeenCalledTimes(2);
     expect(models.map(m => m.id)).toContain('ollama:starcoder2');
@@ -144,14 +163,14 @@ describe('OllamaChatModelProvider caching', () => {
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list, show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     vi.setSystemTime(new Date('2026-03-05T00:00:31.000Z'));
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
 
     expect(list).toHaveBeenCalledTimes(2);
     expect(show).toHaveBeenCalledTimes(1);
@@ -162,13 +181,17 @@ describe('OllamaChatModelProvider caching', () => {
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list, show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
     );
 
     // Directly populate the private sets (via type cast for testing)
-    const providerWithPrivate = provider as any;
+    const providerWithPrivate = provider as unknown as {
+      thinkingModels: Set<string>;
+      nonThinkingModels: Set<string>;
+      clearModelCache(): void;
+    };
     providerWithPrivate.thinkingModels.add('test-model');
     providerWithPrivate.nonThinkingModels.add('test-model-2');
 
@@ -192,20 +215,20 @@ describe('OllamaChatModelProvider utility flows', () => {
 
   it('estimates token count from plain text', async () => {
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
-    const count = await provider.provideTokenCount({} as any, '12345678', {} as any);
+    const count = await provider.provideTokenCount({} as unknown as LanguageModelChatInformation, '12345678', {} as unknown as CancellationToken);
     expect(count).toBe(2);
   });
 
   it('estimates token count from message parts', async () => {
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const message = {
@@ -214,9 +237,9 @@ describe('OllamaChatModelProvider utility flows', () => {
         new LanguageModelToolCallPart('abc123xyz', 'toolName', { input: 'x' }),
         new LanguageModelToolResultPart('abc123xyz', [new LanguageModelTextPart('done')]),
       ],
-    } as any;
+    } as unknown as LanguageModelChatRequestMessage;
 
-    const count = await provider.provideTokenCount({} as any, message, {} as any);
+    const count = await provider.provideTokenCount({} as unknown as LanguageModelChatInformation, message, {} as unknown as CancellationToken);
     expect(count).toBeGreaterThan(0);
   });
 });
@@ -236,12 +259,12 @@ describe('OllamaChatModelProvider model detection', () => {
     });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn().mockResolvedValue({ models: [{ name: 'qwen2.5-coder:latest' }] }), show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'qwen2.5-coder:latest' }] }), show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     expect(models[0]?.maxInputTokens).toBe(131072);
     expect(models[0]?.maxOutputTokens).toBe(131072);
     expect((models[0] as unknown as { category?: { label?: string } })?.category?.label).toBe('Ask');
@@ -255,12 +278,12 @@ describe('OllamaChatModelProvider model detection', () => {
     });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn().mockResolvedValue({ models: [{ name: 'granite4:latest' }] }), show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'granite4:latest' }] }), show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     expect(models[0]?.capabilities?.toolCalling).toBe(true);
   });
 
@@ -272,12 +295,12 @@ describe('OllamaChatModelProvider model detection', () => {
     });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn().mockResolvedValue({ models: [{ name: 'llava:latest' }] }), show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'llava:latest' }] }), show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     expect(models[0]?.capabilities?.imageInput).toBe(true);
   });
 
@@ -288,12 +311,12 @@ describe('OllamaChatModelProvider model detection', () => {
     });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     // We can't directly test private methods, but we can verify that models are fetched
     expect(show).toBeDefined();
   });
@@ -305,12 +328,12 @@ describe('OllamaChatModelProvider model detection', () => {
     });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn().mockResolvedValue({ models: [{ name: 'llava' }] }), show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'llava' }] }), show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     expect(models).toBeDefined();
   });
 
@@ -321,12 +344,12 @@ describe('OllamaChatModelProvider model detection', () => {
     });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn().mockResolvedValue({ models: [{ name: 'tool-model' }] }), show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'tool-model' }] }), show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     expect(models).toBeDefined();
   });
 
@@ -337,12 +360,12 @@ describe('OllamaChatModelProvider model detection', () => {
     });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn().mockResolvedValue({ models: [{ name: 'basic-model' }] }), show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn().mockResolvedValue({ models: [{ name: 'basic-model' }] }), show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     expect(models).toBeDefined();
     expect(models[0]?.capabilities).toBeDefined();
   });
@@ -358,12 +381,12 @@ describe('OllamaChatModelProvider error handling', () => {
     const list = vi.fn().mockRejectedValue(new Error('Connection failed'));
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list, show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error, debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list, show: vi.fn() } as unknown as Ollama,
+      { info: vi.fn(), warn: vi.fn(), error, debug: vi.fn(), exception: vi.fn() } as unknown as DiagnosticsLogger,
     );
 
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
 
     expect(error).toHaveBeenCalled();
     expect(models).toEqual([]);
@@ -376,12 +399,12 @@ describe('OllamaChatModelProvider error handling', () => {
     const show = vi.fn().mockRejectedValue(new Error('Show failed'));
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list, show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
     );
 
-    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const models = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
 
     expect(models).toHaveLength(2);
     expect(models[0]?.name).toBe('Llama2');
@@ -400,19 +423,19 @@ describe('OllamaChatModelProvider error handling', () => {
     });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list, show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
     );
 
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-05T00:00:00.000Z'));
 
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
     vi.setSystemTime(new Date('2026-03-05T00:00:31.000Z'));
 
     // This should call list() again and prune mistral from cache
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
 
     expect(list).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
@@ -432,19 +455,19 @@ describe('OllamaChatModelProvider error handling', () => {
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list, show } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
     );
 
     // First call starts an in-flight fetch that hangs
-    const firstFetch = provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const firstFetch = provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
 
     // Pull completes — refreshModels() should discard the stale in-flight promise
     provider.refreshModels();
 
     // VS Code queries again after the event fires — must NOT reuse the stale promise
-    const secondFetch = provider.provideLanguageModelChatInformation({ silent: true }, {} as any);
+    const secondFetch = provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
 
     // Now resolve the first (stale) list with old data
     resolveFirstList({ models: [{ name: 'llama2' }] });
@@ -453,6 +476,75 @@ describe('OllamaChatModelProvider error handling', () => {
     const models = await secondFetch;
 
     expect(models.map((m: { id: string }) => m.id)).toContain('ollama:newmodel');
+  });
+
+  it('concurrent provideLanguageModelChatInformation calls share in-flight promise (single list() call)', async () => {
+    let resolveList!: (v: unknown) => void;
+    const listPending = new Promise(resolve => {
+      resolveList = resolve;
+    });
+
+    const list = vi.fn().mockReturnValueOnce(listPending);
+    const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    // Fire two concurrent requests while list() is still pending
+    const call1 = provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+    const call2 = provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+
+    resolveList({ models: [{ name: 'gemma3' }] });
+
+    const [result1, result2] = await Promise.all([call1, call2]);
+
+    // Both calls should get the same result
+    expect(result1.map((m: { id: string }) => m.id)).toContain('ollama:gemma3');
+    expect(result2.map((m: { id: string }) => m.id)).toContain('ollama:gemma3');
+    // And only ONE list() call should have been made
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
+  it('generation guard prevents stale in-flight fetch from overwriting fresh cache', async () => {
+    let resolveFirstList!: (v: unknown) => void;
+    const firstListPending = new Promise(resolve => {
+      resolveFirstList = resolve;
+    });
+
+    const list = vi
+      .fn()
+      .mockReturnValueOnce(firstListPending)
+      .mockResolvedValueOnce({ models: [{ name: 'llama2' }, { name: 'newmodel' }] });
+
+    const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list, show } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    // Start the first (stale) fetch
+    const firstFetch = provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+
+    // Discard stale fetch and start a fresh one
+    provider.refreshModels();
+    const freshFetch = provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+
+    // Fresh fetch resolves first
+    const freshResult = await freshFetch;
+    expect(freshResult.map((m: { id: string }) => m.id)).toContain('ollama:newmodel');
+
+    // Now let the stale fetch resolve with old data
+    resolveFirstList({ models: [{ name: 'llama2' }] });
+    await firstFetch;
+
+    // Query a third time — should serve from the FRESH cachedModelList, not stale
+    const thirdFetch = await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+    expect(thirdFetch.map((m: { id: string }) => m.id)).toContain('ollama:newmodel');
   });
 });
 
@@ -467,12 +559,12 @@ describe('OllamaChatModelProvider chat response', () => {
       yield { message: { content: 'chunk2' } };
     });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -496,10 +588,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     // Should stop processing immediately
@@ -510,12 +602,12 @@ describe('OllamaChatModelProvider chat response', () => {
     const exception = vi.fn();
     const chat = vi.fn().mockRejectedValue(new Error('Chat failed'));
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception } as unknown as DiagnosticsLogger,
     );
 
     const progress = { report: vi.fn() };
@@ -539,10 +631,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(exception).toHaveBeenCalled();
@@ -554,16 +646,16 @@ describe('OllamaChatModelProvider chat response', () => {
       yield { message: { content: 'response' } };
     });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     // Pre-register as a vision model so images are forwarded
-    (provider as any).visionByModelId.set('vision-model', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).visionByModelId.set('vision-model', true);
 
     const progress = { report: vi.fn() };
     const token = { isCancellationRequested: false };
@@ -589,10 +681,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(chat).toHaveBeenCalled();
@@ -608,12 +700,12 @@ describe('OllamaChatModelProvider chat response', () => {
       yield { message: { content: 'text response' } };
     });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     // Non-vision model: visionByModelId not set (defaults to false)
@@ -639,10 +731,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(chat).toHaveBeenCalled();
@@ -667,12 +759,12 @@ describe('OllamaChatModelProvider chat response', () => {
       };
     });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -702,10 +794,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [toolDef], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(progress.report).toHaveBeenCalledWith(expect.objectContaining({ name: 'get_weather' }));
@@ -720,12 +812,12 @@ describe('OllamaChatModelProvider chat response', () => {
       })(),
     );
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -749,10 +841,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     // Verify streaming works with SAX-based filtering
@@ -776,12 +868,12 @@ describe('OllamaChatModelProvider chat response', () => {
         done: true,
       });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -805,10 +897,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(chat).toHaveBeenCalledTimes(2);
@@ -827,12 +919,12 @@ describe('OllamaChatModelProvider chat response', () => {
       })(),
     );
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -856,10 +948,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     // Should include a header for thinking section
@@ -885,12 +977,12 @@ describe('OllamaChatModelProvider chat response', () => {
       })(),
     );
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -914,10 +1006,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     const rendered = progress.report.mock.calls.map((c: any[]) => c[0]?.value ?? '').join('');
@@ -933,12 +1025,12 @@ describe('OllamaChatModelProvider chat response', () => {
       })(),
     );
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -962,10 +1054,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(chat).toHaveBeenCalledWith(expect.objectContaining({ think: true }));
@@ -978,12 +1070,12 @@ describe('OllamaChatModelProvider chat response', () => {
       })(),
     );
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -1007,10 +1099,10 @@ describe('OllamaChatModelProvider chat response', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     const chatArgs = chat.mock.calls[0]?.[0];
@@ -1032,12 +1124,12 @@ describe('OllamaChatModelProvider chat response', () => {
         })(),
       );
 
-    vi.mocked(getOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -1060,11 +1152,11 @@ describe('OllamaChatModelProvider chat response', () => {
     };
 
     await provider.provideLanguageModelChatResponse(
-      model as any,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     // First call should have used think: true (cogito matches the regex)
@@ -1098,12 +1190,12 @@ describe('OllamaChatModelProvider chat response', () => {
         })(),
       );
 
-    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as any);
+    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -1126,11 +1218,11 @@ describe('OllamaChatModelProvider chat response', () => {
     };
 
     await provider.provideLanguageModelChatResponse(
-      model as any,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(chat).toHaveBeenCalledTimes(2);
@@ -1162,17 +1254,17 @@ describe('OllamaChatModelProvider chat response', () => {
         })(),
       );
 
-    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as any);
+    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     // Force native tool-calling support so the first request includes tools.
-    (provider as any).nativeToolCallingByModelId.set('tool-model:cloud', true);
-    (provider as any).nativeToolCallingByModelId.set('ollama:tool-model:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('tool-model:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('ollama:tool-model:cloud', true);
 
     const progress = { report: vi.fn() };
     const token = { isCancellationRequested: false };
@@ -1200,11 +1292,11 @@ describe('OllamaChatModelProvider chat response', () => {
     };
 
     await provider.provideLanguageModelChatResponse(
-      model as any,
-      [message as any],
-      { tools: [toolDef], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(chat).toHaveBeenCalledTimes(2);
@@ -1233,17 +1325,17 @@ describe('OllamaChatModelProvider chat response', () => {
         })(),
       );
 
-    vi.mocked(getOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     // Force native tool-calling support so first request includes tools.
-    (provider as any).nativeToolCallingByModelId.set('stablelm-zephyr:latest', true);
-    (provider as any).nativeToolCallingByModelId.set('ollama:stablelm-zephyr:latest', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('stablelm-zephyr:latest', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('ollama:stablelm-zephyr:latest', true);
 
     const progress = { report: vi.fn() };
     const token = { isCancellationRequested: false };
@@ -1271,11 +1363,11 @@ describe('OllamaChatModelProvider chat response', () => {
     };
 
     await provider.provideLanguageModelChatResponse(
-      model as any,
-      [message as any],
-      { tools: [toolDef], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(chat).toHaveBeenCalledTimes(2);
@@ -1311,17 +1403,17 @@ describe('OllamaChatModelProvider chat response', () => {
         done: true,
       });
 
-    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as any);
+    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     // Force native tool-calling support so the first request includes tools and follows the same branch as runtime.
-    (provider as any).nativeToolCallingByModelId.set('kimi-k2-thinking:cloud', true);
-    (provider as any).nativeToolCallingByModelId.set('ollama:kimi-k2-thinking:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('kimi-k2-thinking:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('ollama:kimi-k2-thinking:cloud', true);
 
     const progress = { report: vi.fn() };
     const token = { isCancellationRequested: false };
@@ -1349,11 +1441,11 @@ describe('OllamaChatModelProvider chat response', () => {
     };
 
     await provider.provideLanguageModelChatResponse(
-      model as any,
-      [message as any],
-      { tools: [toolDef], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(chat).toHaveBeenCalledTimes(4);
@@ -1394,16 +1486,16 @@ describe('OllamaChatModelProvider chat response', () => {
         done: true,
       });
 
-    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as any);
+    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
-    (provider as any).nativeToolCallingByModelId.set('kimi-k2-thinking:cloud', true);
-    (provider as any).nativeToolCallingByModelId.set('ollama:kimi-k2-thinking:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('kimi-k2-thinking:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('ollama:kimi-k2-thinking:cloud', true);
 
     const progress = { report: vi.fn() };
     const token = { isCancellationRequested: false };
@@ -1431,11 +1523,11 @@ describe('OllamaChatModelProvider chat response', () => {
     };
 
     await provider.provideLanguageModelChatResponse(
-      model as any,
-      [message as any],
-      { tools: [toolDef], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     // The rescue request should include think and tools
@@ -1480,12 +1572,12 @@ describe('OllamaChatModelProvider chat response', () => {
         })(),
       );
 
-    vi.mocked(getOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -1509,27 +1601,358 @@ describe('OllamaChatModelProvider chat response', () => {
 
     // First call — triggers retry and blacklists the model
     await provider.provideLanguageModelChatResponse(
-      model as any,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     progress.report.mockClear();
 
     // Second call — should NOT pass think: true (model is now blacklisted)
     await provider.provideLanguageModelChatResponse(
-      model as any,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     // Total: 3 calls (1 failed + 1 retry + 1 second request without think)
     expect(chat).toHaveBeenCalledTimes(3);
     expect(chat.mock.calls[2]?.[0]?.think).toBeUndefined();
+  });
+
+  it('cloud rescue attempt 2 (reduced-context+think, no tools) succeeds when attempt 1 returns empty content', async () => {
+    const opaque500 = Object.assign(
+      new Error(
+        '{"StatusCode":500,"Status":"500 Internal Server Error","error":"Internal Server Error while thinking"}',
+      ),
+      { name: 'ResponseError', status_code: 500 },
+    );
+
+    const chat = vi
+      .fn()
+      // Streaming retries (3 throws drive into the outer catch)
+      .mockRejectedValueOnce(opaque500)
+      .mockRejectedValueOnce(opaque500)
+      .mockRejectedValueOnce(opaque500)
+      // Rescue attempt 1: reduced-context+think+tools → empty content (hasContent falsy)
+      .mockResolvedValueOnce({ message: { content: '', thinking: '', tool_calls: [] }, done: true })
+      // Rescue attempt 2: reduced-context+think → succeeds
+      .mockResolvedValueOnce({ message: { content: 'Rescued on attempt 2.' }, done: true });
+
+    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('kimi-k2-thinking:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('ollama:kimi-k2-thinking:cloud', true);
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+
+    const model = {
+      id: 'kimi-k2-thinking:cloud',
+      name: 'Kimi K2 Thinking Cloud',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: true },
+    };
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('hi')],
+    };
+
+    const toolDef = { name: 'search', description: 'search', inputSchema: {} };
+
+    await provider.provideLanguageModelChatResponse(
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
+    );
+
+    expect(chat).toHaveBeenCalledTimes(5);
+
+    // Attempt 2 should be stream: false and have no tools
+    const attempt2Call = chat.mock.calls[4]?.[0];
+    expect(attempt2Call).toEqual(expect.objectContaining({ stream: false }));
+    expect(attempt2Call.tools).toBeUndefined();
+
+    const allValues = progress.report.mock.calls.map((c: any[]) => c[0]?.value ?? '');
+    expect(allValues.some((v: string) => v.includes('Rescued on attempt 2.'))).toBe(true);
+  });
+
+  it('cloud rescue attempt 3 (reduced-context, no think, no tools) succeeds when attempts 1-2 throw', async () => {
+    const opaque500 = Object.assign(
+      new Error(
+        '{"StatusCode":500,"Status":"500 Internal Server Error","error":"Internal Server Error while thinking"}',
+      ),
+      { name: 'ResponseError', status_code: 500 },
+    );
+
+    const chat = vi
+      .fn()
+      // Streaming retries
+      .mockRejectedValueOnce(opaque500)
+      .mockRejectedValueOnce(opaque500)
+      .mockRejectedValueOnce(opaque500)
+      // Rescue attempt 1: throws
+      .mockRejectedValueOnce(new Error('attempt 1 failed'))
+      // Rescue attempt 2: throws
+      .mockRejectedValueOnce(new Error('attempt 2 failed'))
+      // Rescue attempt 3: reduced-context, no think, no tools — succeeds
+      .mockResolvedValueOnce({ message: { content: 'Rescued on attempt 3.' }, done: true });
+
+    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('kimi-k2-thinking:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('ollama:kimi-k2-thinking:cloud', true);
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+
+    const model = {
+      id: 'kimi-k2-thinking:cloud',
+      name: 'Kimi K2 Thinking Cloud',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: true },
+    };
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('hi')],
+    };
+
+    const toolDef = { name: 'search', description: 'search', inputSchema: {} };
+
+    await provider.provideLanguageModelChatResponse(
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
+    );
+
+    expect(chat).toHaveBeenCalledTimes(6);
+
+    // Attempt 3 should be stream: false, no think, no tools
+    const attempt3Call = chat.mock.calls[5]?.[0];
+    expect(attempt3Call).toEqual(expect.objectContaining({ stream: false }));
+    expect(attempt3Call.tools).toBeUndefined();
+    expect(attempt3Call.think).toBeUndefined();
+
+    const allValues = progress.report.mock.calls.map((c: any[]) => c[0]?.value ?? '');
+    expect(allValues.some((v: string) => v.includes('Rescued on attempt 3.'))).toBe(true);
+  });
+
+  it('cloud rescue emits error message when all 4 attempts fail', async () => {
+    const opaque500 = Object.assign(
+      new Error(
+        '{"StatusCode":500,"Status":"500 Internal Server Error","error":"Internal Server Error while thinking"}',
+      ),
+      { name: 'ResponseError', status_code: 500 },
+    );
+
+    const chat = vi
+      .fn()
+      // Streaming retries (3)
+      .mockRejectedValueOnce(opaque500)
+      .mockRejectedValueOnce(opaque500)
+      .mockRejectedValueOnce(opaque500)
+      // All 4 rescue attempts fail with empty content
+      .mockResolvedValueOnce({ message: { content: '' }, done: true })
+      .mockResolvedValueOnce({ message: { content: '' }, done: true })
+      .mockResolvedValueOnce({ message: { content: '' }, done: true })
+      .mockResolvedValueOnce({ message: { content: '' }, done: true });
+
+    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('kimi-k2-thinking:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('ollama:kimi-k2-thinking:cloud', true);
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+
+    const model = {
+      id: 'kimi-k2-thinking:cloud',
+      name: 'Kimi K2 Thinking Cloud',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: true },
+    };
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('hi')],
+    };
+
+    const toolDef = { name: 'search', description: 'search', inputSchema: {} };
+
+    await provider.provideLanguageModelChatResponse(
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
+    );
+
+    // All 4 rescue attempts exhausted plus the 3 streaming retries
+    expect(chat).toHaveBeenCalledTimes(7);
+
+    // An error message should be emitted to progress when all rescue attempts fail
+    const allValues = progress.report.mock.calls.map((c: any[]) => c[0]?.value ?? '');
+    expect(allValues.some((v: string) => v.startsWith('Error:'))).toBe(true);
+  });
+
+  it('cloud rescue is skipped when cancellation is requested before rescue', async () => {
+    const opaque500 = Object.assign(
+      new Error(
+        '{"StatusCode":500,"Status":"500 Internal Server Error","error":"Internal Server Error while thinking"}',
+      ),
+      { name: 'ResponseError', status_code: 500 },
+    );
+
+    const chat = vi
+      .fn()
+      .mockRejectedValueOnce(opaque500)
+      .mockRejectedValueOnce(opaque500)
+      .mockRejectedValueOnce(opaque500);
+
+    vi.mocked(getCloudOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('kimi-k2-thinking:cloud', true);
+    (provider as unknown as { visionByModelId: Map<string, boolean>; nativeToolCallingByModelId: Map<string, boolean>; thinkingModels: Set<string>; nonThinkingModels: Set<string>; clearModelCache(): void }).nativeToolCallingByModelId.set('ollama:kimi-k2-thinking:cloud', true);
+
+    const progress = { report: vi.fn() };
+    // Cancellation is already requested
+    const token = { isCancellationRequested: true };
+
+    const model = {
+      id: 'kimi-k2-thinking:cloud',
+      name: 'Kimi K2 Thinking Cloud',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: true },
+    };
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('hi')],
+    };
+
+    const toolDef = { name: 'search', description: 'search', inputSchema: {} };
+
+    await provider.provideLanguageModelChatResponse(
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [toolDef], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
+    );
+
+    // Only the 3 streaming retries — rescue attempts must NOT be made
+    expect(chat).toHaveBeenCalledTimes(3);
+  });
+
+  it('cloud rescue is not triggered for non-cloud model 500 errors', async () => {
+    const opaque500 = Object.assign(
+      new Error(
+        '{"StatusCode":500,"Status":"500 Internal Server Error","error":"Internal Server Error while thinking"}',
+      ),
+      { name: 'ResponseError', status_code: 500 },
+    );
+
+    const chat = vi
+      .fn()
+      .mockRejectedValueOnce(opaque500)
+      // Retry without think
+      .mockResolvedValueOnce(
+        (async function* () {
+          yield { message: { content: 'responded without thinking' }, done: true };
+        })(),
+      );
+
+    vi.mocked(getOllamaClient).mockResolvedValue({ chat, abort: vi.fn() } as unknown as Ollama);
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+
+    // Local model (no ':cloud' suffix) — cloud rescue must NOT be triggered
+    const model = {
+      id: 'qwen3:latest',
+      name: 'Qwen3',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: false },
+    };
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('hi')],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      model as unknown as LanguageModelChatInformation,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
+    );
+
+    // Only 2 chat calls (initial + think retry) — no rescue attempts
+    expect(chat).toHaveBeenCalledTimes(2);
+
+    const allValues = progress.report.mock.calls.map((c: any[]) => c[0]?.value ?? '');
+    expect(allValues.some((v: string) => v.includes('responded without thinking'))).toBe(true);
   });
 });
 
@@ -1544,12 +1967,12 @@ describe('OllamaChatModelProvider crash handling', () => {
       .fn()
       .mockRejectedValue(new Error('model runner has unexpectedly stopped, please check ollama server logs'));
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, generate, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, generate, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -1571,10 +1994,10 @@ describe('OllamaChatModelProvider crash handling', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     expect(vi.mocked(window.showErrorMessage)).toHaveBeenCalledWith(
@@ -1640,12 +2063,12 @@ describe('XML context extraction in message conversion', () => {
       yield { message: { content: 'response' } };
     });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const progress = { report: vi.fn() };
@@ -1669,10 +2092,10 @@ describe('XML context extraction in message conversion', () => {
 
     await provider.provideLanguageModelChatResponse(
       model,
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      progress as any,
-      token as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
     );
 
     const messages = chat.mock.calls[0]?.[0]?.messages;
@@ -1690,12 +2113,12 @@ describe('XML context extraction in message conversion', () => {
       yield { message: { content: 'response' } };
     });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     // Context tag appears mid-message, not at the start — must NOT be promoted to system
@@ -1716,10 +2139,10 @@ describe('XML context extraction in message conversion', () => {
         maxOutputTokens: 100,
         capabilities: { imageInput: false, toolCalling: false },
       },
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      { report: vi.fn() } as any,
-      { isCancellationRequested: false } as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      { report: vi.fn() } as unknown as Progress<LanguageModelResponsePart>,
+      { isCancellationRequested: false } as unknown as CancellationToken,
     );
 
     const messages = chat.mock.calls[0]?.[0]?.messages;
@@ -1735,12 +2158,12 @@ describe('XML context extraction in message conversion', () => {
       yield { message: { content: 'response' } };
     });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     // Simulate a two-turn conversation where both turns inject an environment_info block
@@ -1770,10 +2193,10 @@ describe('XML context extraction in message conversion', () => {
         maxOutputTokens: 100,
         capabilities: { imageInput: false, toolCalling: false },
       },
-      [turn1 as any, turn1Reply as any, turn2 as any],
-      { tools: [], toolMode: 'auto' } as any,
-      { report: vi.fn() } as any,
-      { isCancellationRequested: false } as any,
+      [turn1 as unknown as LanguageModelChatRequestMessage, turn1Reply as unknown as LanguageModelChatRequestMessage, turn2 as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      { report: vi.fn() } as unknown as Progress<LanguageModelResponsePart>,
+      { isCancellationRequested: false } as unknown as CancellationToken,
     );
 
     const messages = chat.mock.calls[0]?.[0]?.messages;
@@ -1792,12 +2215,12 @@ describe('XML context extraction in message conversion', () => {
       yield { message: { content: 'ok' } };
     });
 
-    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as any);
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
 
     const provider = new OllamaChatModelProvider(
-      { secrets: { get: vi.fn(), store: vi.fn(), delete: vi.fn() } } as any,
-      { list: vi.fn(), show: vi.fn() } as any,
-      { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), exception: vi.fn() } as any,
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
     );
 
     const userText = [
@@ -1824,10 +2247,10 @@ describe('XML context extraction in message conversion', () => {
         maxOutputTokens: 100,
         capabilities: { imageInput: false, toolCalling: false },
       },
-      [message as any],
-      { tools: [], toolMode: 'auto' } as any,
-      { report: vi.fn() } as any,
-      { isCancellationRequested: false } as any,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      { report: vi.fn() } as unknown as Progress<LanguageModelResponsePart>,
+      { isCancellationRequested: false } as unknown as CancellationToken,
     );
 
     const messages = chat.mock.calls[0]?.[0]?.messages;

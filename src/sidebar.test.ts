@@ -1,4 +1,6 @@
 import type { Ollama } from 'ollama';
+import type { ExtensionContext } from 'vscode';
+import type { CloudModelsProvider, LibraryModelsProvider, LocalModelsProvider, ModelTreeItem } from './sidebar.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('LocalModelsProvider', () => {
@@ -317,7 +319,7 @@ describe('LocalModelsProvider', () => {
 
     const { CloudModelsProvider } = await import('./sidebar.js');
     const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as any,
+      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as unknown as ExtensionContext,
       undefined,
     );
     cloudProvider.grouped = false;
@@ -461,7 +463,7 @@ describe('LocalModelsProvider', () => {
 
     const { CloudModelsProvider } = await import('./sidebar.js');
     const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as any,
+      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as unknown as ExtensionContext,
       undefined,
     );
 
@@ -628,13 +630,13 @@ describe('LocalModelsProvider', () => {
       list: vi.fn().mockResolvedValue({ models: [] }),
       ps: vi.fn().mockResolvedValue({ models: [] }),
       generate: regularGenerate,
-    } as any;
+    } as unknown as Ollama;
 
     const mockContext = {
       secrets: {
         get: vi.fn().mockResolvedValue('test-cloud-api-key'),
       },
-    } as any;
+    } as unknown as ExtensionContext;
 
     const localProvider = new LocalModelsProvider(mockRegularClient, mockContext);
     await localProvider.stopModel('llama2:cloud');
@@ -713,7 +715,7 @@ describe('LocalModelsProvider', () => {
         secrets: {
           get: vi.fn().mockResolvedValue('test-key'),
         },
-      } as unknown as any,
+      },
       undefined,
     );
 
@@ -855,7 +857,7 @@ describe('LocalModelsProvider', () => {
     const libraryProvider = new LibraryModelsProvider(undefined);
     libraryProvider.setLocalProvider({
       getCachedLocalModelNames: () => new Set(['llama3.2:1b']),
-    } as any);
+    } as unknown as LocalModelsProvider);
     // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
     const llamaGroup = groups.find((item: any) => item.label === 'llama');
@@ -888,7 +890,7 @@ describe('LocalModelsProvider', () => {
     // local provider returns empty set — nothing downloaded
     libraryProvider.setLocalProvider({
       getCachedLocalModelNames: () => new Set<string>(),
-    } as any);
+    } as unknown as LocalModelsProvider);
     // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
     const llamaGroup = groups.find((item: any) => item.label === 'llama');
@@ -960,7 +962,7 @@ describe('LocalModelsProvider', () => {
     const libraryProvider = new LibraryModelsProvider(undefined);
     libraryProvider.setLocalProvider({
       getCachedLocalModelNames: () => localModels,
-    } as any);
+    } as unknown as LocalModelsProvider);
     // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
     const llamaGroup = groups.find((item: any) => item.label === 'llama');
@@ -1049,7 +1051,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       refresh: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     handleRefreshLocalModels(mockProvider);
 
@@ -1061,7 +1063,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       refresh: vi.fn(),
-    } as any;
+    } as unknown as LibraryModelsProvider;
 
     handleRefreshLibrary(mockProvider);
 
@@ -1073,7 +1075,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       refresh: vi.fn(),
-    } as any;
+    } as unknown as CloudModelsProvider;
 
     handleRefreshCloudModels(mockProvider);
 
@@ -1085,7 +1087,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       deleteModel: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-stopped', 1000);
 
@@ -1097,7 +1099,7 @@ describe('Extracted command handlers', () => {
   it('handleDeleteModel blocks deletion of a running local model', async () => {
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
-    const mockProvider = { deleteModel: vi.fn() } as any;
+    const mockProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
     const item = new ModelTreeItem('test-model', 'local-running', 1000);
 
     await handleDeleteModel(item, mockProvider);
@@ -1108,7 +1110,7 @@ describe('Extracted command handlers', () => {
   it('handleDeleteModel blocks deletion of a running cloud model', async () => {
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
-    const mockProvider = { deleteModel: vi.fn() } as any;
+    const mockProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
     const item = new ModelTreeItem('cloud-model', 'cloud-running', 1000);
 
     await handleDeleteModel(item, mockProvider);
@@ -1157,7 +1159,7 @@ describe('Extracted command handlers', () => {
 
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
-    const mockProvider = { deleteModel: vi.fn() } as any;
+    const mockProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
     const item = new ModelTreeItem('test-model', 'local-stopped');
 
     await handleDeleteModel(item, mockProvider);
@@ -1170,7 +1172,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       deleteModel: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'library-model');
 
@@ -1184,7 +1186,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       startModel: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-stopped');
 
@@ -1198,7 +1200,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       stopModel: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-running');
 
@@ -1222,9 +1224,9 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       deleteModel: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
-    handleDeleteModel(null as any, mockProvider);
+    handleDeleteModel(null as unknown as ModelTreeItem, mockProvider);
 
     // null/undefined guard fires before any confirmation prompt
     expect(mockProvider.deleteModel).not.toHaveBeenCalled();
@@ -1235,7 +1237,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       startModel: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-running');
 
@@ -1249,7 +1251,7 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       stopModel: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'cloud-running');
 
@@ -1264,13 +1266,13 @@ describe('Extracted command handlers', () => {
     const mockProvider = {
       startModel: vi.fn(),
       getCachedLocalModelNames: vi.fn().mockReturnValue(new Set(['test-model'])),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const mockCloudProvider = {
       resolveRunnableCloudModelName: vi.fn().mockResolvedValue('test-model'),
       markModelWarm: vi.fn(),
       refresh: vi.fn(),
-    } as any;
+    } as unknown as CloudModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'cloud-stopped');
 
@@ -1332,13 +1334,13 @@ describe('Extracted command handlers', () => {
     const mockProvider = {
       startModel: mockStartModel,
       getCachedLocalModelNames: vi.fn().mockReturnValue(new Set<string>()),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const mockCloudProvider = {
       resolveRunnableCloudModelName: vi.fn().mockResolvedValue('new-cloud-model:cloud'),
       markModelWarm: vi.fn(),
       refresh: vi.fn(),
-    } as any;
+    } as unknown as CloudModelsProvider;
 
     const item = new ModelTreeItem('new-cloud-model', 'cloud-stopped');
 
@@ -1355,13 +1357,13 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       stopModel: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const mockCloudProvider = {
       getWarmedModelName: vi.fn().mockReturnValue('test-model:cloud'),
       markModelStopped: vi.fn(),
       refresh: vi.fn(),
-    } as any;
+    } as unknown as CloudModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'cloud-running');
 
@@ -1408,11 +1410,11 @@ describe('Extracted command handlers', () => {
 
     const _mockClient = {
       pull: vi.fn().mockResolvedValue(undefined),
-    } as any;
+    } as unknown as Ollama;
 
     const mockProvider = {
       refresh: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('mistral:7b', 'library-model');
 
@@ -1429,11 +1431,11 @@ describe('Extracted command handlers', () => {
 
     const mockClient = {
       pull: vi.fn().mockResolvedValue(undefined),
-    } as any;
+    } as unknown as Ollama;
 
     const mockProvider = {
       refresh: vi.fn(),
-    } as any;
+    } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-running');
 
@@ -1510,7 +1512,7 @@ describe('Extracted command handlers', () => {
 
     const { handlePullModel } = await import('./sidebar.js');
 
-    await handlePullModel({ pull: mockPull } as any, { refresh: mockRefresh } as any);
+    await handlePullModel({ pull: mockPull } as unknown as Ollama, { refresh: mockRefresh } as unknown as LocalModelsProvider);
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'llama3:8b', stream: true });
     // Progress should have been reported at least once with a percentage message
@@ -1552,7 +1554,7 @@ describe('Extracted command handlers', () => {
 
     const { handlePullModel } = await import('./sidebar.js');
 
-    await handlePullModel({ pull: mockPull } as any, { refresh: vi.fn() } as any);
+    await handlePullModel({ pull: mockPull } as unknown as Ollama, { refresh: vi.fn() } as unknown as LocalModelsProvider);
 
     expect(mockPull).not.toHaveBeenCalled();
   });
@@ -1610,7 +1612,7 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('mistral:7b', 'library-model-variant');
-    await handlePullModelFromLibrary(item, { pull: mockPull } as any, { refresh: mockRefresh } as any);
+    await handlePullModelFromLibrary(item, { pull: mockPull } as unknown as Ollama, { refresh: mockRefresh } as unknown as LocalModelsProvider);
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'mistral:7b', stream: true });
     const reportCalls = progressReport.mock.calls.map((c: any) => c[0].message as string);
@@ -1683,10 +1685,10 @@ describe('Extracted command handlers', () => {
     const item = new ModelTreeItem('mistral:7b', 'library-model-variant');
     await handlePullModelFromLibrary(
       item,
-      { pull: mockPull, abort: mockAbort } as any,
+      { pull: mockPull, abort: mockAbort } as unknown as Ollama,
       {
         refresh: vi.fn(),
-      } as any,
+      } as unknown as LocalModelsProvider,
     );
 
     expect(mockAbort).toHaveBeenCalled();
@@ -1748,7 +1750,7 @@ describe('Extracted command handlers', () => {
         models: [{ name: 'llama3-tools:latest', size: 4000000000, digest: 'abc' }],
       }),
       ps: vi.fn().mockResolvedValue({ models: [] }),
-    } as any;
+    } as unknown as Ollama;
 
     const localProvider = new LocalModelsProvider(mockClient);
 
@@ -1821,7 +1823,7 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('llama3.2:1b', 'library-model-variant');
-    await handlePullModelFromLibrary(item, { pull: mockPull } as any, { refresh: mockRefresh } as any);
+    await handlePullModelFromLibrary(item, { pull: mockPull } as unknown as Ollama, { refresh: mockRefresh } as unknown as LocalModelsProvider);
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'llama3.2:1b', stream: true });
     expect(mockRefresh).toHaveBeenCalled();
@@ -1879,7 +1881,7 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('llama3.2:1b', 'library-model-downloaded-variant');
-    await handlePullModelFromLibrary(item, { pull: mockPull } as any, { refresh: mockRefresh } as any);
+    await handlePullModelFromLibrary(item, { pull: mockPull } as unknown as Ollama, { refresh: mockRefresh } as unknown as LocalModelsProvider);
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'llama3.2:1b', stream: true });
     expect(mockRefresh).toHaveBeenCalled();
@@ -1923,7 +1925,7 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('llama3.2', 'library-model');
-    await handlePullModelFromLibrary(item, { pull: mockPull } as any, { refresh: vi.fn() } as any);
+    await handlePullModelFromLibrary(item, { pull: mockPull } as unknown as Ollama, { refresh: vi.fn() } as unknown as LocalModelsProvider);
 
     expect(mockPull).not.toHaveBeenCalled();
   });
@@ -1972,12 +1974,12 @@ describe('Extracted command handlers', () => {
       subscriptions: { push: vi.fn() },
       secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
       globalState: { get: vi.fn(), update: vi.fn() },
-    } as any;
+    } as unknown as ExtensionContext;
 
     const mockClient = {
       list: vi.fn().mockResolvedValue({ models: [] }),
       generate: vi.fn(),
-    } as any;
+    } as unknown as Ollama;
 
     registerSidebar(mockContext, mockClient);
 
@@ -2048,8 +2050,8 @@ describe('Extracted command handlers', () => {
       subscriptions: { push: vi.fn() },
       secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
       globalState: { get: vi.fn(), update: vi.fn() },
-    } as any;
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as any;
+    } as unknown as ExtensionContext;
+    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as unknown as Ollama;
 
     registerSidebar(mockContext, mockClient);
 
@@ -2283,8 +2285,8 @@ describe('registerSidebar grouped/flat toggle commands', () => {
       subscriptions: { push: vi.fn() },
       secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
       globalState: { get: vi.fn().mockReturnValue(undefined), update: vi.fn() },
-    } as any;
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as any;
+    } as unknown as ExtensionContext;
+    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as unknown as Ollama;
 
     registerSidebar(mockContext, mockClient);
 
