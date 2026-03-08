@@ -7,7 +7,7 @@
       "name": "comment.line.number-sign.modelfile"
     },
     {
-      "match": "^(FROM|PARAMETER|SYSTEM|TEMPLATE|MESSAGE|ADAPTER|LICENSE|REQUIRES|DESCRIPTION)\\b",
+      "match": "^(FROM|PARAMETER|SYSTEM|TEMPLATE|MESSAGE|ADAPTER|LICENSE|REQUIRES)\\b",
       "name": "keyword.control.modelfile"
     },
     {

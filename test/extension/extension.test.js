@@ -75,28 +75,16 @@ exports.run = async () => {
   // Sidebar/Tree View Providers
   // ---------------------------------------------------------------------------
 
-  assert.ok(
-    commands.includes('ollama-copilot.refreshLocalModels'),
-    'Local models tree view not properly initialized',
-  );
+  assert.ok(commands.includes('ollama-copilot.refreshLocalModels'), 'Local models tree view not properly initialized');
   console.log('✓ Local models tree view initialized');
 
-  assert.ok(
-    commands.includes('ollama-copilot.refreshCloudModels'),
-    'Cloud models tree view not properly initialized',
-  );
+  assert.ok(commands.includes('ollama-copilot.refreshCloudModels'), 'Cloud models tree view not properly initialized');
   console.log('✓ Cloud models tree view initialized');
 
-  assert.ok(
-    commands.includes('ollama-copilot.refreshLibrary'),
-    'Library models tree view not properly initialized',
-  );
+  assert.ok(commands.includes('ollama-copilot.refreshLibrary'), 'Library models tree view not properly initialized');
   console.log('✓ Library models tree view initialized');
 
-  assert.ok(
-    commands.includes('ollama-copilot.newModelfile'),
-    'Modelfiles tree view not properly initialized',
-  );
+  assert.ok(commands.includes('ollama-copilot.newModelfile'), 'Modelfiles tree view not properly initialized');
   console.log('✓ Modelfiles tree view initialized');
 
   // ---------------------------------------------------------------------------
@@ -121,10 +109,7 @@ exports.run = async () => {
   console.log('✓ ollama.contextLength setting accessible');
 
   const completionModel = config.get('completionModel');
-  assert.ok(
-    typeof completionModel === 'string' || completionModel === undefined,
-    'completionModel should be a string',
-  );
+  assert.ok(typeof completionModel === 'string' || completionModel === undefined, 'completionModel should be a string');
   console.log('✓ ollama.completionModel setting accessible');
 
   const enabled = config.get('enableInlineCompletions');

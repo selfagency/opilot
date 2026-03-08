@@ -18,13 +18,14 @@
 
 ## ✨ Features
 
-- 🧠 **All Models** - Use any model from the [Ollama Library](https://ollama.ai/library), including Cloud models (requires API key), within the Copilot chat interface
+- 🧠 **All Models** - Use any model from the [Ollama Library](https://ollama.ai/library), including Cloud models (after `ollama login`), within the Copilot chat interface
 - 🛠️ **Model Management** - Pull, run, inspect, stop, and delete models from a custom Ollama sidebar
 - 💬 **Chat Participant** - Invoke `@ollama` directly in Copilot Chat for a dedicated, history-aware conversation with your local model
 - 📝 **Modelfile Management** - Create, edit, and build custom Ollama modelfiles with syntax highlighting, hover docs, and autocomplete
 - 🤖 **Code Completions** - Use local models to provide inline code completions
 - 🔧 **Tool Calling** - Tool support for agentic workflows with compatible models (access IDE functions, MCP servers, custom skills, etc.)
 - 🖼️ **Vision Support** - Image input for models with vision capabilities
+- 💭 **Thinking Models** - Extended reasoning display with collapsible "Thinking" and "Response" sections for models that support it
 - 🏠 **Local Execution** - Local models run on your machine with full privacy—no data leaves your computer
 - ⚡ **Streaming** - Real-time response streaming for faster interactions
 
@@ -37,9 +38,10 @@
 ## 🚀 Installation
 
 1. **Install Ollama** - Download and install from [ollama.ai](https://ollama.ai/download)
-2. **Start Ollama** - Run `ollama serve` (or use the system app)
-3. **Install Extension** - Install from VS Code Marketplace (or install the `.vsix` file)
-4. **Pull a Model** - Use the sidebar to pull a model, or run `ollama pull llama2` from terminal
+2. **Start Ollama** - Start the Ollama app or run `ollama serve` from the terminal
+3. **Login to Ollama Cloud** - Login through the app or run `ollama login` from the terminal (required for cloud models)
+4. **Install Extension** - Install from VS Code Marketplace (or install the `.vsix` file)
+5. **Pull a Model** - Use the sidebar to pull a model, or run `ollama pull llama2` from terminal
 
 The extension will auto-detect your local Ollama instance at `http://localhost:11434` by default.
 
@@ -48,10 +50,14 @@ The extension will auto-detect your local Ollama instance at `http://localhost:1
 Open VS Code Settings (`Ctrl+,` / `Cmd+,`) and search for "Ollama":
 
 - **`ollama.host`** - Ollama server address (default: `http://localhost:11434`)
-- **`ollama.contextLength`** - Context window size for models (default: `1024`)
+- **`ollama.contextLength`** - Override context window size in tokens (default: `0` = use model default)
 - **`ollama.streamLogs`** - Stream Ollama server logs to output channel (default: `true`)
+- **`ollama.localModelRefreshInterval`** - Auto-refresh interval for local and running models, in seconds (default: `30`)
+- **`ollama.libraryRefreshInterval`** - Reserved refresh interval for library and cloud model catalogs, in seconds (default: `21600`); panels currently refresh on startup and via the manual refresh button
 - **`ollama.completionModel`** - Model used for inline code completions (e.g. `qwen2.5-coder:1.5b`). Leave empty to disable.
 - **`ollama.enableInlineCompletions`** - Enable or disable inline code completions (default: `true`)
+- **`ollama.modelfilesPath`** - Folder where modelfiles are stored (default: `~/.ollama/modelfiles`)
+- **`ollama.diagnostics.logLevel`** - Verbosity of the Ollama output channel (`debug`, `info`, `warn`, `error`; default: `info`)
 
 To use a remote Ollama instance, update `ollama.host` to point to your remote server.
 
@@ -88,24 +94,38 @@ Completions use fill-in-the-middle (FIM) when the model supports it, and can be 
 
 ### Sidebar: Model Management
 
-The Ollama sidebar provides three sections:
+The Ollama activity bar icon opens a sidebar with four panels:
 
 #### Local Models
 
-- View installed models on your system
-- Right-click to run, stop, or delete models
-- Monitor active models in real-time
-- View context window and memory usage
+- View all locally installed models grouped by family (tree view) or as a flat list
+- Filter models by name using the filter icon in the panel header
+- Toggle between grouped tree view and flat list with the layout icon
+- Inline buttons per model: **Start** (▶), **Stop** (⏹), **Delete** (🗑)
+- Running models show VRAM usage and how long they've been loaded
+- Model capability badges: 🧠 thinking, 🛠️ tools, 👁️ vision, 🧩 embedding
+- Auto-refreshes every 30 seconds (configurable via `ollama.localModelRefreshInterval`); refresh interval restarts automatically when the setting changes
 
-#### Library Models
+#### Cloud Models
 
-- Browse 200+ pre-configured models from [ollama.ai/library](https://ollama.ai/library)
-- Sort by recency or name
-- Click to view details, preview capabilities, or pull to local system
+- View models pulled from Ollama Cloud (requires `ollama login`)
+- Filter, group by family, and collapse all — same controls as Local Models
+- Inline buttons: **Open page** (🔗), **Run** (▶), **Stop** (⏹), **Delete** (🗑)
+- Use the **Login** (👤) button in the panel header to authenticate
+
+#### Library
+
+- Browse hundreds of pre-configured models from [ollama.ai/library](https://ollama.ai/library)
+- Models grouped by family with collapsible variant children
+- Filter by name; sort by newest or name
+- Variants already downloaded locally show a ✓ checkmark
+- Click **Pull** (⬇) on any variant to download it with streaming progress
+
+#### Modelfiles
+
+The **Modelfile Manager** pane for creating and managing custom Ollama modelfiles. See [Modelfile Manager](#modelfile-manager) below.
 
 ### Modelfile Manager
-
-The **Modelfile Manager** is a dedicated sidebar pane for creating and managing custom Ollama modelfiles.
 
 #### Creating a new Modelfile
 
@@ -119,14 +139,14 @@ The wizard creates the file, pre-populates it with the chosen settings, and open
 
 #### Building a Modelfile
 
-Right-click any `.modelfile` in the pane and choose **Build Modelfile** (or use the command palette: `Ollama: Build Modelfile`). This runs `ollama create` with the file and streams progress in a VS Code notification.
+Right-click any `.modelfile` in the pane and choose **Build Model from Modelfile** (or use the command palette: `Ollama: Build Model from Modelfile`). This runs `ollama create` with the file and streams progress in a VS Code notification.
 
 #### Syntax support
 
 All `.modelfile` files receive:
 
-- **Syntax highlighting** — keywords (`FROM`, `PARAMETER`, `SYSTEM`, `TEMPLATE`, `ADAPTER`, `LICENSE`, `MESSAGE`), parameter names, numbers, strings, and comments
-- **Hover documentation** — hover over any keyword to see its description and usage
+- **Syntax highlighting** — keywords (`FROM`, `PARAMETER`, `SYSTEM`, `TEMPLATE`, `ADAPTER`, `LICENSE`, `MESSAGE`, `REQUIRES`), parameter names, numbers, strings, and comments
+- **Hover documentation** — hover over any keyword or parameter name to see its description and usage
 - **Autocomplete** — suggestions for Modelfile keywords and common parameter names
 
 ```modelfile
@@ -140,10 +160,6 @@ PARAMETER num_ctx 4096
 ```
 
 See the [Ollama Modelfile Docs](https://github.com/ollama/ollama/blob/main/docs/modelfile.md) for the full syntax reference.
-
-#### Configuration
-
-- **`ollama.modelfilesPath`** — folder where modelfiles are stored (default: `~/.ollama/modelfiles`)
 
 ## 🛡️ Privacy & Security
 

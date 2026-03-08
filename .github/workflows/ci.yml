@@ -73,59 +73,50 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check types
-        run: ./node_modules/.bin/task check-types
+        run: xvfb-run -a ./node_modules/.bin/task check-types
 
       - name: Lint
-        run: ./node_modules/.bin/task lint
+        run: xvfb-run -a ./node_modules/.bin/task lint
 
       - name: Compile
-        run: ./node_modules/.bin/task compile
+        run: xvfb-run -a ./node_modules/.bin/task compile
 
       - name: Run unit tests
         run: xvfb-run -a ./node_modules/.bin/task unit-test-coverage -- --reporter=default --reporter=junit --outputFile=test-report.junit.xml
         env:
           CI: true
 
+      - name: Cache VS Code test binary
+        uses: actions/cache@v5
+        with:
+          path: .vscode-test
+          key: ${{ runner.os }}-vscode-test-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vscode-test-
+
       - name: Run extension tests
-        run: ./node_modules/.bin/task extension-tests
+        run: xvfb-run -a ./node_modules/.bin/task extension-tests
         env:
           CI: true
 
       - name: Setup Ollama
         uses: ai-action/setup-ollama@v2
 
-      - name: Wait for Ollama server
-        run: |
-          sleep 5
-          for i in {1..30}; do
-            if curl -s http://localhost:11434/api/version > /dev/null; then
-              echo "Ollama server is running"
-              exit 0
-            fi
-            echo "Waiting for Ollama server... ($i/30)"
-            sleep 2
-          done
-          echo "Ollama server failed to start"
-          exit 1
-        shell: bash
-
       - name: Cache Ollama model
         uses: actions/cache@v5
         with:
           path: ~/.ollama
-          key: ${{ runner.os }}-ollama-llama3.2:1b
+          key: ${{ runner.os }}-ollama-smollm135m-qwen3
           restore-keys: |
             ${{ runner.os }}-ollama-
 
-      - name: Pull Ollama model
-        run: ollama pull llama3.2:1b
-        shell: bash
-
       - name: Run integration tests
-        run: ./node_modules/.bin/task integration-tests
+        run: xvfb-run -a ./node_modules/.bin/task integration-tests
         env:
           CI: true
-          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_TEST_MODEL: smollm:135m
+          OLLAMA_TEST_TOOL_MODEL: qwen3:0.6b
+          OLLAMA_CLOUD_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 
       - name: Upload test artifacts on failure
         if: failure()

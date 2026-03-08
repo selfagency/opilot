@@ -53,7 +53,7 @@ export class OllamaInlineCompletionProvider implements vscode.InlineCompletionIt
       return [new vscode.InlineCompletionItem(text)];
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logChannel?.error(`[Ollama] Inline completion failed: ${message}`);
+      this.logChannel?.error(`[client] inline completion failed: ${message}`);
       return null;
     }
   }

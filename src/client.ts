@@ -23,28 +23,13 @@ export async function getOllamaClient(context: ExtensionContext): Promise<Ollama
 }
 
 /**
- * Get an Ollama client configured with the cloud API key as the Bearer token.
- * Required for proxying requests to Ollama's cloud backend through the local server.
+ * Get an Ollama client for cloud model requests.
+ *
+ * Cloud usage is login-first (`ollama login`) and routed through the local
+ * Ollama server session; no dedicated cloud API key is required.
  */
 export async function getCloudOllamaClient(context: ExtensionContext): Promise<Ollama> {
-  const config = workspace.getConfiguration('ollama');
-  const host = config.get<string>('host') || 'http://localhost:11434';
-  const cloudApiKey = await context.secrets.get('ollama-cloud-api-key');
-
-  if (!cloudApiKey) {
-    throw new Error(
-      'Ollama Cloud API key not configured. Use the "Ollama: Manage Cloud API Key" command to set it up.',
-    );
-  }
-
-  const clientConfig: { host: string; headers: Record<string, string> } = {
-    host,
-    headers: {
-      Authorization: `Bearer ${cloudApiKey}`,
-    },
-  };
-
-  return new Ollama(clientConfig);
+  return getOllamaClient(context);
 }
 
 /**
@@ -53,6 +38,8 @@ export async function getCloudOllamaClient(context: ExtensionContext): Promise<O
 export interface ModelCapabilities {
   toolCalling: boolean;
   imageInput: boolean;
+  thinking: boolean;
+  embedding: boolean;
   maxInputTokens: number;
   maxOutputTokens: number;
 }
@@ -131,9 +118,19 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
     const maxInputTokens = contextLength;
     const maxOutputTokens = contextLength;
 
+    // Detect thinking support from capabilities array or template
+    const capabilitiesArr = (modelInfo as unknown as Record<string, unknown>).capabilities;
+    const capsArray = Array.isArray(capabilitiesArr) ? capabilitiesArr : [];
+    const thinking = capsArray.some((c: unknown) => typeof c === 'string' && c.toLowerCase() === 'thinking');
+
+    // Detect embedding models by checking for bert family or embedding-related families
+    const embedding = families.some(f => /bert|embed/i.test(f)) || (!modelInfo.template && families.length > 0);
+
     return {
       toolCalling,
       imageInput,
+      thinking,
+      embedding,
       maxInputTokens,
       maxOutputTokens,
     };
@@ -142,6 +139,8 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
     return {
       toolCalling: false,
       imageInput: false,
+      thinking: false,
+      embedding: false,
       maxInputTokens: 2048,
       maxOutputTokens: 2048,
     };

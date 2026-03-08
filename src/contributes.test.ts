@@ -144,4 +144,28 @@ describe('package contributes integrity', () => {
     const contextCommands = (pkg.contributes?.menus?.['view/item/context'] ?? []).map(m => m.command);
     expect(contextCommands).not.toContain('ollama-copilot.previewLibraryModel');
   });
+
+  it('all grammar keywords have hover documentation', () => {
+    const grammarPath = resolve(__dirname, '..', 'syntaxes', 'modelfile.tmLanguage.json');
+    const grammarRaw = readFileSync(grammarPath, 'utf8');
+    const grammar = JSON.parse(grammarRaw);
+
+    // Extract KEYWORD_DOCS from modelfiles.ts source to avoid vscode dependency
+    const modelfilesPath = resolve(__dirname, 'modelfiles.ts');
+    const modelfilesSource = readFileSync(modelfilesPath, 'utf8');
+    const keywordNamesInSource = Array.from(modelfilesSource.matchAll(/^\s+([A-Z]+):\s+['"`]/gm), m => m[1]);
+
+    // Extract keyword names from the grammar match pattern
+    // Pattern: ^(FROM|PARAMETER|...|DESCRIPTION)\b
+    const keywordPattern = grammar.patterns.find((p: any) => p.match?.includes('FROM'));
+    expect(keywordPattern).toBeDefined();
+    const rawMatch = keywordPattern.match as string;
+    const keywords = rawMatch
+      .replace(/^\^\(/, '')
+      .replace(/\)\\b$/, '')
+      .split('|');
+
+    const undocumented = keywords.filter((k: string) => !keywordNamesInSource.includes(k));
+    expect(undocumented).toEqual([]); // All grammar keywords must have docs
+  });
 });

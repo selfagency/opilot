@@ -7,9 +7,10 @@ import * as vscode from 'vscode';
 import { getCloudOllamaClient, getOllamaClient, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
+import { createXmlStreamFilter, formatXmlLikeResponseForDisplay } from './formatting';
 import { registerModelfileManager } from './modelfiles.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
-import { registerSidebar } from './sidebar.js';
+import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-ollama';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
@@ -17,6 +18,24 @@ let builtInOllamaConflictPromptInProgress = false;
 
 function toRuntimeModelId(modelId: string): string {
   return modelId.startsWith(PROVIDER_MODEL_ID_PREFIX) ? modelId.slice(PROVIDER_MODEL_ID_PREFIX.length) : modelId;
+}
+
+function normalizeToolParameters(inputSchema: unknown): Tool['function']['parameters'] {
+  if (inputSchema && typeof inputSchema === 'object' && !Array.isArray(inputSchema)) {
+    return inputSchema as Tool['function']['parameters'];
+  }
+
+  // Ollama validates tools against JSON Schema object shape.
+  return {
+    type: 'object',
+    properties: {},
+  } as Tool['function']['parameters'];
+}
+
+function isToolsNotSupportedError(error: unknown): boolean {
+  return (
+    error instanceof Error && /does not support tools|error validating json schema|schemaerror/i.test(error.message)
+  );
 }
 
 function isSelectedAction(selection: unknown, actionLabel: string): boolean {
@@ -111,7 +130,7 @@ export function handleConfigurationChange(
   onAutoStartChange?: (enabled: boolean) => void,
 ): void {
   if (event.affectsConfiguration('ollama.diagnostics.logLevel')) {
-    diagnostics.info(`[Ollama] Diagnostics log level changed to: ${getConfiguredLogLevel()}`);
+    diagnostics.info(`[client] Diagnostics log level changed to: ${getConfiguredLogLevel()}`);
     onLogLevelChange?.();
   }
 
@@ -120,8 +139,44 @@ export function handleConfigurationChange(
   }
 
   const enabled = vscode.workspace.getConfiguration('ollama').get<boolean>('streamLogs') ?? true;
-  diagnostics.info(`[Ollama] Auto-start log streaming setting changed: ${enabled ? 'enabled' : 'disabled'}`);
+  diagnostics.info(`[client] Auto-start log streaming setting changed: ${enabled ? 'enabled' : 'disabled'}`);
   onAutoStartChange?.(enabled);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function logPerformanceSnapshot(
+  diagnostics: DiagnosticsLogger,
+  sidebarSnapshot?: SidebarProfilingSnapshot,
+  label = 'manual',
+): void {
+  const memory = process.memoryUsage();
+
+  const payload = {
+    kind: 'performance_snapshot',
+    label,
+    timestamp: new Date().toISOString(),
+    memory: {
+      rssBytes: memory.rss,
+      heapUsedBytes: memory.heapUsed,
+      heapTotalBytes: memory.heapTotal,
+      externalBytes: memory.external,
+      arrayBuffersBytes: memory.arrayBuffers,
+      rss: formatBytes(memory.rss),
+      heapUsed: formatBytes(memory.heapUsed),
+      heapTotal: formatBytes(memory.heapTotal),
+      external: formatBytes(memory.external),
+      arrayBuffers: formatBytes(memory.arrayBuffers),
+    },
+    sidebar: sidebarSnapshot ?? null,
+  };
+
+  diagnostics.info(`[client] ${JSON.stringify(payload)}`);
 }
 export async function handleConnectionTestFailure(
   host: string,
@@ -370,28 +425,41 @@ export async function handleChatRequest(
           function: {
             name: t.name,
             description: t.description ?? '',
-            parameters: t.inputSchema as Tool['function']['parameters'],
+            parameters: normalizeToolParameters(t.inputSchema),
           },
         }));
 
+        const shouldThinkInToolLoop = isThinkingModelId(modelId);
         const MAX_TOOL_ROUNDS = 10;
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           if (token.isCancellationRequested) {
             return;
           }
 
-          const roundResponse = await effectiveClient.chat({
-            model: modelId,
-            messages: ollamaMessages as Message[],
-            stream: false,
-            tools: ollamaTools,
-          });
+          let roundResponse: ChatResponse;
+          try {
+            roundResponse = (await effectiveClient.chat({
+              model: modelId,
+              messages: ollamaMessages as Message[],
+              stream: false,
+              tools: ollamaTools,
+              ...(shouldThinkInToolLoop ? { think: true } : {}),
+            })) as ChatResponse;
+          } catch (toolError) {
+            if (isToolsNotSupportedError(toolError)) {
+              outputChannel?.warn?.(
+                `[client] disabling tools for @ollama request on model ${modelId}: ${String(toolError)}`,
+              );
+              break;
+            }
+            throw toolError;
+          }
 
           const toolCalls = roundResponse.message.tool_calls;
           if (!toolCalls?.length) {
             // No tool invocations needed — render the response text and exit.
             if (roundResponse.message.content) {
-              stream.markdown(roundResponse.message.content);
+              stream.markdown(formatXmlLikeResponseForDisplay(roundResponse.message.content));
             }
             return;
           }
@@ -445,12 +513,21 @@ export async function handleChatRequest(
           ...(shouldThink ? { think: true } : {}),
         });
       } catch (chatError) {
-        if (
+        const supportsThinkingError =
           shouldThink &&
           chatError instanceof Error &&
           chatError.name === 'ResponseError' &&
-          chatError.message.toLowerCase().includes('does not support thinking')
-        ) {
+          chatError.message.toLowerCase().includes('does not support thinking');
+
+        if (supportsThinkingError) {
+          response = await effectiveClient.chat({
+            model: modelId,
+            messages: ollamaMessages as Message[],
+            stream: true,
+          });
+        } else if (isToolsNotSupportedError(chatError)) {
+          outputChannel?.warn?.(`[client] model ${modelId} rejected tools; retrying stream without tools/thinking`);
+          shouldThink = false;
           response = await effectiveClient.chat({
             model: modelId,
             messages: ollamaMessages as Message[],
@@ -463,6 +540,7 @@ export async function handleChatRequest(
 
       let thinkingStarted = false;
       let contentStarted = false;
+      const xmlFilter = createXmlStreamFilter();
 
       for await (const chunk of response) {
         if (token.isCancellationRequested) {
@@ -482,8 +560,12 @@ export async function handleChatRequest(
             stream.markdown('\n\n---\n\n*Response*\n\n');
             contentStarted = true;
           }
-          outputChannel?.debug(`[Ollama] @ollama chunk: ${chunk.message.content.substring(0, 50)}`);
-          stream.markdown(chunk.message.content);
+          outputChannel?.debug(`[client] @ollama chunk: ${chunk.message.content.substring(0, 50)}`);
+          // Filter context tags using SAX parser - handles incomplete tags across chunk boundaries
+          const cleanContent = xmlFilter.write(chunk.message.content);
+          if (cleanContent) {
+            stream.markdown(cleanContent);
+          }
         }
 
         if (chunk.message?.tool_calls?.length) {
@@ -498,9 +580,15 @@ export async function handleChatRequest(
           break;
         }
       }
+
+      // Finalize XML filter to flush any remaining buffer
+      const finalContent = xmlFilter.end();
+      if (finalContent) {
+        stream.markdown(finalContent);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      outputChannel?.exception('[Ollama] Chat participant request failed', error);
+      outputChannel?.exception('[client] chat participant request failed', error);
       const isCrashError = error instanceof Error && error.message.includes('model runner has unexpectedly stopped');
       if (isCrashError) {
         // Best-effort unload to keep behaviour consistent with the provider path.
@@ -634,9 +722,9 @@ export async function activate(context: vscode.ExtensionContext) {
         .filter(Boolean);
       for (const line of lines) {
         if (stream === 'stderr') {
-          output.warn(`[Ollama Server] ${line}`);
+          output.warn(`[server] ${line}`);
         } else {
-          output.info(`[Ollama Server] ${line}`);
+          output.info(`[server] ${line}`);
         }
       }
     };
@@ -644,20 +732,20 @@ export async function activate(context: vscode.ExtensionContext) {
     const platform = process.platform;
     if (platform === 'darwin') {
       const logPath = join(homedir(), '.ollama', 'logs', 'server.log');
-      output.info(`[Ollama] Starting log stream from ${logPath}`);
+      output.info(`[server] starting log stream from ${logPath}`);
       logTailProcess = spawn('tail', ['-n', '200', '-F', logPath], { stdio: 'pipe' });
     } else if (platform === 'linux') {
-      output.info('[Ollama] Starting log stream from journalctl (-u ollama)');
+      output.info('[server] starting log stream from journalctl (-u ollama)');
       logTailProcess = spawn('journalctl', ['-u', 'ollama', '--no-pager', '--follow', '--output', 'cat'], {
         stdio: 'pipe',
       });
     } else if (platform === 'win32') {
       const script =
         '$p=Join-Path $env:LOCALAPPDATA \'Ollama\\server.log\'; if (Test-Path $p) { Get-Content -Path $p -Tail 200 -Wait } else { Write-Error "Missing log file: $p" }';
-      output.info('[Ollama] Starting log stream from %LOCALAPPDATA%\\Ollama\\server.log');
+      output.info('[server] starting log stream from %LOCALAPPDATA%\\Ollama\\server.log');
       logTailProcess = spawn('powershell', ['-NoProfile', '-Command', script], { stdio: 'pipe' });
     } else {
-      output.warn(`[Ollama] Log streaming not supported on platform: ${platform}`);
+      output.warn(`[server] log streaming not supported on platform: ${platform}`);
       return;
     }
 
@@ -665,12 +753,12 @@ export async function activate(context: vscode.ExtensionContext) {
     logTailProcess.stderr.on('data', chunk => onData(chunk, 'stderr'));
 
     logTailProcess.on('error', error => {
-      output.error(`[Ollama] Log stream process failed: ${error.message}`);
+      output.error(`[server] log stream process failed: ${error.message}`);
       stopLogStreaming();
     });
 
     logTailProcess.on('exit', (code, signal) => {
-      output.info(`[Ollama] Log stream stopped (code=${code ?? 'null'}, signal=${signal ?? 'null'})`);
+      output.info(`[server] log stream stopped (code=${code ?? 'null'}, signal=${signal ?? 'null'})`);
       logTailProcess = undefined;
     });
   };
@@ -684,15 +772,15 @@ export async function activate(context: vscode.ExtensionContext) {
     ? createDiagnosticsLogger(logOutputChannel, () => getConfiguredLogLevel())
     : noopLogger;
 
-  diagnostics.info('[Ollama] Activating extension...');
+  diagnostics.info('[client] activating extension...');
 
   const client = await getOllamaClient(context);
   const config = vscode.workspace.getConfiguration('ollama');
   const host = config.get<string>('host') || 'http://localhost:11434';
   const autoStartLogStreaming = config.get<boolean>('streamLogs') ?? true;
-  diagnostics.info(`[Ollama] Configured host: ${host}`);
-  diagnostics.info(`[Ollama] Auto-start log streaming: ${autoStartLogStreaming ? 'enabled' : 'disabled'}`);
-  diagnostics.info(`[Ollama] Diagnostics log level: ${getConfiguredLogLevel()}`);
+  diagnostics.info(`[client] configured host: ${host}`);
+  diagnostics.info(`[client] auto-start log streaming: ${autoStartLogStreaming ? 'enabled' : 'disabled'}`);
+  diagnostics.info(`[client] diagnostics log level: ${getConfiguredLogLevel()}`);
 
   const provider = new OllamaChatModelProvider(context, client, diagnostics);
   let lmProviderDisposable: vscode.Disposable | undefined;
@@ -702,13 +790,15 @@ export async function activate(context: vscode.ExtensionContext) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes('already registered')) {
       diagnostics.warn(
-        `[Ollama] Language model provider vendor "${LANGUAGE_MODEL_VENDOR}" is already registered. Skipping duplicate registration.`,
+        `[client] language model provider vendor "${LANGUAGE_MODEL_VENDOR}" is already registered; skipping duplicate registration.`,
       );
     } else {
-      diagnostics.exception('[Ollama] Language model provider registration failed', error);
+      diagnostics.exception('[client] language model provider registration failed', error);
       throw error;
     }
   }
+
+  const sidebarRegistration = registerSidebar(context, client, diagnostics, () => provider.refreshModels());
 
   const subscriptions: vscode.Disposable[] = [
     vscode.commands.registerCommand('ollama-copilot.manageAuthToken', async () => {
@@ -716,7 +806,11 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('ollama-copilot.refreshModels', () => {
       provider.refreshModels();
-      diagnostics.info('[Ollama] Model list refresh triggered');
+      diagnostics.info('[client] model list refresh triggered');
+    }),
+    vscode.commands.registerCommand('ollama-copilot.dumpPerformanceSnapshot', () => {
+      logPerformanceSnapshot(diagnostics, sidebarRegistration?.getProfilingSnapshot?.());
+      void vscode.window.showInformationMessage('Performance snapshot written to Ollama for Copilot logs');
     }),
     {
       dispose: () => stopLogStreaming(),
@@ -728,9 +822,6 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   context.subscriptions.push(...subscriptions);
-
-  // Register sidebar view
-  registerSidebar(context, client, diagnostics, () => provider.refreshModels());
 
   // Register modelfile manager
   registerModelfileManager(context, client, diagnostics);
@@ -745,17 +836,18 @@ export async function activate(context: vscode.ExtensionContext) {
   void (async () => {
     try {
       const isConnected = await testConnection(client);
-      diagnostics.info(`[Ollama] Connection test result: ${isConnected ? 'connected' : 'not connected'}`);
+      diagnostics.info(`[client] Connection test result: ${isConnected ? 'connected' : 'not connected'}`);
       if (!isConnected) {
         await handleConnectionTestFailure(host);
       }
     } catch (error) {
-      diagnostics.exception('[Ollama] Connection test failed', error);
+      diagnostics.exception('[client] connection test failed', error);
     }
   })();
 
   if (logOutputChannel) {
-    diagnostics.info('[Ollama] Activation complete');
+    diagnostics.info('[client] activation complete');
+    logPerformanceSnapshot(diagnostics, sidebarRegistration?.getProfilingSnapshot?.(), 'startup');
     if (autoStartLogStreaming) {
       startLogStreaming(diagnostics);
     }
@@ -774,7 +866,7 @@ export async function activate(context: vscode.ExtensionContext) {
               startLogStreaming(diagnostics);
             } else {
               stopLogStreaming();
-              diagnostics.info('[Ollama] Log streaming disabled via settings');
+              diagnostics.info('[server] log streaming disabled via settings');
             }
           },
         );

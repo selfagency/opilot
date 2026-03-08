@@ -64,34 +64,43 @@ tasks:
   extension-tests:
     desc: Run extension tests
     cmds:
-      - xvfb-run -a node test/extension/index.js {{.CLI_ARGS}}
+      - node test/extension/index.js {{.CLI_ARGS}}
+    silent: false
+
+  pull-models:
+    desc: Pull required models for integration tests
+    cmds:
+      - ollama pull smollm:135m
+      - ollama pull qwen3:0.6b
+      - ollama pull kimi-k2.5:cloud
     silent: false
 
   integration-tests:
     desc: Run integration tests
+    deps: [pull-models]
     cmds:
       - ./node_modules/.bin/vitest run -c vitest.integration.config.js test/integration {{.CLI_ARGS}}
     silent: false
 
   precommit:
     desc: Run pre-commit checks
+    deps: [check-types]
     cmds:
-      - task: check-types
       - task: lint-fix
       - task: format
     silent: false
 
   prerelease:
     desc: Create a pre-release
+    deps: [compile]
     cmds:
-      - task: compile
       - ./node_modules/.bin/zx ./scripts/release.mjs --pre-release {{.CLI_ARGS}}
     silent: false
 
   release:
     desc: Release the extension
+    deps: [compile]
     cmds:
-      - task: compile
       - ./node_modules/.bin/zx ./scripts/release.mjs {{.CLI_ARGS}}
     silent: false
 
@@ -105,9 +114,8 @@ tasks:
 
   test-build-release:
     desc: Test, Build & Release
+    deps: [check-all, test-all]
     cmds:
-      - task: check-all
-      - task: test-all
       - task: release
     silent: false
 

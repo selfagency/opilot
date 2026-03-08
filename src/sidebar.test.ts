@@ -143,6 +143,35 @@ describe('LocalModelsProvider', () => {
     callbackProvider.dispose();
   });
 
+  it('does not leak configuration listeners when localModelRefreshInterval changes multiple times', async () => {
+    const vscode = await import('vscode');
+    const onDidChangeConfigListeners: Array<(e: any) => void> = [];
+
+    // Replace the onDidChangeConfiguration mock to track listener registrations
+    vi.mocked(vscode.workspace.onDidChangeConfiguration).mockImplementation((listener: any) => {
+      onDidChangeConfigListeners.push(listener);
+      return { dispose: vi.fn() };
+    });
+
+    // Create a fresh provider with the new mock
+    const testProvider = new LocalModelsProvider(mockClient);
+    const initialListeners = onDidChangeConfigListeners.length;
+
+    // Simulate the config change event being fired 3 times
+    const fakeEvent = { affectsConfiguration: (key: string) => key === 'ollama.localModelRefreshInterval' };
+    for (let i = 0; i < 3; i++) {
+      // Fire ALL current listeners (simulates VS Code dispatching the event)
+      [...onDidChangeConfigListeners].forEach(l => l(fakeEvent));
+      // Give time for any async operations
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    // There should be exactly the initial listener count (registered once in constructor), not growing
+    expect(onDidChangeConfigListeners.length).toBe(initialListeners);
+
+    testProvider.dispose();
+  });
+
   it('adds tooltip process details for local models', async () => {
     const groups = await provider.getChildren();
     const llamaGroup = groups.find((g: any) => g.label === 'llama');
@@ -206,26 +235,87 @@ describe('LocalModelsProvider', () => {
   });
 
   it('does not auto-open cloud models when clicked', async () => {
+    vi.resetModules();
+
+    vi.doMock('./client.js', () => ({
+      getCloudOllamaClient: vi.fn().mockResolvedValue({
+        list: vi.fn().mockResolvedValue({ models: [{ name: 'llama3:cloud', size: 1024 }] }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+      }),
+      fetchModelCapabilities: vi.fn().mockResolvedValue({
+        toolCalling: false,
+        imageInput: false,
+        maxInputTokens: 2048,
+        maxOutputTokens: 2048,
+      }),
+    }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
+          return callback({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+        }),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      env: {
+        openExternal: vi.fn(),
+      },
+      Uri: {
+        parse: vi.fn((value: string) => ({ value })),
+      },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn((key: string) => {
+            if (key === 'libraryRefreshInterval') return 0;
+            return undefined;
+          }),
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      Disposable: class {},
+    }));
+
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({
-          models: [{ name: 'cloud/llama3', size: 1024, expires_at: '2099-03-05T00:00:00Z' }],
-        }),
+        text: async () => '<a href="/library/llama3">llama3</a>',
       }),
     );
 
+    const { CloudModelsProvider } = await import('./sidebar.js');
     const cloudProvider = new CloudModelsProvider(
-      {
-        secrets: {
-          get: vi.fn().mockResolvedValue('test-api-key'),
-        },
-      },
+      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as any,
       undefined,
     );
-
+    cloudProvider.grouped = false;
     const models = await cloudProvider.getChildren();
+    expect(models[0].type).toBe('cloud-stopped');
     expect(models[0].command).toBeUndefined();
     cloudProvider.dispose();
   });
@@ -288,20 +378,91 @@ describe('LocalModelsProvider', () => {
     libraryProvider.dispose();
   });
 
-  it('shows status item when cloud API key is missing', async () => {
-    const cloudProvider = new CloudModelsProvider(
-      {
-        secrets: {
-          get: vi.fn().mockResolvedValue(undefined),
-        },
+  it('shows login status item when no cloud models are available', async () => {
+    vi.resetModules();
+
+    vi.doMock('./client.js', () => ({
+      getCloudOllamaClient: vi.fn().mockResolvedValue({
+        list: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+      }),
+      fetchModelCapabilities: vi.fn().mockResolvedValue({
+        toolCalling: false,
+        imageInput: false,
+        maxInputTokens: 2048,
+        maxOutputTokens: 2048,
+      }),
+    }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        description?: string;
+        contextValue?: string;
+        collapsibleState?: number;
+        tooltip?: string;
+        command?: unknown;
+        constructor(label: string) {
+          this.label = label;
+        }
       },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
+          return callback({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
+        }),
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn(),
+      },
+      env: {
+        openExternal: vi.fn(),
+      },
+      Uri: {
+        parse: vi.fn((value: string) => ({ value })),
+      },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn((key: string) => {
+            if (key === 'libraryRefreshInterval') return 0;
+            return undefined;
+          }),
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      Disposable: class {},
+    }));
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => '<html></html>',
+      }),
+    );
+
+    const { CloudModelsProvider } = await import('./sidebar.js');
+    const cloudProvider = new CloudModelsProvider(
+      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as any,
       undefined,
     );
 
     const models = await cloudProvider.getChildren();
     expect(models).toHaveLength(1);
-    expect(models[0].label).toBe('Add Ollama Cloud API key to view cloud models');
+    expect(models[0].label).toBe('Login to Ollama Cloud');
     expect(models[0].contextValue).toBe('status');
+    expect(models[0].command).toBeDefined();
     cloudProvider.dispose();
   });
 
@@ -477,7 +638,7 @@ describe('LocalModelsProvider', () => {
     localProvider.dispose();
   });
 
-  it('cloud provider handles empty API key', async () => {
+  it('cloud provider works without requiring a stored cloud API key', async () => {
     const cloudProvider = new CloudModelsProvider(
       {
         secrets: {
@@ -488,8 +649,9 @@ describe('LocalModelsProvider', () => {
     );
 
     const models = await cloudProvider.getChildren();
-    expect(models).toHaveLength(1);
-    expect(models[0].contextValue).toBe('status');
+    // Login-first flow may return cloud model groups/items when already authenticated,
+    // or a single status action when not authenticated.
+    expect(models.length).toBeGreaterThan(0);
     cloudProvider.dispose();
   });
 
@@ -625,12 +787,9 @@ describe('LocalModelsProvider', () => {
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
-    // getChildren() groups by family; llama3.2 -> family 'llama'
+    // getChildren() promotes single-child families; llama3.2 appears at top level
     const groups = await libraryProvider.getChildren();
-    const llamaGroup = groups.find((item: any) => item.label === 'llama');
-    expect(llamaGroup).toBeDefined();
-    const familyModels = await libraryProvider.getChildren(llamaGroup);
-    const parent = familyModels.find((item: any) => item.label === 'llama3.2');
+    const parent = groups.find((item: any) => item.label === 'llama3.2');
     expect(parent).toBeDefined();
     const children = await libraryProvider.getChildren(parent);
 
@@ -660,12 +819,9 @@ describe('LocalModelsProvider', () => {
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
-    // getChildren() groups by family; llama3.2 -> family 'llama'
+    // getChildren() promotes single-child families; llama3.2 appears at top level
     const groups = await libraryProvider.getChildren();
-    const llamaGroup = groups.find((item: any) => item.label === 'llama');
-    expect(llamaGroup).toBeDefined();
-    const familyModels = await libraryProvider.getChildren(llamaGroup);
-    const parent = familyModels.find((item: any) => item.label === 'llama3.2');
+    const parent = groups.find((item: any) => item.label === 'llama3.2');
     expect(parent).toBeDefined();
 
     const children = await libraryProvider.getChildren(parent);
@@ -1286,6 +1442,12 @@ describe('Extracted command handlers', () => {
     expect(typeof handleManageCloudApiKey).toBe('function');
   });
 
+  it('handleLoginToCloud function is callable', async () => {
+    const { handleLoginToCloud } = await import('./sidebar.js');
+
+    expect(typeof handleLoginToCloud).toBe('function');
+  });
+
   it('handlePullModel reports streaming progress via withProgress', async () => {
     vi.resetModules();
 
@@ -1596,7 +1758,7 @@ describe('Extracted command handlers', () => {
     const llamaModels = await localProvider.getChildren(models[0]);
     const item = llamaModels[0];
     expect(item.label).toBe('llama3-tools:latest');
-    expect(item.description).toContain('[tools]');
+    expect(item.description).toContain('🛠️');
     localProvider.dispose();
   });
 
@@ -2124,5 +2286,8 @@ describe('registerSidebar grouped/flat toggle commands', () => {
     expect(registeredIds).toContain('ollama-copilot.toggleLocalGrouping');
     expect(registeredIds).toContain('ollama-copilot.toggleCloudGrouping');
     expect(registeredIds).toContain('ollama-copilot.toggleLibraryGrouping');
+    expect(registeredIds).toContain('ollama-copilot.toggleLocalGroupingToTree');
+    expect(registeredIds).toContain('ollama-copilot.toggleCloudGroupingToTree');
+    expect(registeredIds).toContain('ollama-copilot.toggleLibraryGroupingToTree');
   });
 });
