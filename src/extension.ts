@@ -513,7 +513,6 @@ export async function handleChatRequest(
             model: modelId,
             messages: ollamaMessages as Message[],
             stream: true,
-          });
         } else {
           throw chatError;
         }
