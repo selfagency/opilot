@@ -3,8 +3,8 @@
  *
  * Requirements:
  * - A running Ollama server on http://localhost:11434
- * - Non-tool local model: smollm:360m (smallest, no tools/thinking)
- * - Tool-capable local model: qwen3.5:0.8b (smallest with tools/thinking)
+ * - Non-tool local model: smollm:135m (smallest, no tools/thinking)
+ * - Tool-capable local model: qwen3:0.6b (smallest with tools/thinking)
  * - Cloud model: any model with a `:cloud` or `-cloud` tag (optional — tests skip gracefully)
  *
  * Run with:  npx vitest run test/integration/ollama.test.ts
@@ -17,8 +17,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // ---------------------------------------------------------------------------
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
-const LOCAL_MODEL = process.env.OLLAMA_TEST_MODEL ?? 'smollm:360m';
-const TOOL_MODEL = process.env.OLLAMA_TEST_TOOL_MODEL ?? 'qwen3.5:0.8b';
+const LOCAL_MODEL = process.env.OLLAMA_TEST_MODEL ?? 'smollm:135m';
+const TOOL_MODEL = process.env.OLLAMA_TEST_TOOL_MODEL ?? 'qwen3:0.6b';
 
 function isCloudTag(tag: string): boolean {
   return tag === 'cloud' || tag.endsWith('-cloud');
@@ -130,10 +130,18 @@ describe('Local model start and stop', () => {
       keep_alive: 0,
     });
 
-    // Ollama unloads asynchronously — poll ps until the model disappears
+    // Ollama unloads asynchronously — send a second keep_alive:0 to be sure,
+    // then poll ps until the model disappears
+    await client.generate({
+      model: LOCAL_MODEL,
+      prompt: '',
+      stream: false,
+      keep_alive: 0,
+    });
+
     const modelBase = LOCAL_MODEL.split(':')[0];
     let unloaded = false;
-    for (let attempt = 0; attempt < 20; attempt++) {
+    for (let attempt = 0; attempt < 40; attempt++) {
       const ps = await client.ps();
       const running = ps.models.find(m => m.name.includes(modelBase));
       if (!running) {
@@ -178,12 +186,13 @@ describe('Local model chat', () => {
       model: LOCAL_MODEL,
       messages: [{ role: 'user', content: 'Reply with only the word "hello".' }],
       stream: false,
+      options: { num_predict: 20 },
     });
 
     expect(response.message).toBeDefined();
     expect(response.message.role).toBe('assistant');
     expect(response.message.content.length).toBeGreaterThan(0);
-  }, 60_000);
+  }, 120_000);
 
   it('generates a streaming response', async () => {
     const chunks: string[] = [];
@@ -191,6 +200,7 @@ describe('Local model chat', () => {
       model: LOCAL_MODEL,
       messages: [{ role: 'user', content: 'Reply with only the word "yes".' }],
       stream: true,
+      options: { num_predict: 20 },
     });
 
     for await (const chunk of stream) {
@@ -202,7 +212,7 @@ describe('Local model chat', () => {
     expect(chunks.length).toBeGreaterThan(0);
     const fullText = chunks.join('');
     expect(fullText.length).toBeGreaterThan(0);
-  }, 60_000);
+  }, 120_000);
 
   it('handles multi-turn conversation', async () => {
     const response = await client.chat({
@@ -213,11 +223,12 @@ describe('Local model chat', () => {
         { role: 'user', content: 'What number did I ask you to remember? Reply with just the number.' },
       ],
       stream: false,
+      options: { num_predict: 20 },
     });
 
     expect(response.message.content).toBeDefined();
     expect(response.message.content.length).toBeGreaterThan(0);
-  }, 60_000);
+  }, 120_000);
 });
 
 // ---------------------------------------------------------------------------
@@ -230,11 +241,12 @@ describe('Local model generate', () => {
       model: LOCAL_MODEL,
       prompt: 'The capital of France is',
       stream: false,
+      options: { num_predict: 20 },
     });
 
     expect(response.response).toBeDefined();
     expect(response.response.length).toBeGreaterThan(0);
-  }, 60_000);
+  }, 120_000);
 });
 
 // ---------------------------------------------------------------------------

@@ -70,8 +70,8 @@ tasks:
   pull-models:
     desc: Pull required models for integration tests
     cmds:
-      - ollama pull smollm:360m
-      - ollama pull qwen3.5:0.8b
+      - ollama pull smollm:135m
+      - ollama pull qwen3:0.6b
       - ollama pull kimi-k2.5:cloud
     silent: false
 

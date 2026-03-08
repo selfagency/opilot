@@ -121,7 +121,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.ollama
-          key: ${{ runner.os }}-ollama-smollm-qwen35
+          key: ${{ runner.os }}-ollama-smollm135m-qwen3
           restore-keys: |
             ${{ runner.os }}-ollama-
 
@@ -129,8 +129,8 @@ jobs:
         run: xvfb-run -a ./node_modules/.bin/task integration-tests
         env:
           CI: true
-          OLLAMA_TEST_MODEL: smollm:360m
-          OLLAMA_TEST_TOOL_MODEL: qwen3.5:0.8b
+          OLLAMA_TEST_MODEL: smollm:135m
+          OLLAMA_TEST_TOOL_MODEL: qwen3:0.6b
           OLLAMA_CLOUD_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 
       - name: Upload test artifacts on failure
