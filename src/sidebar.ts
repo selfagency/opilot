@@ -225,7 +225,12 @@ function buildLocalModelTooltip(
   return lines.join('\n');
 }
 
-function buildCapabilityLines(caps: { thinking?: boolean; tools?: boolean; vision?: boolean; embedding?: boolean }): string[] {
+function buildCapabilityLines(caps: {
+  thinking?: boolean;
+  tools?: boolean;
+  vision?: boolean;
+  embedding?: boolean;
+}): string[] {
   const lines: string[] = [];
   if (caps.thinking) lines.push('🧠 Thinking');
   if (caps.tools) lines.push('🛠️ Tools');
@@ -245,7 +250,11 @@ function getLibraryModelUrl(modelName: string): string {
 async function fetchModelPagePreview(
   modelName: string,
   timeoutMs = 8000,
-): Promise<{ title: string; description: string; capabilities: { thinking: boolean; tools: boolean; vision: boolean; embedding: boolean } }> {
+): Promise<{
+  title: string;
+  description: string;
+  capabilities: { thinking: boolean; tools: boolean; vision: boolean; embedding: boolean };
+}> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const url = getLibraryModelUrl(modelName);
@@ -323,7 +332,13 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       if (!this.grouped) {
         const filterLower = this.filterText.toLowerCase();
         return models
-          .filter(m => m.type !== 'status' && (!filterLower || m.label.toLowerCase().includes(filterLower) || (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))))
+          .filter(
+            m =>
+              m.type !== 'status' &&
+              (!filterLower ||
+                m.label.toLowerCase().includes(filterLower) ||
+                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))),
+          )
           .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
       }
 
@@ -337,7 +352,11 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           ([familyName, familyModels]) =>
             !filterLower ||
             familyName.toLowerCase().includes(filterLower) ||
-            familyModels.some(m => m.label.toLowerCase().includes(filterLower) || (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))),
+            familyModels.some(
+              m =>
+                m.label.toLowerCase().includes(filterLower) ||
+                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+            ),
         )
         .sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -747,7 +766,13 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       const filterLower = this.filterText.toLowerCase();
       const localNames = this.getLocalModelNames();
       return models
-        .filter(m => m.type !== 'status' && (!filterLower || m.label.toLowerCase().includes(filterLower) || (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))))
+        .filter(
+          m =>
+            m.type !== 'status' &&
+            (!filterLower ||
+              m.label.toLowerCase().includes(filterLower) ||
+              (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))),
+        )
         .map(m => {
           m.collapsibleState = TreeItemCollapsibleState.None;
           // Show check icon for installed models
@@ -772,7 +797,11 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         ([familyName, familyModels]) =>
           !filterLower ||
           familyName.toLowerCase().includes(filterLower) ||
-          familyModels.some(m => m.label.toLowerCase().includes(filterLower) || (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))),
+          familyModels.some(
+            m =>
+              m.label.toLowerCase().includes(filterLower) ||
+              (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+          ),
       )
       .sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -1073,7 +1102,13 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       if (!this.grouped) {
         const filterLower = this.filterText.toLowerCase();
         return models
-          .filter(m => m.type !== 'status' && (!filterLower || m.label.toLowerCase().includes(filterLower) || (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))))
+          .filter(
+            m =>
+              m.type !== 'status' &&
+              (!filterLower ||
+                m.label.toLowerCase().includes(filterLower) ||
+                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))),
+          )
           .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
       }
 
@@ -1087,7 +1122,11 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           ([familyName, familyModels]) =>
             !filterLower ||
             familyName.toLowerCase().includes(filterLower) ||
-            familyModels.some(m => m.label.toLowerCase().includes(filterLower) || (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))),
+            familyModels.some(
+              m =>
+                m.label.toLowerCase().includes(filterLower) ||
+                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+            ),
         )
         .sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -1369,7 +1408,12 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
             const until = formatRelativeFromNow(runningInfo?.durationMs);
             tooltipLines.push(`⏱️ ${until}`);
           }
-          const capLines = buildCapabilityLines({ thinking: isThinking, tools: hasTools, vision: hasVision, embedding: hasEmbedding });
+          const capLines = buildCapabilityLines({
+            thinking: isThinking,
+            tools: hasTools,
+            vision: hasVision,
+            embedding: hasEmbedding,
+          });
           if (capLines.length > 0) {
             tooltipLines.push(...capLines);
           }
@@ -1383,7 +1427,9 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
                 this.treeChangeEmitter.fire(item);
               }
             },
-            () => { /* keep existing tooltip */ },
+            () => {
+              /* keep existing tooltip */
+            },
           );
 
           return item;

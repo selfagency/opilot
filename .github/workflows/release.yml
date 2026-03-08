@@ -185,7 +185,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build extension package
-        run: ./node_modules/.bin/task compile
+        run: xvfb-run -a ./node_modules/.bin/task compile
 
       - name: Package extension
         run: |

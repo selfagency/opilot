@@ -51,8 +51,7 @@ function normalizeToolParameters(inputSchema: unknown): Tool['function']['parame
 
 function isToolsNotSupportedError(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    /does not support tools|error validating json schema|schemaerror/i.test(error.message)
+    error instanceof Error && /does not support tools|error validating json schema|schemaerror/i.test(error.message)
   );
 }
 
@@ -413,7 +412,6 @@ export async function handleChatRequest(
 
         const shouldThinkInToolLoop = isThinkingModelId(modelId);
         const MAX_TOOL_ROUNDS = 10;
-        let disableToolsForThisRequest = false;
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           if (token.isCancellationRequested) {
             return;
@@ -430,11 +428,13 @@ export async function handleChatRequest(
             })) as ChatResponse;
           } catch (toolError) {
             if (isToolsNotSupportedError(toolError)) {
-              outputChannel?.warn?.(`[Ollama] Disabling tools for @ollama request on model ${modelId}: ${String(toolError)}`);
-              disableToolsForThisRequest = true;
+              outputChannel?.warn?.(
+                `[Ollama] Disabling tools for @ollama request on model ${modelId}: ${String(toolError)}`,
+              );
               break;
             }
             throw toolError;
+          }
 
           const toolCalls = roundResponse.message.tool_calls;
           if (!toolCalls?.length) {
@@ -513,6 +513,7 @@ export async function handleChatRequest(
             model: modelId,
             messages: ollamaMessages as Message[],
             stream: true,
+          });
         } else {
           throw chatError;
         }

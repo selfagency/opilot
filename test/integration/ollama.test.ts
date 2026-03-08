@@ -3,8 +3,8 @@
  *
  * Requirements:
  * - A running Ollama server on http://localhost:11434
- * - Non-tool local model: tinyllama (fast default)
- * - Tool-capable local model: qwen2.5:0.5b (separate capability check)
+ * - Non-tool local model: smollm:360m (smallest, no tools/thinking)
+ * - Tool-capable local model: qwen3.5:0.8b (smallest with tools/thinking)
  * - Cloud model: any model with a `:cloud` or `-cloud` tag (optional — tests skip gracefully)
  *
  * Run with:  npx vitest run test/integration/ollama.test.ts
@@ -17,8 +17,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // ---------------------------------------------------------------------------
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
-const LOCAL_MODEL = process.env.OLLAMA_TEST_MODEL ?? 'tinyllama';
-const TOOL_MODEL = process.env.OLLAMA_TEST_TOOL_MODEL ?? 'qwen2.5:0.5b';
+const LOCAL_MODEL = process.env.OLLAMA_TEST_MODEL ?? 'smollm:360m';
+const TOOL_MODEL = process.env.OLLAMA_TEST_TOOL_MODEL ?? 'qwen3.5:0.8b';
 
 function isCloudTag(tag: string): boolean {
   return tag === 'cloud' || tag.endsWith('-cloud');

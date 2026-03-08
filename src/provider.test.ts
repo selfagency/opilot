@@ -607,10 +607,7 @@ describe('OllamaChatModelProvider chat response', () => {
     const message = {
       role: LanguageModelChatMessageRole.User,
       name: undefined,
-      content: [
-        new LanguageModelTextPart('hello '),
-        new LanguageModelDataPart(Buffer.from('image data'), 'image/png'),
-      ],
+      content: [new LanguageModelTextPart('hello '), new LanguageModelDataPart(Buffer.from('image data'), 'image/png')],
     };
 
     await provider.provideLanguageModelChatResponse(
@@ -853,8 +850,7 @@ describe('OllamaChatModelProvider chat response', () => {
       (async function* () {
         yield {
           message: {
-            content:
-              '<note>Use Cmd+N to create a note.</note> <help>Use search in the top right for keywords.</help>',
+            content: '<note>Use Cmd+N to create a note.</note> <help>Use search in the top right for keywords.</help>',
           },
           done: true,
         };
@@ -1188,10 +1184,13 @@ describe('OllamaChatModelProvider chat response', () => {
   });
 
   it('retries without tools when model returns does not support tools', async () => {
-    const toolsUnsupportedError = Object.assign(new Error('registry.ollama.ai/library/stablelm-zephyr:latest does not support tools'), {
-      name: 'ResponseError',
-      status_code: 400,
-    });
+    const toolsUnsupportedError = Object.assign(
+      new Error('registry.ollama.ai/library/stablelm-zephyr:latest does not support tools'),
+      {
+        name: 'ResponseError',
+        status_code: 400,
+      },
+    );
 
     const chat = vi
       .fn()

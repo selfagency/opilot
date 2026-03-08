@@ -139,8 +139,7 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
     const thinking = capsArray.some((c: unknown) => typeof c === 'string' && c.toLowerCase() === 'thinking');
 
     // Detect embedding models by checking for bert family or embedding-related families
-    const embedding = families.some(f => /bert|embed/i.test(f)) ||
-      (!modelInfo.template && families.length > 0);
+    const embedding = families.some(f => /bert|embed/i.test(f)) || (!modelInfo.template && families.length > 0);
 
     return {
       toolCalling,

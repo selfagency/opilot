@@ -3,17 +3,17 @@ name: Tests
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ['v*']
     paths:
-      - "src/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   pull_request:
     branches: [main]
     paths:
-      - "src/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
+      - 'src/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 permissions:
@@ -66,20 +66,20 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
-          cache: "pnpm"
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Check types
-        run: ./node_modules/.bin/task check-types
+        run: xvfb-run -a ./node_modules/.bin/task check-types
 
       - name: Lint
-        run: ./node_modules/.bin/task lint
+        run: xvfb-run -a ./node_modules/.bin/task lint
 
       - name: Compile
-        run: ./node_modules/.bin/task compile
+        run: xvfb-run -a ./node_modules/.bin/task compile
 
       - name: Run unit tests
         run: xvfb-run -a ./node_modules/.bin/task unit-test-coverage -- --reporter=default --reporter=junit --outputFile=test-report.junit.xml
@@ -87,7 +87,7 @@ jobs:
           CI: true
 
       - name: Run extension tests
-        run: ./node_modules/.bin/task extension-tests
+        run: xvfb-run -a ./node_modules/.bin/task extension-tests
         env:
           CI: true
 
@@ -113,22 +113,22 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.ollama
-          key: ${{ runner.os }}-ollama-tinyllama-qwen2.5-0.5b
+          key: ${{ runner.os }}-ollama-smollm-360m-qwen3.5-0.8b
           restore-keys: |
             ${{ runner.os }}-ollama-
 
       - name: Pull Ollama models
         run: |
-          ollama pull tinyllama
-          ollama pull qwen2.5:0.5b
+          ollama pull smollm:360m
+          ollama pull qwen3.5:0.8b
         shell: bash
 
       - name: Run integration tests
-        run: ./node_modules/.bin/task integration-tests
+        run: xvfb-run -a ./node_modules/.bin/task integration-tests
         env:
           CI: true
-          OLLAMA_TEST_MODEL: tinyllama
-          OLLAMA_TEST_TOOL_MODEL: qwen2.5:0.5b
+          OLLAMA_TEST_MODEL: smollm:360m
+          OLLAMA_TEST_TOOL_MODEL: qwen3.5:0.8b
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OLLAMA_CLOUD_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 
