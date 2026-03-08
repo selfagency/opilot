@@ -3,7 +3,7 @@ import type { DiagnosticsLogger } from './diagnostics.js';
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
-    return error.stack ? `${error.message}\n${error.stack}` : error.message;
+    return error.stack ?? error.message;
   }
   return String(error);
 }

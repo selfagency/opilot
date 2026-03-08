@@ -715,7 +715,7 @@ describe('LocalModelsProvider', () => {
         secrets: {
           get: vi.fn().mockResolvedValue('test-key'),
         },
-      },
+      } as unknown as ExtensionContext,
       undefined,
     );
 
@@ -1512,7 +1512,10 @@ describe('Extracted command handlers', () => {
 
     const { handlePullModel } = await import('./sidebar.js');
 
-    await handlePullModel({ pull: mockPull } as unknown as Ollama, { refresh: mockRefresh } as unknown as LocalModelsProvider);
+    await handlePullModel(
+      { pull: mockPull } as unknown as Ollama,
+      { refresh: mockRefresh } as unknown as LocalModelsProvider,
+    );
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'llama3:8b', stream: true });
     // Progress should have been reported at least once with a percentage message
@@ -1554,7 +1557,10 @@ describe('Extracted command handlers', () => {
 
     const { handlePullModel } = await import('./sidebar.js');
 
-    await handlePullModel({ pull: mockPull } as unknown as Ollama, { refresh: vi.fn() } as unknown as LocalModelsProvider);
+    await handlePullModel(
+      { pull: mockPull } as unknown as Ollama,
+      { refresh: vi.fn() } as unknown as LocalModelsProvider,
+    );
 
     expect(mockPull).not.toHaveBeenCalled();
   });
@@ -1612,7 +1618,11 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('mistral:7b', 'library-model-variant');
-    await handlePullModelFromLibrary(item, { pull: mockPull } as unknown as Ollama, { refresh: mockRefresh } as unknown as LocalModelsProvider);
+    await handlePullModelFromLibrary(
+      item,
+      { pull: mockPull } as unknown as Ollama,
+      { refresh: mockRefresh } as unknown as LocalModelsProvider,
+    );
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'mistral:7b', stream: true });
     const reportCalls = progressReport.mock.calls.map((c: any) => c[0].message as string);
@@ -1823,7 +1833,11 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('llama3.2:1b', 'library-model-variant');
-    await handlePullModelFromLibrary(item, { pull: mockPull } as unknown as Ollama, { refresh: mockRefresh } as unknown as LocalModelsProvider);
+    await handlePullModelFromLibrary(
+      item,
+      { pull: mockPull } as unknown as Ollama,
+      { refresh: mockRefresh } as unknown as LocalModelsProvider,
+    );
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'llama3.2:1b', stream: true });
     expect(mockRefresh).toHaveBeenCalled();
@@ -1881,7 +1895,11 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('llama3.2:1b', 'library-model-downloaded-variant');
-    await handlePullModelFromLibrary(item, { pull: mockPull } as unknown as Ollama, { refresh: mockRefresh } as unknown as LocalModelsProvider);
+    await handlePullModelFromLibrary(
+      item,
+      { pull: mockPull } as unknown as Ollama,
+      { refresh: mockRefresh } as unknown as LocalModelsProvider,
+    );
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'llama3.2:1b', stream: true });
     expect(mockRefresh).toHaveBeenCalled();
@@ -1925,7 +1943,11 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const item = new ModelTreeItem('llama3.2', 'library-model');
-    await handlePullModelFromLibrary(item, { pull: mockPull } as unknown as Ollama, { refresh: vi.fn() } as unknown as LocalModelsProvider);
+    await handlePullModelFromLibrary(
+      item,
+      { pull: mockPull } as unknown as Ollama,
+      { refresh: vi.fn() } as unknown as LocalModelsProvider,
+    );
 
     expect(mockPull).not.toHaveBeenCalled();
   });
@@ -2314,7 +2336,9 @@ describe('Provider lifecycle and disposal', () => {
     vi.doMock('vscode', () => ({
       TreeItem: class {
         label: string;
-        constructor(label: string) { this.label = label; }
+        constructor(label: string) {
+          this.label = label;
+        }
       },
       ThemeIcon: class {},
       TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
@@ -2345,7 +2369,11 @@ describe('Provider lifecycle and disposal', () => {
     }));
 
     const { LocalModelsProvider } = await import('./sidebar.js');
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), ps: vi.fn().mockResolvedValue({ models: [] }), show: vi.fn() } as unknown as Ollama;
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] }),
+      show: vi.fn(),
+    } as unknown as Ollama;
     const provider = new LocalModelsProvider(mockClient);
 
     provider.dispose();
@@ -2359,7 +2387,9 @@ describe('Provider lifecycle and disposal', () => {
     vi.doMock('vscode', () => ({
       TreeItem: class {
         label: string;
-        constructor(label: string) { this.label = label; }
+        constructor(label: string) {
+          this.label = label;
+        }
       },
       ThemeIcon: class {},
       TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
@@ -2393,7 +2423,10 @@ describe('Provider lifecycle and disposal', () => {
 
     const { LocalModelsProvider } = await import('./sidebar.js');
     const onLocalModelsChanged = vi.fn();
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), ps: vi.fn().mockResolvedValue({ models: [] }) } as unknown as Ollama;
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] }),
+    } as unknown as Ollama;
     const provider = new LocalModelsProvider(mockClient, undefined, undefined, onLocalModelsChanged);
 
     // Dispose before the first auto-refresh interval fires (interval = 1s)
@@ -2411,7 +2444,9 @@ describe('Provider lifecycle and disposal', () => {
     vi.doMock('vscode', () => ({
       TreeItem: class {
         label: string;
-        constructor(label: string) { this.label = label; }
+        constructor(label: string) {
+          this.label = label;
+        }
       },
       ThemeIcon: class {},
       TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
@@ -2445,7 +2480,10 @@ describe('Provider lifecycle and disposal', () => {
 
     const { LocalModelsProvider } = await import('./sidebar.js');
     const onLocalModelsChanged = vi.fn();
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), ps: vi.fn().mockResolvedValue({ models: [] }) } as unknown as Ollama;
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] }),
+    } as unknown as Ollama;
     const provider = new LocalModelsProvider(mockClient, undefined, undefined, onLocalModelsChanged);
 
     // Start a debounce (300ms)
@@ -2467,7 +2505,9 @@ describe('Provider lifecycle and disposal', () => {
     vi.doMock('vscode', () => ({
       TreeItem: class {
         label: string;
-        constructor(label: string) { this.label = label; }
+        constructor(label: string) {
+          this.label = label;
+        }
       },
       ThemeIcon: class {},
       TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
@@ -2499,7 +2539,12 @@ describe('Provider lifecycle and disposal', () => {
 
     vi.useFakeTimers();
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, headers: { get: vi.fn().mockReturnValue('text/html') }, text: async () => '' }));
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, headers: { get: vi.fn().mockReturnValue('text/html') }, text: async () => '' }),
+    );
 
     const { CloudModelsProvider } = await import('./sidebar.js');
     const mockContext = {
@@ -2524,7 +2569,9 @@ describe('Provider lifecycle and disposal', () => {
     vi.doMock('vscode', () => ({
       TreeItem: class {
         label: string;
-        constructor(label: string) { this.label = label; }
+        constructor(label: string) {
+          this.label = label;
+        }
       },
       ThemeIcon: class {},
       TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
@@ -2567,7 +2614,8 @@ describe('Provider lifecycle and disposal', () => {
 
     // At least 3 dispose-wrapper items must be in subscriptions (for local, library, cloud providers)
     const disposeWrappers = pushedItems.filter(
-      item => item !== null && typeof item === 'object' && typeof (item as { dispose?: unknown }).dispose === 'function',
+      item =>
+        item !== null && typeof item === 'object' && typeof (item as { dispose?: unknown }).dispose === 'function',
     );
     expect(disposeWrappers.length).toBeGreaterThanOrEqual(3);
   });

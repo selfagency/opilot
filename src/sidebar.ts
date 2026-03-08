@@ -35,11 +35,10 @@ const execAsync = promisify(exec);
  * Silently passes when the header is absent (some servers omit it).
  */
 function assertHtmlContentType(response: Response): void {
-  const ct = response.headers?.get('content-type') ?? '';
-  if (ct && !ct.includes('text/html')) {
-    throw new Error(
-      `Expected text/html from ${response.url} but got '${ct}' (HTTP ${response.status})`,
-    );
+  const rawCt = response.headers?.get('content-type') ?? '';
+  const normalizedCt = rawCt.toLowerCase();
+  if (rawCt && !normalizedCt.includes('text/html')) {
+    throw new Error(`Expected text/html from ${response.url} but got '${rawCt}' (HTTP ${response.status})`);
   }
 }
 
@@ -1929,7 +1928,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
 
       if (response.ok) {
         const ct = response.headers?.get('content-type') ?? '';
-        if (ct && !ct.includes('text/html')) {
+        if (ct && !ct.toLowerCase().includes('text/html')) {
           // Non-HTML response (e.g. proxy error page) — skip scraping
           return `${modelName}:cloud`;
         }

@@ -172,15 +172,6 @@ export async function handleConnectionTestFailure(
   const window = windowApi || vscode.window;
   const commands = commandsApi || vscode.commands;
 
-  reportError(
-    undefined,
-    `Connection test failed for ${host}`,
-    new Error(`Cannot connect to Ollama server at ${host}`),
-    {
-      showToUser: false,
-    },
-  );
-
   const selection = await window.showErrorMessage(
     `Cannot connect to Ollama server at ${host}. Please check your ollama.host setting and authentication token.`,
     'Open Settings',
