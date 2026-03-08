@@ -121,9 +121,31 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.ollama
-          key: ${{ runner.os }}-ollama-smollm-360m-qwen3.5-0.8b
+          key: ${{ runner.os }}-ollama-smollm-qwen35
           restore-keys: |
             ${{ runner.os }}-ollama-
+
+      - name: Check Ollama Cloud auth
+        id: cloud-auth
+        run: |
+          if [ -z "$OLLAMA_API_KEY" ]; then
+            echo "No OLLAMA_API_KEY secret configured — cloud tests will be skipped"
+            echo "has_cloud_key=false" >> "$GITHUB_OUTPUT"
+          else
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer $OLLAMA_API_KEY" \
+              http://localhost:11434/api/tags)
+            if [ "$STATUS" = "200" ]; then
+              echo "Ollama Cloud auth succeeded"
+              echo "has_cloud_key=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::Ollama Cloud auth failed (HTTP $STATUS) — cloud tests will be skipped"
+              echo "has_cloud_key=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+        env:
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+        shell: bash
 
       - name: Run integration tests
         run: xvfb-run -a ./node_modules/.bin/task integration-tests
@@ -131,7 +153,7 @@ jobs:
           CI: true
           OLLAMA_TEST_MODEL: smollm:360m
           OLLAMA_TEST_TOOL_MODEL: qwen3.5:0.8b
-          OLLAMA_CLOUD_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_CLOUD_API_KEY: ${{ steps.cloud-auth.outputs.has_cloud_key == 'true' && secrets.OLLAMA_API_KEY || '' }}
 
       - name: Upload test artifacts on failure
         if: failure()
