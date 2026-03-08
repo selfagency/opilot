@@ -6,9 +6,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g. 1.2.3)'
+        description: 'Version to release (e.g. 1.2.3 or 1.2.3-rc.1)'
         required: true
         type: string
+      pre_release:
+        description: 'Publish as pre-release'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,6 +36,7 @@ jobs:
     outputs:
       release_tag: ${{ steps.tag.outputs.release_tag }}
       ready: ${{ steps.tag.outputs.ready }}
+      is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
 
     steps:
       - name: Resolve tag from successful workflow runs
@@ -100,8 +106,10 @@ jobs:
             // Tests are verified by the local release script before tagging.
             // We only need to confirm the tag points to the current main HEAD.
             core.info(`Release tag detected: ${tagName} on latest main commit ${mainSha}; tag verified.`);
+            const isPrerelease = tagName.includes('-') || (context.eventName === 'workflow_dispatch' && '${{ inputs.pre_release }}' === 'true');
             core.setOutput('release_tag', tagName);
             core.setOutput('ready', 'true');
+            core.setOutput('is_prerelease', String(isPrerelease));
 
   release:
     name: Build and Release
@@ -198,13 +206,20 @@ jobs:
           body_path: release-notes.md
           files: 'opilot.vsix'
           draft: false
-          prerelease: false
+          prerelease: ${{ needs.detect-tag.outputs.is_prerelease == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Publish pre-release to VS Code Marketplace
+        id: publish_vsce_pre
+        if: needs.detect-tag.outputs.is_prerelease == 'true'
+        run: pnpm dlx @vscode/vsce publish --pre-release --packagePath opilot.vsix -p ${{ secrets.VSCE_PAT }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
       - name: Create VS Code Marketplace deployment
         id: deploy_vsce
-        if: "!contains(needs.detect-tag.outputs.release_tag, '-')"
+        if: needs.detect-tag.outputs.is_prerelease != 'true'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -223,13 +238,13 @@ jobs:
 
       - name: Publish to VS Code Marketplace
         id: publish_vsce
-        if: "!contains(needs.detect-tag.outputs.release_tag, '-')"
+        if: needs.detect-tag.outputs.is_prerelease != 'true'
         run: pnpm dlx @vscode/vsce publish --packagePath opilot.vsix -p ${{ secrets.VSCE_PAT }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Update VS Code Marketplace deployment status
-        if: "always() && !contains(needs.detect-tag.outputs.release_tag, '-') && steps.deploy_vsce.outputs.deployment_id != ''"
+        if: always() && needs.detect-tag.outputs.is_prerelease != 'true' && steps.deploy_vsce.outputs.deployment_id != ''
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -247,7 +262,7 @@ jobs:
 
       - name: Create Open VSX deployment
         id: deploy_ovsx
-        if: "!contains(needs.detect-tag.outputs.release_tag, '-')"
+        if: needs.detect-tag.outputs.is_prerelease != 'true'
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -266,13 +281,13 @@ jobs:
 
       - name: Publish to Open VSX
         id: publish_ovsx
-        if: "!contains(needs.detect-tag.outputs.release_tag, '-')"
+        if: needs.detect-tag.outputs.is_prerelease != 'true'
         run: pnpm dlx ovsx publish opilot.vsix -p ${{ secrets.OVSX_PAT }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
       - name: Update Open VSX deployment status
-        if: "always() && !contains(needs.detect-tag.outputs.release_tag, '-') && steps.deploy_ovsx.outputs.deployment_id != ''"
+        if: always() && needs.detect-tag.outputs.is_prerelease != 'true' && steps.deploy_ovsx.outputs.deployment_id != ''
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

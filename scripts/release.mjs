@@ -22,9 +22,18 @@ const isPreRelease = argv['pre-release'] === true || argv.p === true;
 if (!version || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
   console.error(
     isPreRelease
-      ? 'Usage: pnpm run release:pre <version>   (e.g. pnpm run release:pre 1.0.5)'
+      ? 'Usage: pnpm run release:pre <version>   (e.g. pnpm run release:pre 1.0.5-rc.1)'
       : 'Usage: pnpm release <version>   (e.g. pnpm release 1.0.5)',
   );
+  process.exit(1);
+}
+
+if (isPreRelease && !version.includes('-')) {
+  console.error('❌ Pre-release versions must include a semver pre-release suffix (e.g. 0.1.0-rc.1).');
+  process.exit(1);
+}
+if (!isPreRelease && version.includes('-')) {
+  console.error('❌ Use "task prerelease" for pre-release versions (versions with a semver suffix).');
   process.exit(1);
 }
 
@@ -156,13 +165,6 @@ async function main() {
       console.error('❌ No GitHub token found. Set GH_TOKEN/GITHUB_TOKEN or run: gh auth login');
       process.exit(1);
     }
-  }
-
-  // Resolve VS Code Marketplace PAT.
-  const vscePat = process.env.VSCE_PAT ?? '';
-  if (!vscePat) {
-    console.error('❌ No marketplace token found. Set VSCE_PAT to your VS Code Marketplace personal access token.');
-    process.exit(1);
   }
 
   const octokit = new Octokit({ auth: githubToken });
@@ -304,18 +306,6 @@ async function main() {
   commitLocal = false;
 
   const headSha = runGit(['rev-parse', 'HEAD']).stdout.trim();
-
-  if (isPreRelease) {
-    // --- Pre-release: publish directly, no tag or GitHub release -------------
-
-    console.log(`📦 Publishing pre-release ${tag} to VS Code Marketplace...`);
-    await $`pnpm dlx @vscode/vsce package --no-dependencies`;
-    await $`pnpm dlx @vscode/vsce publish --pre-release --no-dependencies --pat ${vscePat}`;
-
-    releaseDone = true;
-    console.log(`✅ Pre-release complete: ${tag} published to VS Code Marketplace.`);
-    return;
-  }
 
   // --- Wait for required workflows (sequential to avoid concurrent-spinner visual corruption) ------
 
