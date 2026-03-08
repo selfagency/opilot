@@ -117,19 +117,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ollama-
 
-      - name: Pull Ollama models
-        run: |
-          ollama pull smollm:360m
-          ollama pull qwen3.5:0.8b
-        shell: bash
-
       - name: Run integration tests
         run: xvfb-run -a ./node_modules/.bin/task integration-tests
         env:
           CI: true
           OLLAMA_TEST_MODEL: smollm:360m
           OLLAMA_TEST_TOOL_MODEL: qwen3.5:0.8b
-          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OLLAMA_CLOUD_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 
       - name: Upload test artifacts on failure
