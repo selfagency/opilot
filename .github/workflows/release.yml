@@ -197,7 +197,11 @@ jobs:
 
       - name: Package extension
         run: |
-          pnpm dlx @vscode/vsce package --no-dependencies --out opilot.vsix
+          if [ "${{ needs.detect-tag.outputs.is_prerelease }}" = "true" ]; then
+            pnpm dlx @vscode/vsce package --pre-release --no-dependencies --out opilot.vsix
+          else
+            pnpm dlx @vscode/vsce package --no-dependencies --out opilot.vsix
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
