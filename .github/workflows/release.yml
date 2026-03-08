@@ -214,12 +214,91 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Create VS Code Marketplace deployment (pre-release)
+        id: deploy_vsce_pre
+        if: needs.detect-tag.outputs.is_prerelease == 'true'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.detect-tag.outputs.release_tag }}',
+              environment: 'vscode-marketplace',
+              description: 'Publish pre-release to VS Code Marketplace',
+              auto_merge: false,
+              required_contexts: [],
+              production_environment: false,
+            });
+            core.setOutput('deployment_id', deployment.data.id);
+
       - name: Publish pre-release to VS Code Marketplace
         id: publish_vsce_pre
         if: needs.detect-tag.outputs.is_prerelease == 'true'
         run: pnpm dlx @vscode/vsce publish --pre-release --packagePath opilot.vsix -p ${{ secrets.VSCE_PAT }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Update VS Code Marketplace deployment status (pre-release)
+        if: always() && needs.detect-tag.outputs.is_prerelease == 'true' && steps.deploy_vsce_pre.outputs.deployment_id != ''
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const outcome = '${{ steps.publish_vsce_pre.outcome }}';
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.deploy_vsce_pre.outputs.deployment_id }},
+              state: outcome === 'success' ? 'success' : 'failure',
+              description: `VS Code Marketplace pre-release publish ${outcome}`,
+              environment_url: 'https://marketplace.visualstudio.com/items?itemName=selfagency.opilot',
+              auto_inactive: false,
+            });
+
+      - name: Create Open VSX deployment (pre-release)
+        id: deploy_ovsx_pre
+        if: needs.detect-tag.outputs.is_prerelease == 'true'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.detect-tag.outputs.release_tag }}',
+              environment: 'open-vsx',
+              description: 'Publish pre-release to Open VSX Registry',
+              auto_merge: false,
+              required_contexts: [],
+              production_environment: false,
+            });
+            core.setOutput('deployment_id', deployment.data.id);
+
+      - name: Publish pre-release to Open VSX
+        id: publish_ovsx_pre
+        if: needs.detect-tag.outputs.is_prerelease == 'true'
+        run: pnpm dlx ovsx publish opilot.vsix --pre-release -p ${{ secrets.OVSX_PAT }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Update Open VSX deployment status (pre-release)
+        if: always() && needs.detect-tag.outputs.is_prerelease == 'true' && steps.deploy_ovsx_pre.outputs.deployment_id != ''
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const outcome = '${{ steps.publish_ovsx_pre.outcome }}';
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.deploy_ovsx_pre.outputs.deployment_id }},
+              state: outcome === 'success' ? 'success' : 'failure',
+              description: `Open VSX pre-release publish ${outcome}`,
+              environment_url: 'https://open-vsx.org/extension/selfagency/opilot',
+              auto_inactive: false,
+            });
 
       - name: Create VS Code Marketplace deployment
         id: deploy_vsce
