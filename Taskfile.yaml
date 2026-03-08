@@ -94,7 +94,7 @@ tasks:
     desc: Create a pre-release
     deps: [compile]
     cmds:
-      - ./node_modules/.bin/zx ./scripts/release.mjs --pre-release {{.CLI_ARGS}}
+      - ./node_modules/.bin/zx ./scripts/release.mjs --pre-release -- {{.CLI_ARGS}}
     silent: false
 
   release:
