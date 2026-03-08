@@ -824,6 +824,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       }
 
       const isConnectionError = error instanceof TypeError && error.message.includes('fetch failed');
+      // Security: `error.message` comes from Ollama `ResponseError` (the server's
+      // response body) or from Node `TypeError`s for network failures.  Auth tokens
+      // are only ever in HTTP *request* headers and are never echoed in server
+      // responses or Node error messages, so surfacing `error.message` here is safe.
       const message = isConnectionError
         ? 'Cannot reach Ollama server — check that it is running and accessible.'
         : error instanceof Error
@@ -1059,7 +1063,15 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   }
 
   /**
-   * Manage authentication token with status display and clear option
+   * Manage authentication token with status display and clear option.
+   *
+   * Security notes:
+   * - The token input uses `password: true` so it is masked in the VS Code input box.
+   * - The token is stored via `context.secrets` (VS Code SecretStorage, encrypted at
+   *   rest) and never written to the output channel (only "updated"/"cleared" status
+   *   messages are logged).
+   * - Changing the token immediately rebuilds the Ollama client and clears the model
+   *   cache so subsequent requests use the new credentials.
    */
   async setAuthToken(): Promise<void> {
     const existingToken = await this.context.secrets.get('ollama-auth-token');

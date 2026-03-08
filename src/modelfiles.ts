@@ -80,6 +80,18 @@ interface ParsedModelfile {
  * Parse Modelfile content into structured fields for the Ollama create API.
  *
  * Supports multi-line values delimited by triple-quotes (`"""`).
+ *
+ * Security model:
+ * - All field values (`FROM`, `SYSTEM`, `TEMPLATE`, etc.) are treated as opaque
+ *   strings and forwarded to the locally running Ollama server via its create API.
+ *   The extension does not interpret or execute these values directly, so template
+ *   injection and path traversal attacks in this layer affect only the user's own
+ *   local Ollama server — which runs with the user's own OS permissions.
+ * - The `FROM` and `ADAPTER` fields may contain file system paths. The extension
+ *   passes these verbatim to Ollama; it does not open or read those files itself.
+ * - `PARAMETER` values are coerced to numbers when numeric; only the PARAMETER_DOCS
+ *   key names (not the values) are used for hover documentation. No user-supplied
+ *   parameter value reaches any context where injection is possible.
  */
 export function parseModelfile(content: string): ParsedModelfile {
   const result: ParsedModelfile = {};

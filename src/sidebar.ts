@@ -345,6 +345,15 @@ function buildCapabilityLines(caps: {
   return badges.join(' | ');
 }
 
+/**
+ * Build the ollama.com library URL for a model name.
+ *
+ * Security: each path segment is percent-encoded via `encodeURIComponent` to
+ * prevent path traversal (e.g., a model name containing `../`) and HTTP header
+ * injection. The base domain is always `https://ollama.com/library/`, so the
+ * URL cannot be redirected to an attacker-controlled host regardless of the
+ * model name value.
+ */
 function getLibraryModelUrl(modelName: string): string {
   const encoded = modelName
     .split('/')

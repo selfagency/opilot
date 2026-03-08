@@ -2,7 +2,19 @@ import { Ollama } from 'ollama';
 import { ExtensionContext, workspace } from 'vscode';
 
 /**
- * Get or create an Ollama client instance configured with the current settings
+ * Get or create an Ollama client instance configured with the current settings.
+ *
+ * Security notes:
+ * - The auth token is retrieved from VS Code's `SecretStorage` API (encrypted at
+ *   rest) and injected only as an `Authorization: Bearer` HTTP request header.
+ * - The token is never logged and cannot appear in Ollama error messages:
+ *   the Ollama JS library surfaces `ResponseError` objects containing the server
+ *   response body (which does not echo back request headers), and network-level
+ *   `TypeError` messages that contain no credentials.
+ * - The `host` value is user-controlled via `ollama.host` setting. If a user
+ *   embeds credentials in the URL (e.g. `http://user:pass@host`) the URL will
+ *   appear in connection-failure error dialogs — users should use the token
+ *   mechanism instead.
  */
 export async function getOllamaClient(context: ExtensionContext): Promise<Ollama> {
   const config = workspace.getConfiguration('ollama');
