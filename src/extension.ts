@@ -579,25 +579,32 @@ export async function handleChatRequest(
           }
 
           xmlConversation.push({ role: 'assistant', content: responseText });
-          for (const xmlToolCall of xmlToolCalls) {
-            let resultText: string;
-            try {
-              const result = await vscode.lm.invokeTool(
-                xmlToolCall.name,
-                { input: xmlToolCall.parameters, toolInvocationToken: request.toolInvocationToken! },
-                token,
-              );
-              resultText = result.content
-                .filter((c): c is vscode.LanguageModelTextPart => c instanceof vscode.LanguageModelTextPart)
-                .map(c => c.value)
-                .join('');
-            } catch (invokeError) {
-              resultText = invokeError instanceof Error ? invokeError.message : 'Tool execution failed';
-            }
-            // Use 'user' role for tool results in the XML fallback path — models that fail
-            // JSON function calling have no training data for the 'tool' role either.
-            xmlConversation.push({ role: 'user', content: `[Tool result: ${xmlToolCall.name}]\n${resultText}` });
+          // The XML system prompt instructs models to call ONE tool per response.
+          // If a model emits multiple tool tags, execute only the first to honour
+          // that contract and avoid confusing follow-up context.
+          const [xmlToolCall] = xmlToolCalls;
+          if (xmlToolCalls.length > 1) {
+            outputChannel?.warn(
+              `[client] XML fallback extracted ${xmlToolCalls.length} tool calls; executing only the first (${xmlToolCall.name}) to comply with 'ONE tool per response' contract.`,
+            );
           }
+          let resultText: string;
+          try {
+            const result = await vscode.lm.invokeTool(
+              xmlToolCall.name,
+              { input: xmlToolCall.parameters, toolInvocationToken: request.toolInvocationToken! },
+              token,
+            );
+            resultText = result.content
+              .filter((c): c is vscode.LanguageModelTextPart => c instanceof vscode.LanguageModelTextPart)
+              .map(c => c.value)
+              .join('');
+          } catch (invokeError) {
+            resultText = invokeError instanceof Error ? invokeError.message : 'Tool execution failed';
+          }
+          // Use 'user' role for tool results in the XML fallback path — models that fail
+          // JSON function calling have no training data for the 'tool' role either.
+          xmlConversation.push({ role: 'user', content: `[Tool result: ${xmlToolCall.name}]\n${resultText}` });
 
           correctedOnce = false;
         }

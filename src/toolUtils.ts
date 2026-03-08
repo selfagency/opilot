@@ -91,22 +91,31 @@ export function extractXmlToolCalls(text: string, knownTools: Set<string>): XmlT
   const cleaned = cleanXml(text);
   const results: XmlToolCall[] = [];
 
-  for (const toolName of knownTools) {
-    const escapedName = toolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Allow optional whitespace / attributes on the opening tag and optional
-    // whitespace before > on the closing tag — models sometimes emit extra
-    // spaces or attributes that would otherwise cause a silent parse failure.
-    const toolPattern = new RegExp(`<${escapedName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escapedName}\\s*>`, 'g');
+  if (knownTools.size === 0) {
+    return results;
+  }
 
-    for (const toolMatch of cleaned.matchAll(toolPattern)) {
-      const inner = toolMatch[1]; // capture group 1 = inner content
-      const params: Record<string, string> = {};
-      const paramPattern = /<([^/\s>]+)>([\s\S]*?)<\/\1>/g;
-      for (const paramMatch of inner.matchAll(paramPattern)) {
-        params[paramMatch[1]] = paramMatch[2].trim();
-      }
-      results.push({ name: toolName, parameters: params });
+  // Single-pass scan: one regex captures the tool name (group 1) and inner
+  // content (group 2), then we filter by knownTools.  This keeps parsing cost
+  // proportional to response size (not O(toolCount × responseLength)) and
+  // preserves left-to-right call order even when multiple different tools appear.
+  // Allow optional whitespace / attributes on the opening tag and optional
+  // whitespace before > on the closing tag — models sometimes emit extra
+  // spaces or attributes that would otherwise cause a silent parse failure.
+  const toolPattern = /<([A-Za-z0-9_:-]+)(?:\s[^>]*)?>([\s\S]*?)<\/\1\s*>/g;
+
+  for (const toolMatch of cleaned.matchAll(toolPattern)) {
+    const toolName = toolMatch[1];
+    if (!knownTools.has(toolName)) {
+      continue;
     }
+    const inner = toolMatch[2]; // capture group 2 = inner content
+    const params: Record<string, string> = {};
+    const paramPattern = /<([^/\s>]+)>([\s\S]*?)<\/\1>/g;
+    for (const paramMatch of inner.matchAll(paramPattern)) {
+      params[paramMatch[1]] = paramMatch[2].trim();
+    }
+    results.push({ name: toolName, parameters: params });
   }
 
   return results;
