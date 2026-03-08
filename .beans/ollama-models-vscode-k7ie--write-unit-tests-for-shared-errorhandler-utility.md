@@ -1,11 +1,11 @@
 ---
 # ollama-models-vscode-k7ie
 title: Write unit tests for shared errorHandler utility
-status: todo
+status: in-progress
 type: task
 priority: low
 created_at: 2026-03-08T16:41:44Z
-updated_at: 2026-03-08T16:41:44Z
+updated_at: 2026-03-08T16:54:42Z
 ---
 
 Write unit tests for the shared `reportError()` utility in `src/errorHandler.ts` to validate its logging and user-notification behavior.
