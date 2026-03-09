@@ -21,6 +21,7 @@
     "tools",
     "vision"
   ],
+  "homepage": "https://opilot.self.agency",
   "license": "MIT",
   "author": {
     "name": "Daniel Sieradski",
