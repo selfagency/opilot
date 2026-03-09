@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
-import { getCloudOllamaClient, getOllamaClient, testConnection } from './client.js';
+import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
@@ -15,6 +15,8 @@ import {
   splitLeadingXmlContextBlocks,
 } from './formatting';
 import { registerModelfileManager } from './modelfiles.js';
+import { chatCompletionsOnce, chatCompletionsStream } from './openaiCompat.js';
+import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openaiCompatMapping.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
 import {
@@ -30,6 +32,165 @@ let builtInOllamaConflictPromptInProgress = false;
 
 function toRuntimeModelId(modelId: string): string {
   return modelId.startsWith(PROVIDER_MODEL_ID_PREFIX) ? modelId.slice(PROVIDER_MODEL_ID_PREFIX.length) : modelId;
+}
+
+function mapOpenAiToolCallsToOllamaLike(toolCalls: unknown):
+  | Array<{
+      id?: string;
+      function?: {
+        name?: string;
+        arguments?: Record<string, unknown>;
+      };
+    }>
+  | undefined {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return undefined;
+  }
+
+  const mapped: Array<{
+    id?: string;
+    function?: {
+      name?: string;
+      arguments?: Record<string, unknown>;
+    };
+  }> = [];
+
+  for (const call of toolCalls) {
+    if (!call || typeof call !== 'object') {
+      continue;
+    }
+
+    const typed = call as {
+      id?: unknown;
+      function?: {
+        name?: unknown;
+        arguments?: unknown;
+      };
+    };
+
+    let parsedArgs: Record<string, unknown> = {};
+    if (typeof typed.function?.arguments === 'string' && typed.function.arguments.trim()) {
+      try {
+        const parsed = JSON.parse(typed.function.arguments);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          parsedArgs = parsed as Record<string, unknown>;
+        }
+      } catch {
+        parsedArgs = {};
+      }
+    }
+
+    mapped.push({
+      id: typeof typed.id === 'string' ? typed.id : undefined,
+      function: {
+        name: typeof typed.function?.name === 'string' ? typed.function.name : undefined,
+        arguments: parsedArgs,
+      },
+    });
+  }
+
+  return mapped;
+}
+
+async function openAiCompatStreamChat(params: {
+  modelId: string;
+  messages: Message[];
+  tools?: Tool[];
+  shouldThink: boolean;
+  effectiveClient: Ollama;
+  extensionContext?: vscode.ExtensionContext;
+  signal?: AbortSignal;
+}): Promise<AsyncIterable<ChatResponse>> {
+  try {
+    const baseUrl = getOllamaHost();
+    const authToken = params.extensionContext ? await getOllamaAuthToken(params.extensionContext) : undefined;
+
+    const stream = chatCompletionsStream({
+      baseUrl,
+      authToken,
+      signal: params.signal,
+      request: {
+        model: params.modelId,
+        messages: ollamaMessagesToOpenAICompat(params.messages),
+        tools: ollamaToolsToOpenAICompat(params.tools),
+        ...(params.shouldThink ? { think: true } : {}),
+      },
+    });
+
+    return (async function* (): AsyncGenerator<ChatResponse> {
+      for await (const chunk of stream) {
+        const choice = chunk.choices?.[0];
+        const delta = choice?.delta;
+        const content = typeof delta?.content === 'string' ? delta.content : '';
+        const mappedToolCalls = mapOpenAiToolCallsToOllamaLike(delta?.tool_calls);
+
+        yield {
+          message: {
+            role: 'assistant',
+            content,
+            ...(mappedToolCalls ? { tool_calls: mappedToolCalls } : {}),
+          },
+          done: choice?.finish_reason != null,
+        } as ChatResponse;
+      }
+    })();
+  } catch {
+    return params.effectiveClient.chat({
+      model: params.modelId,
+      messages: params.messages,
+      stream: true,
+      ...(params.tools ? { tools: params.tools } : {}),
+      ...(params.shouldThink ? { think: true } : {}),
+    });
+  }
+}
+
+async function openAiCompatChatOnce(params: {
+  modelId: string;
+  messages: Message[];
+  tools?: Tool[];
+  shouldThink: boolean;
+  effectiveClient: Ollama;
+  extensionContext?: vscode.ExtensionContext;
+  signal?: AbortSignal;
+}): Promise<ChatResponse> {
+  try {
+    const baseUrl = getOllamaHost();
+    const authToken = params.extensionContext ? await getOllamaAuthToken(params.extensionContext) : undefined;
+
+    const response = await chatCompletionsOnce({
+      baseUrl,
+      authToken,
+      signal: params.signal,
+      request: {
+        model: params.modelId,
+        messages: ollamaMessagesToOpenAICompat(params.messages),
+        tools: ollamaToolsToOpenAICompat(params.tools),
+        ...(params.shouldThink ? { think: true } : {}),
+      },
+    });
+
+    const choice = response.choices?.[0];
+    const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
+    const mappedToolCalls = mapOpenAiToolCallsToOllamaLike(choice?.message?.tool_calls);
+
+    return {
+      message: {
+        role: 'assistant',
+        content,
+        ...(mappedToolCalls ? { tool_calls: mappedToolCalls } : {}),
+      },
+      done: true,
+    } as ChatResponse;
+  } catch {
+    return (await params.effectiveClient.chat({
+      model: params.modelId,
+      messages: params.messages,
+      stream: false,
+      ...(params.tools ? { tools: params.tools } : {}),
+      ...(params.shouldThink ? { think: true } : {}),
+    })) as ChatResponse;
+  }
 }
 
 // normalizeToolParameters/isToolsNotSupportedError moved to src/toolUtils.ts
@@ -439,13 +600,14 @@ export async function handleChatRequest(
 
           let roundResponse: ChatResponse;
           try {
-            roundResponse = (await effectiveClient.chat({
-              model: modelId,
+            roundResponse = await openAiCompatChatOnce({
+              modelId,
               messages: ollamaMessages as Message[],
-              stream: false,
               tools: ollamaTools,
-              ...(shouldThinkInToolLoop ? { think: true } : {}),
-            })) as ChatResponse;
+              shouldThink: shouldThinkInToolLoop,
+              effectiveClient,
+              extensionContext,
+            });
           } catch (toolError) {
             if (isToolsNotSupportedError(toolError)) {
               outputChannel?.warn(
@@ -519,11 +681,13 @@ export async function handleChatRequest(
         for (let xmlRound = 0; xmlRound < MAX_XML_ROUNDS; xmlRound++) {
           if (token.isCancellationRequested) return;
 
-          const xmlResponse = (await effectiveClient.chat({
-            model: modelId,
+          const xmlResponse = await openAiCompatChatOnce({
+            modelId,
             messages: xmlConversation,
-            stream: false,
-          })) as ChatResponse;
+            shouldThink: false,
+            effectiveClient,
+            extensionContext,
+          });
 
           const responseText = xmlResponse.message.content ?? '';
           const xmlToolCalls = extractXmlToolCalls(responseText, toolNames);
@@ -585,11 +749,12 @@ export async function handleChatRequest(
       let response: AsyncIterable<ChatResponse>;
 
       try {
-        response = await effectiveClient.chat({
-          model: modelId,
+        response = await openAiCompatStreamChat({
+          modelId,
           messages: ollamaMessages as Message[],
-          stream: true,
-          ...(shouldThink ? { think: true } : {}),
+          shouldThink,
+          effectiveClient,
+          extensionContext,
         });
       } catch (chatError) {
         const supportsThinkingError =
@@ -599,18 +764,22 @@ export async function handleChatRequest(
           chatError.message.toLowerCase().includes('does not support thinking');
 
         if (supportsThinkingError) {
-          response = await effectiveClient.chat({
-            model: modelId,
+          response = await openAiCompatStreamChat({
+            modelId,
             messages: ollamaMessages as Message[],
-            stream: true,
+            shouldThink: false,
+            effectiveClient,
+            extensionContext,
           });
         } else if (isToolsNotSupportedError(chatError)) {
           outputChannel?.warn(`[client] model ${modelId} rejected tools; retrying stream without tools/thinking`);
           shouldThink = false;
-          response = await effectiveClient.chat({
-            model: modelId,
+          response = await openAiCompatStreamChat({
+            modelId,
             messages: ollamaMessages as Message[],
-            stream: true,
+            shouldThink: false,
+            effectiveClient,
+            extensionContext,
           });
         } else {
           throw chatError;

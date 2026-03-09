@@ -1,6 +1,26 @@
 import { Ollama } from 'ollama';
 import { ExtensionContext, workspace } from 'vscode';
 
+export function getOllamaHost(): string {
+  const config = workspace.getConfiguration('ollama');
+  return config.get<string>('host') || 'http://localhost:11434';
+}
+
+export async function getOllamaAuthToken(context: ExtensionContext): Promise<string | undefined> {
+  return context.secrets.get('ollama-auth-token');
+}
+
+export async function getOllamaAuthHeaders(context: ExtensionContext): Promise<Record<string, string> | undefined> {
+  const authToken = await getOllamaAuthToken(context);
+  if (!authToken) {
+    return undefined;
+  }
+
+  return {
+    Authorization: `Bearer ${authToken}`,
+  };
+}
+
 /**
  * Get or create an Ollama client instance configured with the current settings.
  *
@@ -17,9 +37,8 @@ import { ExtensionContext, workspace } from 'vscode';
  *   mechanism instead.
  */
 export async function getOllamaClient(context: ExtensionContext): Promise<Ollama> {
-  const config = workspace.getConfiguration('ollama');
-  const host = config.get<string>('host') || 'http://localhost:11434';
-  const authToken = await context.secrets.get('ollama-auth-token');
+  const host = getOllamaHost();
+  const authToken = await getOllamaAuthToken(context);
 
   const clientConfig: { host: string; headers?: Record<string, string> } = {
     host,
