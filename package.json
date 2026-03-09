@@ -50,7 +50,7 @@
     "saxophone": "^0.8.0"
   },
   "devDependencies": {
-    "@go-task/cli": "^3.49.0",
+    "@go-task/cli": "^3.49.1",
     "@octokit/rest": "^22.0.1",
     "@types/node": "^25.3.5",
     "@types/vscode": "^1.109.0",
@@ -634,7 +634,7 @@
   ],
   "icon": "logo.png",
   "engines": {
-    "vscode": "^1.109.0"
+    "vscode": "^1.111.0"
   },
   "packageManager": "pnpm@10.31.0+sha512.e3927388bfaa8078ceb79b748ffc1e8274e84d75163e67bc22e06c0d3aed43dd153151cbf11d7f8301ff4acb98c68bdc5cadf6989532801ffafe3b3e4a63c268",
   "pnpm": {

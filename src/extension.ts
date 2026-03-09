@@ -30,6 +30,8 @@ import {
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
+/** VS Code Autopilot signals task completion by having the model call this tool. */
+const TASK_COMPLETE_TOOL_NAME = 'task_complete';
 let builtInOllamaConflictPromptInProgress = false;
 
 export function toRuntimeModelId(modelId: string): string {
@@ -693,8 +695,25 @@ export async function handleChatRequest(
           });
 
           // Invoke each tool via VS Code's tool API and append result messages.
+          let calledTaskComplete = false;
           for (const toolCall of toolCalls) {
             const toolName = toolCall.function.name;
+            // task_complete is VS Code's Autopilot signal — invoke it for bookkeeping
+            // then break the loop; no tool-result message is needed.
+            if (toolName === TASK_COMPLETE_TOOL_NAME) {
+              calledTaskComplete = true;
+              try {
+                await vscode.lm.invokeTool(
+                  toolName,
+                  {
+                    input: toolCall.function.arguments as Record<string, unknown>,
+                    toolInvocationToken: request.toolInvocationToken!,
+                  },
+                  token,
+                );
+              } catch { /* ignore — task_complete failure should not block response */ }
+              continue;
+            }
             const toolInput = toolCall.function.arguments;
             let resultText: string;
             try {
@@ -716,6 +735,14 @@ export async function handleChatRequest(
               tool_name: toolName,
               tool_call_id: (toolCall as { id?: string }).id,
             } as never);
+          }
+
+          // task_complete signals the agent is done — display any final content and exit.
+          if (calledTaskComplete) {
+            if (roundResponse.message.content) {
+              stream.markdown(sanitizeNonStreamingModelOutput(roundResponse.message.content));
+            }
+            return;
           }
         }
         // MAX_TOOL_ROUNDS reached — fall through to the streaming pass below.
@@ -991,10 +1018,22 @@ export async function handleChatRequest(
         }
       }
 
-      if (pendingToolCalls.length === 0 || !request.toolInvocationToken) {
-        // No more tool calls — stream any buffered text and finish.
+      const hasTaskComplete = pendingToolCalls.some(tc => tc.name === TASK_COMPLETE_TOOL_NAME);
+      if (pendingToolCalls.length === 0 || !request.toolInvocationToken || hasTaskComplete) {
+        // No more tool calls (or task_complete was invoked) — stream buffered text and finish.
         for (const part of assistantTextParts) {
           stream.markdown(part.value);
+        }
+        // Invoke task_complete for VS Code Autopilot bookkeeping.
+        if (hasTaskComplete && request.toolInvocationToken) {
+          const tc = pendingToolCalls.find(c => c.name === TASK_COMPLETE_TOOL_NAME)!;
+          try {
+            await vscode.lm.invokeTool(
+              TASK_COMPLETE_TOOL_NAME,
+              { input: tc.input as Record<string, unknown>, toolInvocationToken: request.toolInvocationToken },
+              token,
+            );
+          } catch { /* ignore */ }
         }
         break;
       }
