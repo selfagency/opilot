@@ -1,11 +1,11 @@
 ---
 # ollama-models-vscode-xu20
 title: Fix XML context tags leaking into chat output
-status: in-progress
+status: completed
 type: bug
 priority: high
 created_at: 2026-03-08T23:39:18Z
-updated_at: 2026-03-08T23:39:18Z
+updated_at: 2026-03-09T01:23:26Z
 ---
 
 ## Todo
