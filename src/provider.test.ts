@@ -580,8 +580,10 @@ describe('OllamaChatModelProvider error handling', () => {
     (provider as unknown as { clearModelCache: () => void }).clearModelCache?.();
 
     provider.prefetchModels();
-    // Wait a tick for the async chain to settle
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Wait deterministically for the prefetch to call show()
+    await vi.waitFor(() => {
+      expect(show).toHaveBeenCalled();
+    });
 
     expect(list).toHaveBeenCalled();
     expect(show).toHaveBeenCalledWith({ model: 'deepseek-r1:8b' });
@@ -1273,7 +1275,7 @@ describe('OllamaChatModelProvider chat response', () => {
   });
 
   it('retries without think when model returns ResponseError "does not support thinking"', async () => {
-    const thinkingError = Object.assign(new Error('"qwen3:latest" does not support thinking'), {
+    const thinkingError = Object.assign(new Error('"lfm2.5-thinking:1.2b" does not support thinking'), {
       name: 'ResponseError',
       status_code: 400,
     });
@@ -1299,8 +1301,8 @@ describe('OllamaChatModelProvider chat response', () => {
     const token = { isCancellationRequested: false };
 
     const model = {
-      id: 'qwen3:latest',
-      name: 'Qwen3 Latest',
+      id: 'lfm2.5-thinking:1.2b',
+      name: 'LFM 2.5 Thinking 1.2B',
       family: '🦙 Ollama',
       version: '1.0.0',
       maxInputTokens: 100,
@@ -1322,7 +1324,7 @@ describe('OllamaChatModelProvider chat response', () => {
       token as unknown as CancellationToken,
     );
 
-    // First call should have used think: true (qwen3 matches the regex)
+    // First call should have used think: true (lfm2.5-thinking matches the regex)
     expect(chat).toHaveBeenCalledTimes(2);
     expect(chat.mock.calls[0]?.[0]?.think).toBe(true);
     // Second call (retry) should not pass think
@@ -1365,8 +1367,8 @@ describe('OllamaChatModelProvider chat response', () => {
     const token = { isCancellationRequested: false };
 
     const model = {
-      id: 'qwen3:cloud',
-      name: 'Qwen3 Cloud',
+      id: 'lfm2.5-thinking:cloud',
+      name: 'LFM 2.5 Thinking Cloud',
       family: '🦙 Ollama',
       version: '1.0.0',
       maxInputTokens: 100,
