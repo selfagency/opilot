@@ -1174,6 +1174,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             content: toolContent,
             tool_call_id: this.getOllamaToolCallId(part.callId),
           } as never);
+        } else {
+          const extractedText = this.extractTextFromUnknownInputPart(part);
+          if (extractedText) {
+            textContent += extractedText;
+          }
         }
       }
 
@@ -1215,6 +1220,46 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     }
 
     return ollamaMessages;
+  }
+
+  private extractTextFromUnknownInputPart(part: unknown): string {
+    if (typeof part === 'string') {
+      return part;
+    }
+    if (!part || typeof part !== 'object') {
+      return '';
+    }
+
+    const maybePart = part as Record<string, unknown>;
+
+    const directStringKeys = ['value', 'text', 'prompt', 'content'];
+    for (const key of directStringKeys) {
+      const value = maybePart[key];
+      if (typeof value === 'string') {
+        return value;
+      }
+    }
+
+    // Some parts can wrap text in nested objects (for example Markdown-like wrappers)
+    for (const key of directStringKeys) {
+      const nested = maybePart[key];
+      if (nested && typeof nested === 'object') {
+        const nestedValue = (nested as Record<string, unknown>).value;
+        if (typeof nestedValue === 'string') {
+          return nestedValue;
+        }
+      }
+    }
+
+    const toString = (part as { toString?: () => string }).toString;
+    if (typeof toString === 'function') {
+      const converted = toString.call(part);
+      if (converted && converted !== '[object Object]') {
+        return converted;
+      }
+    }
+
+    return '';
   }
 
   /**
