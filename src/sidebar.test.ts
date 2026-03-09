@@ -1457,6 +1457,141 @@ describe('Extracted command handlers', () => {
     expect(typeof handleLoginToCloud).toBe('function');
   });
 
+  it('handleLoginToCloud opens terminal and runs `ollama login`', async () => {
+    vi.resetModules();
+
+    const show = vi.fn();
+    const sendText = vi.fn();
+    const createTerminal = vi.fn(() => ({ show, sendText }));
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        createTerminal,
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(),
+        showInputBox: vi.fn(),
+      },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((value: string) => ({ value })) },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      Disposable: class {},
+    }));
+
+    const { handleLoginToCloud } = await import('./sidebar.js');
+    handleLoginToCloud();
+
+    expect(createTerminal).toHaveBeenCalledWith({ name: 'Ollama Cloud Login' });
+    expect(show).toHaveBeenCalledWith(true);
+    expect(sendText).toHaveBeenCalledWith('ollama login', true);
+  });
+
+  it('handleManageCloudApiKey delegates to login flow', async () => {
+    vi.resetModules();
+
+    const sendText = vi.fn();
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        createTerminal: vi.fn(() => ({ show: vi.fn(), sendText })),
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(),
+        showInputBox: vi.fn(),
+      },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((value: string) => ({ value })) },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      Disposable: class {},
+    }));
+
+    const { handleManageCloudApiKey } = await import('./sidebar.js');
+    await handleManageCloudApiKey({} as any, {} as any, {} as any);
+
+    expect(sendText).toHaveBeenCalledWith('ollama login', true);
+  });
+
+  it('handleOpenCloudModel opens external URL for cloud items only', async () => {
+    vi.resetModules();
+
+    const openExternal = vi.fn();
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        contextValue?: string;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      env: { openExternal },
+      Uri: { parse: vi.fn((value: string) => ({ value })) },
+      window: {
+        showInformationMessage: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showWarningMessage: vi.fn(),
+        withProgress: vi.fn(),
+        showInputBox: vi.fn(),
+      },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      Disposable: class {},
+    }));
+
+    const { handleOpenCloudModel, ModelTreeItem } = await import('./sidebar.js');
+    handleOpenCloudModel(new ModelTreeItem('llama3:cloud', 'cloud-stopped'));
+    handleOpenCloudModel(new ModelTreeItem('llama3', 'library-model'));
+
+    expect(openExternal).toHaveBeenCalledTimes(1);
+    const firstCall = openExternal.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    expect((firstCall[0] as { value: string }).value).toContain('https://ollama.com/library/');
+  });
+
   it('handlePullModel reports streaming progress via withProgress', async () => {
     vi.resetModules();
 

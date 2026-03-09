@@ -30,11 +30,11 @@ const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
 let builtInOllamaConflictPromptInProgress = false;
 
-function toRuntimeModelId(modelId: string): string {
+export function toRuntimeModelId(modelId: string): string {
   return modelId.startsWith(PROVIDER_MODEL_ID_PREFIX) ? modelId.slice(PROVIDER_MODEL_ID_PREFIX.length) : modelId;
 }
 
-function mapOpenAiToolCallsToOllamaLike(toolCalls: unknown):
+export function mapOpenAiToolCallsToOllamaLike(toolCalls: unknown):
   | Array<{
       id?: string;
       function?: {
@@ -195,7 +195,7 @@ async function openAiCompatChatOnce(params: {
 
 // normalizeToolParameters/isToolsNotSupportedError moved to src/toolUtils.ts
 
-function isSelectedAction(selection: unknown, actionLabel: string): boolean {
+export function isSelectedAction(selection: unknown, actionLabel: string): boolean {
   if (typeof selection === 'string') {
     return selection === actionLabel;
   }
@@ -300,7 +300,7 @@ export function handleConfigurationChange(
   onAutoStartChange?.(enabled);
 }
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
@@ -372,7 +372,7 @@ export async function handleConnectionTestFailure(
   }
 }
 
-function getOllamaServerLogPath(): string | null {
+export function getOllamaServerLogPath(): string | null {
   const platform = process.platform;
   if (platform === 'darwin') {
     return join(homedir(), '.ollama', 'logs', 'server.log');

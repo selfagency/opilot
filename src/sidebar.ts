@@ -34,7 +34,7 @@ const execAsync = promisify(exec);
  * loudly rather than silently producing empty results.
  * Silently passes when the header is absent (some servers omit it).
  */
-function assertHtmlContentType(response: Response): void {
+export function assertHtmlContentType(response: Response): void {
   const rawCt = response.headers?.get('content-type') ?? '';
   const normalizedCt = rawCt.toLowerCase();
   if (rawCt && !normalizedCt.includes('text/html')) {
@@ -134,7 +134,7 @@ function createThemeIcon(id: string): ThemeIcon {
 /** Atomic multi-token family prefixes that must not be split at dashes. */
 const FAMILY_EXCEPTIONS = ['gpt-oss', 'open-orca'];
 
-function extractModelFamily(modelName: string): string {
+export function extractModelFamily(modelName: string): string {
   // Remove everything after colon if present
   const baseName = modelName.split(':')[0];
 
@@ -177,7 +177,7 @@ function extractModelFamily(modelName: string): string {
 /**
  * Group models by their family name
  */
-function groupModelsByFamily(models: ModelTreeItem[]): Map<string, ModelTreeItem[]> {
+export function groupModelsByFamily(models: ModelTreeItem[]): Map<string, ModelTreeItem[]> {
   const groups = new Map<string, ModelTreeItem[]>();
 
   for (const model of models) {
@@ -194,7 +194,7 @@ function groupModelsByFamily(models: ModelTreeItem[]): Map<string, ModelTreeItem
 /**
  * Aggregate capabilities from all child models in a family
  */
-function aggregateFamilyCapabilities(familyModels: ModelTreeItem[]): {
+export function aggregateFamilyCapabilities(familyModels: ModelTreeItem[]): {
   thinking: boolean;
   tools: boolean;
   vision: boolean;
@@ -234,7 +234,7 @@ type RunningProcessInfo = {
   sizeVram?: number;
 };
 
-function formatRelativeFromNow(ms?: number): string {
+export function formatRelativeFromNow(ms?: number): string {
   if (typeof ms !== 'number') {
     return 'Not running';
   }
@@ -257,7 +257,7 @@ function formatRelativeFromNow(ms?: number): string {
   return `${secs} second${secs === 1 ? '' : 's'} from now`;
 }
 
-function formatSizeForTooltip(bytes?: number): string {
+export function formatSizeForTooltip(bytes?: number): string {
   if (!bytes) {
     return 'Unknown';
   }
@@ -266,7 +266,7 @@ function formatSizeForTooltip(bytes?: number): string {
   return `${gb.toFixed(1)} GB`;
 }
 
-function buildLocalModelTooltip(
+export function buildLocalModelTooltip(
   modelName: string,
   size?: number,
   running?: RunningProcessInfo,
@@ -330,7 +330,7 @@ function buildLocalModelTooltip(
   return lines.join('\n');
 }
 
-function buildCapabilityLines(caps: {
+export function buildCapabilityLines(caps: {
   thinking?: boolean;
   tools?: boolean;
   vision?: boolean;
@@ -353,10 +353,16 @@ function buildCapabilityLines(caps: {
  * URL cannot be redirected to an attacker-controlled host regardless of the
  * model name value.
  */
-function getLibraryModelUrl(modelName: string): string {
+export function getLibraryModelUrl(modelName: string): string {
   const encoded = modelName
     .split('/')
-    .map(segment => encodeURIComponent(segment))
+    .map(segment => {
+      if (/^\.+$/.test(segment)) {
+        // Prevent path dot-segment traversal by percent-encoding dots.
+        return segment.replace(/\./g, '%2E');
+      }
+      return encodeURIComponent(segment);
+    })
     .join('/');
   return `https://ollama.com/library/${encoded}`;
 }
