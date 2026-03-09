@@ -714,11 +714,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     // Convert VS Code messages to Ollama format, stripping images for non-vision models
     const supportsVision = this.visionByModelId.get(model.id) ?? this.visionByModelId.get(runtimeModelId) ?? false;
     const rawMessages = this.toOllamaMessages(messages, supportsVision) as Message[];
-    this.outputChannel.debug(
+    this.outputChannel.info(
       `[context] before truncation: ${rawMessages.length} messages, ${JSON.stringify(rawMessages, null, 2).length} chars, model.maxInputTokens=${model.maxInputTokens}`,
     );
     const ollamaMessages = truncateMessages(rawMessages, model.maxInputTokens);
-    this.outputChannel.debug(
+    this.outputChannel.info(
       `[context] after truncation: ${ollamaMessages.length} messages, ${JSON.stringify(ollamaMessages, null, 2).length} chars`,
     );
 
@@ -769,14 +769,14 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             this.nativeSdkStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient);
 
       try {
-        this.outputChannel.debug(
+        this.outputChannel.info(
           `[client] chat request: model=${runtimeModelId}, messages=${ollamaMessages?.length ?? 0}, tools=${tools?.length ?? 0}, think=${shouldThink}, native=${!isCloudModel}`,
         );
-        this.outputChannel.debug(
+        this.outputChannel.info(
           `[client] full request payload:\n${JSON.stringify({ model: runtimeModelId, messages: ollamaMessages, tools, think: shouldThink }, null, 2)}`,
         );
         response = await streamFn(shouldThink, tools);
-        this.outputChannel.debug(`[client] chat response stream started for ${runtimeModelId}`);
+        this.outputChannel.info(`[client] chat response stream started for ${runtimeModelId}`);
       } catch (innerError) {
         this.outputChannel.exception(`[client] chat request failed for model ${runtimeModelId}`, innerError);
         if (
@@ -830,7 +830,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           break;
         }
 
-        this.outputChannel.debug(`[client] raw chunk: ${JSON.stringify(chunk)}`);
+        this.outputChannel.info(`[client] raw chunk: ${JSON.stringify(chunk)}`);
 
         // Handle thinking tokens (reasoning phase)
         if (chunk.message?.thinking) {
@@ -942,7 +942,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
               );
 
         const fallback = await fallbackFn(shouldThink);
-        this.outputChannel.debug(`[client] non-stream fallback response: ${JSON.stringify(fallback, null, 2)}`);
+        this.outputChannel.info(`[client] non-stream fallback response: ${JSON.stringify(fallback, null, 2)}`);
 
         if (fallback.message?.thinking) {
           progress.report(new LanguageModelTextPart('\n\n💭 **Thinking**\n\n'));
