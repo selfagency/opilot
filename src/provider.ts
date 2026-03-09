@@ -742,17 +742,18 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     try {
       let response: AsyncIterable<ChatResponse>;
 
+      // Choose API path: native Ollama SDK for local models, OpenAI-compat for cloud
+      const streamFn = isCloudModel
+        ? (think: boolean, t?: typeof tools) =>
+            this.openAiCompatStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient)
+        : (think: boolean, t?: typeof tools) =>
+            this.nativeSdkStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient);
+
       try {
         this.outputChannel.debug(
-          `[client] chat request: model=${runtimeModelId}, messages=${ollamaMessages?.length ?? 0}, tools=${tools?.length ?? 0}, think=${shouldThink}`,
+          `[client] chat request: model=${runtimeModelId}, messages=${ollamaMessages?.length ?? 0}, tools=${tools?.length ?? 0}, think=${shouldThink}, native=${!isCloudModel}`,
         );
-        response = await this.openAiCompatStreamChat(
-          runtimeModelId,
-          ollamaMessages as Message[],
-          tools,
-          shouldThink,
-          perRequestClient,
-        );
+        response = await streamFn(shouldThink, tools);
         this.outputChannel.debug(`[client] chat response stream started for ${runtimeModelId}`);
       } catch (innerError) {
         this.outputChannel.exception(`[client] chat request failed for model ${runtimeModelId}`, innerError);
@@ -764,13 +765,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           this.nonThinkingModels.add(runtimeModelId);
           this.outputChannel.debug(`[client] retrying without thinking support for ${runtimeModelId}`);
           try {
-            response = await this.openAiCompatStreamChat(
-              runtimeModelId,
-              ollamaMessages as Message[],
-              tools,
-              false,
-              perRequestClient,
-            );
+            response = await streamFn(false, tools);
           } catch (retryError) {
             if (
               isCloudModel &&
@@ -780,35 +775,17 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
               this.outputChannel.warn(
                 `[client] cloud model ${runtimeModelId} failed with tools after think retry; retrying without tools`,
               );
-              response = await this.openAiCompatStreamChat(
-                runtimeModelId,
-                ollamaMessages as Message[],
-                undefined,
-                false,
-                perRequestClient,
-              );
+              response = await streamFn(false, undefined);
             } else {
               throw retryError;
             }
           }
         } else if (isCloudModel && tools && this.isThinkingInternalServerError(innerError)) {
           this.outputChannel.warn(`[client] cloud model ${runtimeModelId} failed with tools; retrying without tools`);
-          response = await this.openAiCompatStreamChat(
-            runtimeModelId,
-            ollamaMessages as Message[],
-            undefined,
-            shouldThink,
-            perRequestClient,
-          );
+          response = await streamFn(shouldThink, undefined);
         } else if (tools && isToolsNotSupportedError(innerError)) {
           this.outputChannel.warn(`[client] model ${runtimeModelId} rejected tools; retrying without tools`);
-          response = await this.openAiCompatStreamChat(
-            runtimeModelId,
-            ollamaMessages as Message[],
-            undefined,
-            shouldThink,
-            perRequestClient,
-          );
+          response = await streamFn(shouldThink, undefined);
         } else {
           throw innerError;
         }
@@ -895,13 +872,13 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           `[client] stream returned no output for ${runtimeModelId}; retrying with stream=false`,
         );
 
-        const fallback = await this.openAiCompatChatOnce(
-          runtimeModelId,
-          ollamaMessages as Message[],
-          tools,
-          shouldThink,
-          perRequestClient,
-        );
+        const fallbackFn = isCloudModel
+          ? (think: boolean) =>
+              this.openAiCompatChatOnce(runtimeModelId, ollamaMessages as Message[], tools, think, perRequestClient)
+          : (think: boolean) =>
+              this.nativeSdkChatOnce(runtimeModelId, ollamaMessages as Message[], tools, think, perRequestClient);
+
+        const fallback = await fallbackFn(shouldThink);
 
         if (fallback.message?.thinking) {
           progress.report(new LanguageModelTextPart('\n\n💭 **Thinking**\n\n'));
