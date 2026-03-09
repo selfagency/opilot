@@ -28,6 +28,7 @@ import {
   getOllamaClient,
   getOllamaHost,
 } from './client';
+import { truncateMessages } from './contextUtils.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
 import {
@@ -36,11 +37,10 @@ import {
   sanitizeNonStreamingModelOutput,
   splitLeadingXmlContextBlocks,
 } from './formatting';
-import { chatCompletionsOnce, chatCompletionsStream, initiateChatCompletionsStream } from './openaiCompat.js';
+import { chatCompletionsOnce, initiateChatCompletionsStream } from './openaiCompat.js';
 import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openaiCompatMapping.js';
-import { isToolsNotSupportedError, normalizeToolParameters } from './toolUtils.js';
 import { ThinkingParser } from './thinkingParser.js';
-import { truncateMessages } from './contextUtils.js';
+import { isToolsNotSupportedError, normalizeToolParameters } from './toolUtils.js';
 
 const MODEL_LIST_REFRESH_MIN_INTERVAL_MS = 5_000;
 const MODEL_INFO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -174,6 +174,25 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     this.nonThinkingModels.clear();
     this.cachedModelList = [];
     this.lastModelListRefreshMs = 0;
+  }
+
+  /**
+   * Eagerly fetch all model details in the background at startup so capability
+   * maps (thinkingModels, nativeToolCallingByModelId, visionByModelId) are
+   * populated before the first chat request arrives.  Errors are swallowed —
+   * the lazy path in provideLanguageModelChatInformation is the fallback.
+   */
+  prefetchModels(): void {
+    this.outputChannel.info('[client] prefetching model details in background...');
+    this.refreshModelList()
+      .then(models => {
+        this.outputChannel.info(`[client] prefetch complete: ${models.length} model(s) cached`);
+      })
+      .catch(err => {
+        this.outputChannel.warn(
+          `[client] prefetch failed (will retry on first use): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
   }
 
   /**

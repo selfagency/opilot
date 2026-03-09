@@ -1138,6 +1138,11 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  // Eagerly populate model capability data so thinking/tools detection is
+  // ready before the first chat request rather than waiting for VS Code to
+  // lazily call provideLanguageModelChatInformation.
+  provider.prefetchModels();
+
   const sidebarRegistration = registerSidebar(context, client, diagnostics, () => provider.refreshModels());
 
   const subscriptions: vscode.Disposable[] = [
