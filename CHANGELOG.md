@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-03-09
+
+## What's Changed
+
+- feat(tools): XML tool call fallback for models that reject JSON function calling by @selfagency in https://github.com/selfagency/opilot/pull/44
+- fix: harden XML context filtering and align Beans migration plan by @selfagency in https://github.com/selfagency/opilot/pull/45
+
+**Full Changelog**: https://github.com/selfagency/opilot/compare/v0.1.0-pre...v0.1.2-pre
+
+_Source: changes from v0.1.0-pre to v0.1.2-pre._
+
 ## [0.1.0] - 2026-03-08
 
 ## What's Changed
