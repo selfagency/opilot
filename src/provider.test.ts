@@ -767,6 +767,114 @@ describe('OllamaChatModelProvider chat response', () => {
     expect(userMsg?.content).toBe('hello');
   });
 
+  it('preserves text from unknown input parts', async () => {
+    const chat = vi.fn().mockImplementation(async function* () {
+      yield { message: { content: 'ok' }, done: true };
+    });
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+
+    const model = {
+      id: 'text-model',
+      name: 'Text Only',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: false },
+    };
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [
+        { value: "<environment_info>\nThe user's current OS is: macOS\n</environment_info>\n\n" },
+        { prompt: 'how do i center a div in css' },
+      ],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      model,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
+    );
+
+    expect(chat).toHaveBeenCalled();
+    const chatArgs = chat.mock.calls[0]?.[0];
+    const userMsg = chatArgs?.messages?.find((m: any) => m.role === 'user');
+    expect(userMsg?.content).toContain('how do i center a div in css');
+  });
+
+  it('appends fallback prompt from options when messages only contain scaffolding', async () => {
+    const chat = vi.fn().mockImplementation(async function* () {
+      yield { message: { content: 'ok' }, done: true };
+    });
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+
+    const model = {
+      id: 'text-model',
+      name: 'Text Only',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: false },
+    };
+
+    const scaffoldMessage = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [
+        new LanguageModelTextPart(
+          '<userMemory>\nNo user preferences or notes saved yet.\n</userMemory>\n<sessionMemory>\nSession memory is empty.\n</sessionMemory>',
+        ),
+      ],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      model,
+      [scaffoldMessage as unknown as LanguageModelChatRequestMessage],
+      {
+        tools: [],
+        toolMode: 'auto',
+        modelOptions: {
+          request: {
+            prompt: 'how do i center a div in css',
+          },
+        },
+      } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
+    );
+
+    expect(chat).toHaveBeenCalled();
+    const chatArgs = chat.mock.calls[0]?.[0];
+    const userMessages = chatArgs?.messages?.filter((m: any) => m.role === 'user') ?? [];
+    const lastUser = userMessages[userMessages.length - 1];
+    expect(lastUser?.content).toContain('how do i center a div in css');
+  });
+
   it('handles tool calls in response', async () => {
     const chat = vi.fn().mockImplementation(async function* () {
       yield {

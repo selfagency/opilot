@@ -51,6 +51,13 @@ describe('createXmlStreamFilter', () => {
     expect(a + b + c + filter.end()).toBe(' visible answer');
   });
 
+  it('strips leaked conversation wrapper tags and nested content', () => {
+    const filter = createXmlStreamFilter();
+    const a = filter.write('<conversation-summary><analysis>hidden</analysis>');
+    const b = filter.write('</conversation-summary>visible');
+    expect(a + b + filter.end()).toBe('visible');
+  });
+
   it('passes through non-context tags', () => {
     const filter = createXmlStreamFilter();
     const out = filter.write('<code>print("hi")</code>');
@@ -80,6 +87,11 @@ describe('stripXmlContextTags', () => {
     const result = stripXmlContextTags(
       '<user_info>private user</user_info><workspace_info>private workspace</workspace_info>public',
     );
+    expect(result).toBe('public');
+  });
+
+  it('removes leaked wrapper blocks from complete text', () => {
+    const result = stripXmlContextTags('<context><todoList>hidden</todoList></context>public');
     expect(result).toBe('public');
   });
 });
@@ -192,6 +204,13 @@ describe('splitLeadingXmlContextBlocks', () => {
     const result = splitLeadingXmlContextBlocks(input);
     expect(result.contextBlocks).toEqual([]);
     expect(result.content).toBe('<note>user content</note>hello');
+  });
+
+  it('does not elevate leading wrapper meta tags into context blocks', () => {
+    const input = '<context><todoList>meta</todoList></context>hello';
+    const result = splitLeadingXmlContextBlocks(input);
+    expect(result.contextBlocks).toEqual([]);
+    expect(result.content).toBe('<context><todoList>meta</todoList></context>hello');
   });
 });
 

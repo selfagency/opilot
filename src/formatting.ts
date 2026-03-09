@@ -16,11 +16,17 @@ export interface XmlStreamFilter {
 
 const XML_CONTEXT_TAG_RE = /<([a-zA-Z_][a-zA-Z0-9_.-]*)[^>]*>[\s\S]*?<\/\1>/gi;
 const ELEVATED_CONTEXT_TAG_NAMES = new Set([
+  // Strict allowlist for VS Code-injected context tags only.
   'environment_info',
   'user_info',
   'workspace_info',
   'selection',
   'file_context',
+]);
+
+const OUTPUT_SCRUB_TAG_NAMES = new Set([
+  ...ELEVATED_CONTEXT_TAG_NAMES,
+  // Non-VS-Code wrapper/meta tags we never want surfaced in model output.
   'user',
   'userRequest',
   'workspaces',
@@ -37,6 +43,14 @@ const ELEVATED_CONTEXT_TAG_NAMES = new Set([
   'chatHistory',
   'contextWindow',
   'injectedContext',
+  'conversation-summary',
+  'attachments',
+  'attachment',
+  'todoList',
+  'reminderInstructions',
+  'userMemory',
+  'sessionMemory',
+  'repository_memories',
 ]);
 
 export interface SplitLeadingXmlContextResult {
@@ -120,35 +134,12 @@ export function dedupeXmlContextBlocksByTag(contextBlocks: readonly string[]): s
  * separate from `buffer` and is unaffected by the clear.
  */
 export function createXmlStreamFilter(): XmlStreamFilter {
-  const contextTagNames = new Set([
-    'environment_info',
-    'user_info',
-    'workspace_info',
-    'selection',
-    'file_context',
-    'user',
-    'userRequest',
-    'workspaces',
-    'workspace',
-    'session',
-    'instructions',
-    'context',
-    'userPreferences',
-    'userData',
-    'profile',
-    'history',
-    'system',
-    'systemPrompt',
-    'chatHistory',
-    'contextWindow',
-    'injectedContext',
-  ]);
   const parser = new Saxophone();
   let skipDepth = 0;
   let buffer = '';
 
   parser.on('tagopen', (tag: SaxophoneTag) => {
-    if (contextTagNames.has(tag.name)) {
+    if (OUTPUT_SCRUB_TAG_NAMES.has(tag.name)) {
       skipDepth++;
     } else if (skipDepth === 0) {
       // Reconstruct opening tag
@@ -157,7 +148,7 @@ export function createXmlStreamFilter(): XmlStreamFilter {
   });
 
   parser.on('tagclose', (tag: SaxophoneTag) => {
-    if (contextTagNames.has(tag.name)) {
+    if (OUTPUT_SCRUB_TAG_NAMES.has(tag.name)) {
       skipDepth--;
     } else if (skipDepth === 0) {
       buffer += `</${tag.name}>`;

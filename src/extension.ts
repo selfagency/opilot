@@ -15,9 +15,11 @@ import {
   splitLeadingXmlContextBlocks,
 } from './formatting';
 import { registerModelfileManager } from './modelfiles.js';
-import { chatCompletionsOnce, chatCompletionsStream } from './openaiCompat.js';
+import { chatCompletionsOnce, chatCompletionsStream, initiateChatCompletionsStream } from './openaiCompat.js';
 import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openaiCompatMapping.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
+import { ThinkingParser } from './thinkingParser.js';
+import { truncateMessages } from './contextUtils.js';
 import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
 import {
   buildXmlToolSystemPrompt,
@@ -105,7 +107,10 @@ async function openAiCompatStreamChat(params: {
     const baseUrl = getOllamaHost();
     const authToken = params.extensionContext ? await getOllamaAuthToken(params.extensionContext) : undefined;
 
-    const stream = chatCompletionsStream({
+    // Use initiateChatCompletionsStream (eager fetch) so that any connection
+    // or HTTP error is thrown here, allowing the catch below to fall back to
+    // effectiveClient.chat() rather than surfacing during generator iteration.
+    const stream = await initiateChatCompletionsStream({
       baseUrl,
       authToken,
       signal: params.signal,
@@ -122,12 +127,14 @@ async function openAiCompatStreamChat(params: {
         const choice = chunk.choices?.[0];
         const delta = choice?.delta;
         const content = typeof delta?.content === 'string' ? delta.content : '';
+        const thinking = typeof delta?.reasoning === 'string' ? delta.reasoning : undefined;
         const mappedToolCalls = mapOpenAiToolCallsToOllamaLike(delta?.tool_calls);
 
         yield {
           message: {
             role: 'assistant',
             content,
+            ...(thinking ? { thinking } : {}),
             ...(mappedToolCalls ? { tool_calls: mappedToolCalls } : {}),
           },
           done: choice?.finish_reason != null,
@@ -172,12 +179,14 @@ async function openAiCompatChatOnce(params: {
 
     const choice = response.choices?.[0];
     const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
+    const thinking = typeof choice?.message?.reasoning === 'string' ? choice.message.reasoning : undefined;
     const mappedToolCalls = mapOpenAiToolCallsToOllamaLike(choice?.message?.tool_calls);
 
     return {
       message: {
         role: 'assistant',
         content,
+        ...(thinking ? { thinking } : {}),
         ...(mappedToolCalls ? { tool_calls: mappedToolCalls } : {}),
       },
       done: true,
@@ -191,6 +200,38 @@ async function openAiCompatChatOnce(params: {
       ...(params.shouldThink ? { think: true } : {}),
     })) as ChatResponse;
   }
+}
+
+async function nativeSdkStreamChat(params: {
+  modelId: string;
+  messages: Message[];
+  tools?: Tool[];
+  shouldThink: boolean;
+  effectiveClient: Ollama;
+}): Promise<AsyncIterable<ChatResponse>> {
+  return params.effectiveClient.chat({
+    model: params.modelId,
+    messages: params.messages,
+    stream: true,
+    ...(params.tools ? { tools: params.tools } : {}),
+    ...(params.shouldThink ? { think: true } : {}),
+  });
+}
+
+async function nativeSdkChatOnce(params: {
+  modelId: string;
+  messages: Message[];
+  tools?: Tool[];
+  shouldThink: boolean;
+  effectiveClient: Ollama;
+}): Promise<ChatResponse> {
+  return (await params.effectiveClient.chat({
+    model: params.modelId,
+    messages: params.messages,
+    stream: false,
+    ...(params.tools ? { tools: params.tools } : {}),
+    ...(params.shouldThink ? { think: true } : {}),
+  })) as ChatResponse;
 }
 
 // normalizeToolParameters/isToolsNotSupportedError moved to src/toolUtils.ts
@@ -578,6 +619,14 @@ export async function handleChatRequest(
         ollamaMessages.unshift({ role: 'system', content: dedupedContextParts.join('\n\n') });
       }
 
+      // Truncate messages to fit within the model's context window.
+      // VS Code injects 100K+ token prompts; small models cannot handle this.
+      const maxInputTokens = request.model.maxInputTokens ?? 0;
+      if (maxInputTokens > 0) {
+        const truncated = truncateMessages(ollamaMessages as Message[], maxInputTokens);
+        ollamaMessages.splice(0, ollamaMessages.length, ...truncated);
+      }
+
       // Tool invocation loop — only when VS Code tools and an invocation token are available.
       const vscodeLmTools = vscode.lm.tools ?? [];
       let useXmlFallback = false;
@@ -600,14 +649,22 @@ export async function handleChatRequest(
 
           let roundResponse: ChatResponse;
           try {
-            roundResponse = await openAiCompatChatOnce({
-              modelId,
-              messages: ollamaMessages as Message[],
-              tools: ollamaTools,
-              shouldThink: shouldThinkInToolLoop,
-              effectiveClient,
-              extensionContext,
-            });
+            roundResponse = await (isCloudModel
+              ? openAiCompatChatOnce({
+                  modelId,
+                  messages: ollamaMessages as Message[],
+                  tools: ollamaTools,
+                  shouldThink: shouldThinkInToolLoop,
+                  effectiveClient,
+                  extensionContext,
+                })
+              : nativeSdkChatOnce({
+                  modelId,
+                  messages: ollamaMessages as Message[],
+                  tools: ollamaTools,
+                  shouldThink: shouldThinkInToolLoop,
+                  effectiveClient,
+                }));
           } catch (toolError) {
             if (isToolsNotSupportedError(toolError)) {
               outputChannel?.warn(
@@ -681,13 +738,20 @@ export async function handleChatRequest(
         for (let xmlRound = 0; xmlRound < MAX_XML_ROUNDS; xmlRound++) {
           if (token.isCancellationRequested) return;
 
-          const xmlResponse = await openAiCompatChatOnce({
-            modelId,
-            messages: xmlConversation,
-            shouldThink: false,
-            effectiveClient,
-            extensionContext,
-          });
+          const xmlResponse = await (isCloudModel
+            ? openAiCompatChatOnce({
+                modelId,
+                messages: xmlConversation,
+                shouldThink: false,
+                effectiveClient,
+                extensionContext,
+              })
+            : nativeSdkChatOnce({
+                modelId,
+                messages: xmlConversation,
+                shouldThink: false,
+                effectiveClient,
+              }));
 
           const responseText = xmlResponse.message.content ?? '';
           const xmlToolCalls = extractXmlToolCalls(responseText, toolNames);
@@ -745,17 +809,32 @@ export async function handleChatRequest(
 
       const shouldThinkInitial = isThinkingModelId(modelId);
 
+      // Check if user wants to hide thinking content (only show header)
+      const hideThinkingContent = vscode.workspace.getConfiguration('ollama').get<boolean>('hideThinkingContent', true);
+
       let shouldThink = shouldThinkInitial;
       let response: AsyncIterable<ChatResponse>;
 
+      // Choose API path: native Ollama SDK for local models, OpenAI-compat for cloud
+      const streamChatFn = isCloudModel
+        ? (think: boolean) =>
+            openAiCompatStreamChat({
+              modelId,
+              messages: ollamaMessages as Message[],
+              shouldThink: think,
+              effectiveClient,
+              extensionContext,
+            })
+        : (think: boolean) =>
+            nativeSdkStreamChat({
+              modelId,
+              messages: ollamaMessages as Message[],
+              shouldThink: think,
+              effectiveClient,
+            });
+
       try {
-        response = await openAiCompatStreamChat({
-          modelId,
-          messages: ollamaMessages as Message[],
-          shouldThink,
-          effectiveClient,
-          extensionContext,
-        });
+        response = await streamChatFn(shouldThink);
       } catch (chatError) {
         const supportsThinkingError =
           shouldThink &&
@@ -764,23 +843,12 @@ export async function handleChatRequest(
           chatError.message.toLowerCase().includes('does not support thinking');
 
         if (supportsThinkingError) {
-          response = await openAiCompatStreamChat({
-            modelId,
-            messages: ollamaMessages as Message[],
-            shouldThink: false,
-            effectiveClient,
-            extensionContext,
-          });
+          shouldThink = false;
+          response = await streamChatFn(false);
         } else if (isToolsNotSupportedError(chatError)) {
           outputChannel?.warn(`[client] model ${modelId} rejected tools; retrying stream without tools/thinking`);
           shouldThink = false;
-          response = await openAiCompatStreamChat({
-            modelId,
-            messages: ollamaMessages as Message[],
-            shouldThink: false,
-            effectiveClient,
-            extensionContext,
-          });
+          response = await streamChatFn(false);
         } else {
           throw chatError;
         }
@@ -789,6 +857,9 @@ export async function handleChatRequest(
       let thinkingStarted = false;
       let contentStarted = false;
       const xmlFilter = createXmlStreamFilter();
+      // Only parse <think> tags client-side on the cloud/OpenAI-compat path.
+      // Native SDK path gets message.thinking pre-split by Ollama's server-side parser.
+      const thinkingParser = isCloudModel && shouldThink ? new ThinkingParser() : null;
 
       for await (const chunk of response) {
         if (token.isCancellationRequested) {
@@ -800,19 +871,40 @@ export async function handleChatRequest(
             stream.markdown('\n\n*Thinking*\n\n');
             thinkingStarted = true;
           }
-          stream.markdown(chunk.message.thinking);
+          if (!hideThinkingContent) {
+            stream.markdown(chunk.message.thinking);
+          }
         }
 
         if (chunk.message?.content) {
-          if (thinkingStarted && !contentStarted) {
-            stream.markdown('\n\n---\n\n*Response*\n\n');
-            contentStarted = true;
+          let thinkingChunk = '';
+          let contentChunk = chunk.message.content;
+
+          if (thinkingParser) {
+            [thinkingChunk, contentChunk] = thinkingParser.addContent(chunk.message.content);
           }
-          outputChannel?.debug(`[client] @ollama chunk: ${chunk.message.content.substring(0, 50)}`);
-          // Filter context tags using SAX parser - handles incomplete tags across chunk boundaries
-          const cleanContent = xmlFilter.write(chunk.message.content);
-          if (cleanContent) {
-            stream.markdown(cleanContent);
+
+          if (thinkingChunk) {
+            if (!thinkingStarted) {
+              stream.markdown('\n\n*Thinking*\n\n');
+              thinkingStarted = true;
+            }
+            if (!hideThinkingContent) {
+              stream.markdown(thinkingChunk);
+            }
+          }
+
+          if (contentChunk) {
+            if (thinkingStarted && !contentStarted) {
+              stream.markdown('\n\n---\n\n*Response*\n\n');
+              contentStarted = true;
+            }
+            outputChannel?.debug(`[client] @ollama chunk: ${contentChunk.substring(0, 50)}`);
+            // Filter context tags using SAX parser - handles incomplete tags across chunk boundaries
+            const cleanContent = xmlFilter.write(contentChunk);
+            if (cleanContent) {
+              stream.markdown(cleanContent);
+            }
           }
         }
 

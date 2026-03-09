@@ -36,9 +36,11 @@ import {
   sanitizeNonStreamingModelOutput,
   splitLeadingXmlContextBlocks,
 } from './formatting';
-import { chatCompletionsOnce, chatCompletionsStream } from './openaiCompat.js';
+import { chatCompletionsOnce, chatCompletionsStream, initiateChatCompletionsStream } from './openaiCompat.js';
 import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openaiCompatMapping.js';
 import { isToolsNotSupportedError, normalizeToolParameters } from './toolUtils.js';
+import { ThinkingParser } from './thinkingParser.js';
+import { truncateMessages } from './contextUtils.js';
 
 const MODEL_LIST_REFRESH_MIN_INTERVAL_MS = 5_000;
 const MODEL_INFO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -541,7 +543,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       const baseUrl = getOllamaHost();
       const authToken = await getOllamaAuthToken(this.context);
 
-      stream = chatCompletionsStream({
+      // Use initiateChatCompletionsStream (eager fetch) so that any connection
+      // or HTTP error is thrown here, allowing the catch below to fall back to
+      // fallbackClient.chat() rather than surfacing during generator iteration.
+      stream = await initiateChatCompletionsStream({
         baseUrl,
         authToken,
         signal,
@@ -567,12 +572,14 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         const choice = chunk.choices?.[0];
         const delta = choice?.delta;
         const content = typeof delta?.content === 'string' ? delta.content : '';
+        const thinking = typeof delta?.reasoning === 'string' ? delta.reasoning : undefined;
         const mappedToolCalls = provider.mapOpenAiToolCallsToOllamaLike(delta?.tool_calls);
 
         const out: ChatResponse = {
           message: {
             role: 'assistant',
             content,
+            ...(thinking ? { thinking } : {}),
             ...(mappedToolCalls ? { tool_calls: mappedToolCalls } : {}),
           },
           done: choice?.finish_reason != null,
@@ -619,16 +626,50 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
     const choice = response.choices?.[0];
     const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
+    const thinking = typeof choice?.message?.reasoning === 'string' ? choice.message.reasoning : undefined;
     const mappedToolCalls = this.mapOpenAiToolCallsToOllamaLike(choice?.message?.tool_calls);
 
     return {
       message: {
         role: 'assistant',
         content,
+        ...(thinking ? { thinking } : {}),
         ...(mappedToolCalls ? { tool_calls: mappedToolCalls } : {}),
       },
       done: true,
     } as ChatResponse;
+  }
+
+  private async nativeSdkStreamChat(
+    runtimeModelId: string,
+    messages: Message[],
+    tools: Parameters<typeof this.client.chat>[0]['tools'] | undefined,
+    shouldThink: boolean,
+    client: Ollama,
+  ): Promise<AsyncIterable<ChatResponse>> {
+    return client.chat({
+      model: runtimeModelId,
+      messages,
+      stream: true,
+      tools,
+      ...(shouldThink ? { think: true } : {}),
+    });
+  }
+
+  private async nativeSdkChatOnce(
+    runtimeModelId: string,
+    messages: Message[],
+    tools: Parameters<typeof this.client.chat>[0]['tools'] | undefined,
+    shouldThink: boolean,
+    client: Ollama,
+  ): Promise<ChatResponse> {
+    return (await client.chat({
+      model: runtimeModelId,
+      messages,
+      stream: false,
+      tools,
+      ...(shouldThink ? { think: true } : {}),
+    })) as ChatResponse;
   }
 
   /**
@@ -670,9 +711,21 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     this.clearToolCallIdMappings();
     const runtimeModelId = this.toRuntimeModelId(model.id);
 
+    this.outputChannel.info(
+      `[context] incoming request shape: ${JSON.stringify(this.summarizeIncomingRequest(messages, options), null, 2)}`,
+    );
+
     // Convert VS Code messages to Ollama format, stripping images for non-vision models
     const supportsVision = this.visionByModelId.get(model.id) ?? this.visionByModelId.get(runtimeModelId) ?? false;
-    const ollamaMessages = this.toOllamaMessages(messages, supportsVision);
+    const rawMessages = this.toOllamaMessages(messages, supportsVision) as Message[];
+    const effectiveMessages = this.ensurePromptMessage(rawMessages, options);
+    this.outputChannel.info(
+      `[context] before truncation: ${effectiveMessages.length} messages, ${JSON.stringify(effectiveMessages, null, 2).length} chars, model.maxInputTokens=${model.maxInputTokens}`,
+    );
+    const ollamaMessages = truncateMessages(effectiveMessages, model.maxInputTokens);
+    this.outputChannel.info(
+      `[context] after truncation: ${ollamaMessages.length} messages, ${JSON.stringify(ollamaMessages, null, 2).length} chars`,
+    );
 
     // Build tools array if supported
     let tools: Parameters<typeof this.client.chat>[0]['tools'] | undefined;
@@ -702,22 +755,33 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     let shouldThink =
       (this.thinkingModels.has(runtimeModelId) || isThinkingModelId(runtimeModelId)) &&
       !this.nonThinkingModels.has(runtimeModelId);
+    // Preserve initial value for the rescue ladder: even if retries downgrade
+    // shouldThink, the first rescue attempts should still try with think=true.
+    const initialShouldThink = shouldThink;
+
+    // Check if user wants to hide thinking content (only show header)
+    const hideThinkingContent = workspace.getConfiguration('ollama').get<boolean>('hideThinkingContent', true);
 
     try {
       let response: AsyncIterable<ChatResponse>;
+      let effectiveTools = tools;
+
+      // Choose API path: native Ollama SDK for local models, OpenAI-compat for cloud
+      const streamFn = isCloudModel
+        ? (think: boolean, t?: typeof tools) =>
+            this.openAiCompatStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient)
+        : (think: boolean, t?: typeof tools) =>
+            this.nativeSdkStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient);
 
       try {
-        this.outputChannel.debug(
-          `[client] chat request: model=${runtimeModelId}, messages=${ollamaMessages?.length ?? 0}, tools=${tools?.length ?? 0}, think=${shouldThink}`,
+        this.outputChannel.info(
+          `[client] chat request: model=${runtimeModelId}, messages=${ollamaMessages?.length ?? 0}, tools=${tools?.length ?? 0}, think=${shouldThink}, native=${!isCloudModel}`,
         );
-        response = await this.openAiCompatStreamChat(
-          runtimeModelId,
-          ollamaMessages as Message[],
-          tools,
-          shouldThink,
-          perRequestClient,
+        this.outputChannel.info(
+          `[client] full request payload:\n${JSON.stringify({ model: runtimeModelId, messages: ollamaMessages, tools, think: shouldThink }, null, 2)}`,
         );
-        this.outputChannel.debug(`[client] chat response stream started for ${runtimeModelId}`);
+        response = await streamFn(shouldThink, tools);
+        this.outputChannel.info(`[client] chat response stream started for ${runtimeModelId}`);
       } catch (innerError) {
         this.outputChannel.exception(`[client] chat request failed for model ${runtimeModelId}`, innerError);
         if (
@@ -726,15 +790,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         ) {
           this.thinkingModels.delete(runtimeModelId);
           this.nonThinkingModels.add(runtimeModelId);
+          shouldThink = false;
           this.outputChannel.debug(`[client] retrying without thinking support for ${runtimeModelId}`);
           try {
-            response = await this.openAiCompatStreamChat(
-              runtimeModelId,
-              ollamaMessages as Message[],
-              tools,
-              false,
-              perRequestClient,
-            );
+            response = await streamFn(false, tools);
           } catch (retryError) {
             if (
               isCloudModel &&
@@ -744,35 +803,20 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
               this.outputChannel.warn(
                 `[client] cloud model ${runtimeModelId} failed with tools after think retry; retrying without tools`,
               );
-              response = await this.openAiCompatStreamChat(
-                runtimeModelId,
-                ollamaMessages as Message[],
-                undefined,
-                false,
-                perRequestClient,
-              );
+              effectiveTools = undefined;
+              response = await streamFn(false, undefined);
             } else {
               throw retryError;
             }
           }
         } else if (isCloudModel && tools && this.isThinkingInternalServerError(innerError)) {
           this.outputChannel.warn(`[client] cloud model ${runtimeModelId} failed with tools; retrying without tools`);
-          response = await this.openAiCompatStreamChat(
-            runtimeModelId,
-            ollamaMessages as Message[],
-            undefined,
-            shouldThink,
-            perRequestClient,
-          );
+          effectiveTools = undefined;
+          response = await streamFn(shouldThink, undefined);
         } else if (tools && isToolsNotSupportedError(innerError)) {
           this.outputChannel.warn(`[client] model ${runtimeModelId} rejected tools; retrying without tools`);
-          response = await this.openAiCompatStreamChat(
-            runtimeModelId,
-            ollamaMessages as Message[],
-            undefined,
-            shouldThink,
-            perRequestClient,
-          );
+          effectiveTools = undefined;
+          response = await streamFn(shouldThink, undefined);
         } else {
           throw innerError;
         }
@@ -782,11 +826,16 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       let contentStarted = false;
       let emittedOutput = false;
       const xmlFilter = createXmlStreamFilter();
+      // Only parse <think> tags client-side on the cloud/OpenAI-compat path.
+      // Native SDK path gets message.thinking pre-split by Ollama's server-side parser.
+      const thinkingParser = isCloudModel && shouldThink ? new ThinkingParser() : null;
 
       for await (const chunk of response) {
         if (token.isCancellationRequested) {
           break;
         }
+
+        this.outputChannel.info(`[client] raw chunk: ${JSON.stringify(chunk)}`);
 
         // Handle thinking tokens (reasoning phase)
         if (chunk.message?.thinking) {
@@ -795,23 +844,45 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             thinkingStarted = true;
             emittedOutput = true;
           }
-          progress.report(new LanguageModelTextPart(chunk.message.thinking));
-          emittedOutput = true;
-        }
-
-        // Stream text chunks immediately as they arrive
-        if (chunk.message?.content) {
-          if (thinkingStarted && !contentStarted) {
-            progress.report(new LanguageModelTextPart('\n\n---\n\n'));
-            contentStarted = true;
+          if (!hideThinkingContent) {
+            progress.report(new LanguageModelTextPart(chunk.message.thinking));
             emittedOutput = true;
           }
-          this.outputChannel.debug(`[client] streaming chunk: ${chunk.message.content.substring(0, 50)}`);
-          // Filter context tags using SAX parser - handles incomplete tags across chunk boundaries
-          const cleanContent = xmlFilter.write(chunk.message.content);
-          if (cleanContent) {
-            progress.report(new LanguageModelTextPart(cleanContent));
-            emittedOutput = true;
+        }
+
+        // Stream text chunks — run through thinking tag parser if on cloud path
+        if (chunk.message?.content) {
+          let thinkingChunk = '';
+          let contentChunk = chunk.message.content;
+
+          if (thinkingParser) {
+            [thinkingChunk, contentChunk] = thinkingParser.addContent(chunk.message.content);
+          }
+
+          if (thinkingChunk) {
+            if (!thinkingStarted) {
+              progress.report(new LanguageModelTextPart('\n\n💭 **Thinking**\n\n'));
+              thinkingStarted = true;
+              emittedOutput = true;
+            }
+            if (!hideThinkingContent) {
+              progress.report(new LanguageModelTextPart(thinkingChunk));
+              emittedOutput = true;
+            }
+          }
+
+          if (contentChunk) {
+            if (thinkingStarted && !contentStarted) {
+              progress.report(new LanguageModelTextPart('\n\n---\n\n'));
+              contentStarted = true;
+              emittedOutput = true;
+            }
+            this.outputChannel.debug(`[client] streaming chunk: ${contentChunk.substring(0, 50)}`);
+            const cleanContent = xmlFilter.write(contentChunk);
+            if (cleanContent) {
+              progress.report(new LanguageModelTextPart(cleanContent));
+              emittedOutput = true;
+            }
           }
         }
 
@@ -855,21 +926,34 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       // "Sorry, no response was returned." Recover by retrying once without
       // streaming and emit any returned content.
       if (!emittedOutput && !token.isCancellationRequested) {
-        this.outputChannel.debug(
-          `[client] stream returned no output for ${runtimeModelId}; retrying with stream=false`,
-        );
+        this.outputChannel.warn(`[client] stream returned no output for ${runtimeModelId}; retrying with stream=false`);
 
-        const fallback = await this.openAiCompatChatOnce(
-          runtimeModelId,
-          ollamaMessages as Message[],
-          tools,
-          shouldThink,
-          perRequestClient,
-        );
+        const fallbackFn = isCloudModel
+          ? (think: boolean) =>
+              this.openAiCompatChatOnce(
+                runtimeModelId,
+                ollamaMessages as Message[],
+                effectiveTools,
+                think,
+                perRequestClient,
+              )
+          : (think: boolean) =>
+              this.nativeSdkChatOnce(
+                runtimeModelId,
+                ollamaMessages as Message[],
+                effectiveTools,
+                think,
+                perRequestClient,
+              );
+
+        const fallback = await fallbackFn(shouldThink);
+        this.outputChannel.info(`[client] non-stream fallback response: ${JSON.stringify(fallback, null, 2)}`);
 
         if (fallback.message?.thinking) {
           progress.report(new LanguageModelTextPart('\n\n💭 **Thinking**\n\n'));
-          progress.report(new LanguageModelTextPart(fallback.message.thinking));
+          if (!hideThinkingContent) {
+            progress.report(new LanguageModelTextPart(fallback.message.thinking));
+          }
           emittedOutput = true;
         }
 
@@ -907,13 +991,13 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           {
             label: 'reduced-context+think+tools',
             messages: this.buildReducedCloudRescueMessages(rescueBaseMessages),
-            think: shouldThink,
+            think: initialShouldThink,
             tools,
           },
           {
             label: 'reduced-context+think',
             messages: this.buildReducedCloudRescueMessages(rescueBaseMessages),
-            think: shouldThink,
+            think: initialShouldThink,
             tools: undefined,
           },
           {
@@ -944,7 +1028,9 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
               if (rescued.message?.thinking) {
                 progress.report(new LanguageModelTextPart('\n\n\ud83d\udcad **Thinking**\n\n'));
-                progress.report(new LanguageModelTextPart(rescued.message.thinking));
+                if (!hideThinkingContent) {
+                  progress.report(new LanguageModelTextPart(rescued.message.thinking));
+                }
                 progress.report(new LanguageModelTextPart('\n\n---\n\n'));
               }
 
@@ -1093,6 +1179,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             content: toolContent,
             tool_call_id: this.getOllamaToolCallId(part.callId),
           } as never);
+        } else {
+          const extractedText = this.extractTextFromUnknownInputPart(part);
+          if (extractedText) {
+            textContent += extractedText;
+          }
         }
       }
 
@@ -1134,6 +1225,194 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     }
 
     return ollamaMessages;
+  }
+
+  private extractTextFromUnknownInputPart(part: unknown): string {
+    if (typeof part === 'string') {
+      return part;
+    }
+    if (!part || typeof part !== 'object') {
+      return '';
+    }
+
+    const maybePart = part as Record<string, unknown>;
+
+    const directStringKeys = ['value', 'text', 'prompt', 'content'];
+    for (const key of directStringKeys) {
+      const value = maybePart[key];
+      if (typeof value === 'string') {
+        return value;
+      }
+    }
+
+    // Some parts can wrap text in nested objects (for example Markdown-like wrappers)
+    for (const key of directStringKeys) {
+      const nested = maybePart[key];
+      if (nested && typeof nested === 'object') {
+        const nestedValue = (nested as Record<string, unknown>).value;
+        if (typeof nestedValue === 'string') {
+          return nestedValue;
+        }
+      }
+    }
+
+    const toString = (part as { toString?: () => string }).toString;
+    if (typeof toString === 'function') {
+      const converted = toString.call(part);
+      if (converted && converted !== '[object Object]') {
+        return converted;
+      }
+    }
+
+    return '';
+  }
+
+  private summarizeIncomingRequest(
+    messages: readonly LanguageModelChatRequestMessage[],
+    options: ProvideLanguageModelChatResponseOptions,
+  ): Record<string, unknown> {
+    const summarizedMessages = messages.map((message, index) => ({
+      index,
+      role: message.role,
+      name: message.name,
+      contentParts: message.content.map((part, partIndex) => this.summarizePart(part, partIndex)),
+    }));
+
+    return {
+      messageCount: messages.length,
+      messages: summarizedMessages,
+      optionKeys: Object.keys((options as unknown as Record<string, unknown>) ?? {}),
+      modelOptionKeys:
+        options.modelOptions && typeof options.modelOptions === 'object'
+          ? Object.keys(options.modelOptions as Record<string, unknown>)
+          : [],
+    };
+  }
+
+  private summarizePart(part: unknown, index: number): Record<string, unknown> {
+    const partRecord = (part && typeof part === 'object' ? (part as Record<string, unknown>) : {}) as Record<
+      string,
+      unknown
+    >;
+    const ctorName =
+      part && typeof part === 'object' ? (part as { constructor?: { name?: string } }).constructor?.name : typeof part;
+    return {
+      index,
+      type: ctorName,
+      keys: Object.keys(partRecord),
+      sample:
+        this.extractTextFromUnknownInputPart(part)?.slice(0, 120) ||
+        (part instanceof LanguageModelTextPart ? part.value.slice(0, 120) : ''),
+    };
+  }
+
+  private ensurePromptMessage(messages: Message[], options: ProvideLanguageModelChatResponseOptions): Message[] {
+    const normalizedLastUser = this.extractMeaningfulUserText(messages);
+    if (normalizedLastUser) {
+      return messages;
+    }
+
+    const fallbackPrompt = this.extractPromptFromOptions(options);
+    if (!fallbackPrompt) {
+      return messages;
+    }
+
+    this.outputChannel.warn('[context] no meaningful user prompt in messages; appending fallback prompt from options');
+
+    return [...messages, { role: 'user', content: fallbackPrompt } as Message];
+  }
+
+  private extractMeaningfulUserText(messages: Message[]): string {
+    const userMessages = messages
+      .filter(m => m.role === 'user')
+      .map(m => (typeof m.content === 'string' ? m.content : ''));
+    const combined = userMessages.join('\n').trim();
+    if (!combined) {
+      return '';
+    }
+
+    const stripped = combined
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Ignore known scaffolding blocks that can appear without the actual ask
+    const onlyScaffolding =
+      /^(No user preferences|Session memory|I am working in a workspace|The user's current OS)/i.test(stripped);
+    return onlyScaffolding ? '' : stripped;
+  }
+
+  private extractPromptFromOptions(options: ProvideLanguageModelChatResponseOptions): string {
+    const sources: unknown[] = [];
+    if (options.modelOptions) {
+      sources.push(options.modelOptions as unknown);
+    }
+    sources.push(options as unknown);
+
+    for (const source of sources) {
+      const prompt = this.deepFindPromptString(source, 0, new Set());
+      if (prompt) {
+        return prompt;
+      }
+    }
+
+    return '';
+  }
+
+  private deepFindPromptString(value: unknown, depth: number, seen: Set<unknown>): string {
+    if (depth > 5 || value == null) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return '';
+      }
+      const isLikelyXmlScaffold = trimmed.startsWith('<') && trimmed.includes('>');
+      const looksLikeNaturalPrompt = /\s/.test(trimmed) || /[?.!,:;]/.test(trimmed);
+      return isLikelyXmlScaffold || !looksLikeNaturalPrompt ? '' : trimmed;
+    }
+    if (typeof value !== 'object') {
+      return '';
+    }
+    if (seen.has(value)) {
+      return '';
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = this.deepFindPromptString(item, depth + 1, seen);
+        if (found) {
+          return found;
+        }
+      }
+      return '';
+    }
+
+    const record = value as Record<string, unknown>;
+    const priorityKeys = ['prompt', 'userPrompt', 'query', 'input', 'text', 'message'];
+    for (const key of priorityKeys) {
+      if (key in record) {
+        const found = this.deepFindPromptString(record[key], depth + 1, seen);
+        if (found) {
+          return found;
+        }
+      }
+    }
+
+    const ignoredTraversalKeys = new Set(['toolMode', 'tools']);
+    for (const [key, child] of Object.entries(record)) {
+      if (ignoredTraversalKeys.has(key)) {
+        continue;
+      }
+      const found = this.deepFindPromptString(child, depth + 1, seen);
+      if (found) {
+        return found;
+      }
+    }
+
+    return '';
   }
 
   /**
