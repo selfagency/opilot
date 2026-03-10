@@ -435,5 +435,3 @@ describe('fetchModelCapabilities', () => {
     expect(caps.maxInputTokens).toBe(4096);
   });
 });
-
-

@@ -177,4 +177,3 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
     };
   }
 }
-

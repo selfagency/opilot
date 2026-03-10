@@ -21,12 +21,7 @@ import {
   window,
   workspace,
 } from 'vscode';
-import {
-  getCloudOllamaClient,
-  getOllamaAuthToken,
-  getOllamaClient,
-  getOllamaHost,
-} from './client';
+import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost } from './client';
 import { truncateMessages } from './contextUtils.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
@@ -329,7 +324,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       const response = await this.client.show({ model: modelId });
       const providerModelId = this.toProviderModelId(modelId);
 
-      // Prefer the model's actual context window; fall back to the user override, then 0.
+      // Prefer the model's actual context window; fall back to the parsed num_ctx parameter, then 0.
       const typedResponse = response as ShowResponse & { modelinfo?: Map<string, unknown> | Record<string, unknown> };
       const modelinfo =
         (typedResponse.model_info as Map<string, unknown> | Record<string, unknown> | undefined) ??

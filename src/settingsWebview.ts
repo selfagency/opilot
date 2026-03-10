@@ -246,50 +246,50 @@ function buildHtml(webview: vscode.Webview, _extensionUri: vscode.Uri): string {
         <div class="field">
           <div class="field-label" title="Controls output randomness. Lower values are more deterministic; higher values are more creative.">Temperature</div>
           <div class="row">
-            <input type="range" id="temperature" min="0" max="2" step="0.01" />
-            <input type="number" id="temperatureNumber" min="0" max="2" step="0.01" />
+            <input type="range" id="temperature" min="0" max="2" step="0.01" aria-label="Temperature (slider)" />
+            <input type="number" id="temperatureNumber" min="0" max="2" step="0.01" aria-label="Temperature (value)" />
           </div>
         </div>
 
         <div class="field">
           <div class="field-label" title="Nucleus sampling cutoff. Restricts token sampling to the most likely tokens whose cumulative probability reaches this value.">Top-P</div>
           <div class="row">
-            <input type="range" id="top_p" min="0" max="1" step="0.01" />
-            <input type="number" id="top_pNumber" min="0" max="1" step="0.01" />
+            <input type="range" id="top_p" min="0" max="1" step="0.01" aria-label="Top-P (slider)" />
+            <input type="number" id="top_pNumber" min="0" max="1" step="0.01" aria-label="Top-P (value)" />
           </div>
         </div>
 
         <div class="field">
           <div class="field-label" title="Limits token sampling to the K most likely next tokens. Lower values make output more focused.">Top-K</div>
           <div class="row">
-            <input type="range" id="top_k" min="0" max="100" step="1" />
-            <input type="number" id="top_kNumber" min="0" max="100" step="1" />
+            <input type="range" id="top_k" min="0" max="100" step="1" aria-label="Top-K (slider)" />
+            <input type="number" id="top_kNumber" min="0" max="100" step="1" aria-label="Top-K (value)" />
           </div>
         </div>
 
         <div class="field">
           <div class="field-label" title="Maximum number of tokens held in the context window (prompt + response). Larger values allow longer conversations.">Context Window</div>
           <div class="row">
-            <input type="range" id="num_ctx" min="512" max="131072" step="512" />
-            <input type="number" id="num_ctxNumber" min="512" max="131072" step="512" />
+            <input type="range" id="num_ctx" min="512" max="131072" step="512" aria-label="Context Window (slider)" />
+            <input type="number" id="num_ctxNumber" min="512" max="131072" step="512" aria-label="Context Window (value)" />
           </div>
         </div>
 
         <div class="checkbox-row">
           <span class="field-label" title="Maximum number of tokens to generate per response. Use -1 for unlimited.">Max Tokens (-1 = unlimited)</span>
-          <input type="number" id="num_predict" step="1" style="width:70px" />
+          <input type="number" id="num_predict" step="1" style="width:70px" aria-label="Max Tokens" />
         </div>
 
         <div class="checkbox-row" id="think-row">
           <span class="field-label" title="Enable chain-of-thought reasoning before answering. Only available for thinking models.">Thinking</span>
-          <input type="checkbox" id="think" />
+          <input type="checkbox" id="think" aria-label="Enable Thinking" />
         </div>
 
         <div class="field" id="think-budget-field">
           <div class="field-label" title="Maximum number of tokens the model may use for its internal thinking phase.">Thinking Budget</div>
           <div class="row">
-            <input type="range" id="think_budget" min="0" max="16384" step="1" />
-            <input type="number" id="think_budgetNumber" min="0" max="16384" step="1" />
+            <input type="range" id="think_budget" min="0" max="16384" step="1" aria-label="Thinking Budget (slider)" />
+            <input type="number" id="think_budgetNumber" min="0" max="16384" step="1" aria-label="Thinking Budget (value)" />
           </div>
         </div>
 
@@ -429,10 +429,23 @@ function buildHtml(webview: vscode.Webview, _extensionUri: vscode.Uri): string {
         document.getElementById('think-budget-field').classList.toggle('disabled-section', !isThinking);
       }
 
+      const KNOWN_KEYS = new Set(['temperature', 'top_p', 'top_k', 'num_ctx', 'num_predict', 'think', 'think_budget']);
+
       function emitPatch(patch) {
         if (!selectedModel) return;
-        vscode.postMessage({ type: 'setModelSettings', modelId: selectedModel, patch });
-        store[selectedModel] = { ...(store[selectedModel] || {}), ...patch };
+        // Validate client-side: only known keys, reject non-finite numbers and NaN before mutating store
+        const validated = {};
+        for (const [key, value] of Object.entries(patch)) {
+          if (!KNOWN_KEYS.has(key)) continue;
+          if (typeof value === 'boolean') {
+            validated[key] = value;
+          } else if (typeof value === 'number' && Number.isFinite(value)) {
+            validated[key] = value;
+          }
+        }
+        if (Object.keys(validated).length === 0) return;
+        vscode.postMessage({ type: 'setModelSettings', modelId: selectedModel, patch: validated });
+        store[selectedModel] = { ...(store[selectedModel] || {}), ...validated };
         flashSpinner();
       }
 
@@ -486,7 +499,9 @@ export class ModelSettingsViewProvider implements vscode.WebviewViewProvider {
       this.preferredModel = modelId;
     }
 
-    await vscode.commands.executeCommand('workbench.view.extension.ollama-explorer');
+    // Focus the view directly — this reveals the sidebar container and the panel
+    // even on first use before resolveWebviewView has been called.
+    await vscode.commands.executeCommand(`${MODEL_SETTINGS_VIEW_ID}.focus`);
 
     if (this.webviewView) {
       this.webviewView.show?.(true);
@@ -522,6 +537,9 @@ export class ModelSettingsViewProvider implements vscode.WebviewViewProvider {
 
         if (payload.type === 'setModelSettings') {
           const patch = sanitizePatch(payload.patch);
+          if (Object.keys(patch).length === 0) {
+            return;
+          }
           this.store = mergeSettings(this.store, payload.modelId, patch);
           await this.options.onStoreChanged(this.store);
           return;
@@ -555,7 +573,13 @@ export class ModelSettingsViewProvider implements vscode.WebviewViewProvider {
     }
 
     const availableModels = await this.options.getAvailableModels();
-    const sorted = [...new Set([...availableModels, ...Object.keys(this.store)])].sort((a, b) => a.localeCompare(b));
+    const sorted = [
+      ...new Set([
+        ...availableModels,
+        ...Object.keys(this.store),
+        ...(this.preferredModel ? [this.preferredModel] : []),
+      ]),
+    ].sort((a, b) => a.localeCompare(b));
 
     let selectedModel = this.preferredModel;
     if (!selectedModel || !sorted.includes(selectedModel)) {

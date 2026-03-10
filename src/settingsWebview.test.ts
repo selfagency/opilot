@@ -345,7 +345,9 @@ describe('buildHtml (via resolveWebviewView)', () => {
     expect(view.webview.html).toContain('title="Maximum number of tokens held in the context window');
     expect(view.webview.html).toContain('title="Maximum number of tokens to generate per response');
     expect(view.webview.html).toContain('title="Enable chain-of-thought reasoning');
-    expect(view.webview.html).toContain('title="Maximum number of tokens the model may use for its internal thinking phase');
+    expect(view.webview.html).toContain(
+      'title="Maximum number of tokens the model may use for its internal thinking phase',
+    );
   });
 
   it('includes disabled-section CSS class definition', async () => {
@@ -456,8 +458,8 @@ describe('ModelSettingsViewProvider message handling', () => {
 
     await view.fire({ type: 'setModelSettings', modelId: 'llama3.2:latest', patch: { temperature: 'invalid' } });
 
-    // sanitizePatch strips invalid values; onStoreChanged called with empty patch merged
-    expect(onStoreChanged).toHaveBeenCalledWith({ 'llama3.2:latest': {} });
+    // sanitizePatch strips all invalid values → empty patch → short-circuit, onStoreChanged NOT called
+    expect(onStoreChanged).not.toHaveBeenCalled();
   });
 
   it('handles resetModelSettings and removes model from store', async () => {
@@ -572,7 +574,7 @@ describe('ModelSettingsViewProvider.open', () => {
     const vscode = await import('vscode');
     const provider = makeProvider();
     await provider.open();
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('workbench.view.extension.ollama-explorer');
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('ollama-model-settings.focus');
   });
 
   it('shows the webview when it is already resolved', async () => {
