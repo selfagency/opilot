@@ -1,7 +1,28 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// ---------------------------------------------------------------------------
+// node:fs/promises mock — set up before importing the module under test
+// ---------------------------------------------------------------------------
+
+const { mockReadFile, mockWriteFile, mockMkdir } = vi.hoisted(() => ({
+  mockReadFile: vi.fn<(path: string, encoding: string) => Promise<string>>(),
+  mockWriteFile: vi.fn<(path: string, data: string, encoding: string) => Promise<void>>(),
+  mockMkdir: vi.fn<(path: string, opts: { recursive: boolean }) => Promise<void>>(),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  readFile: mockReadFile,
+  writeFile: mockWriteFile,
+  mkdir: mockMkdir,
+}));
+
+// ---------------------------------------------------------------------------
+// Module under test (imported after the mock is in place)
+// ---------------------------------------------------------------------------
+
 import {
   getModelOptionsForModel,
   getModelSettingsFilePath,

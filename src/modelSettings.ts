@@ -5,6 +5,21 @@ import type { DiagnosticsLogger } from './diagnostics.js';
 const MODEL_SETTINGS_FILE = 'model-settings.json';
 
 export interface ModelOptionOverrides {
+import { dirname, join } from 'node:path';
+
+/**
+ * Minimal context shape required by the model settings helpers.
+ * Compatible with `vscode.ExtensionContext` but avoids importing the full type.
+ */
+export interface ModelSettingsContext {
+  globalStorageUri: { fsPath: string };
+}
+
+/**
+ * Per-model generation options that can be persisted per model ID.
+ * All fields are optional; only set values override Ollama defaults.
+ */
+export interface ModelOptions {
   temperature?: number;
   top_p?: number;
   top_k?: number;
