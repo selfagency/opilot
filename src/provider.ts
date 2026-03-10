@@ -866,7 +866,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           }
         }
 
-        // Stream text chunks — run through thinking tag parser if on cloud path
+        // Stream text chunks — run through thinking tag parser on both cloud and local paths
         if (chunk.message?.content) {
           let thinkingChunk = '';
           let contentChunk = chunk.message.content;

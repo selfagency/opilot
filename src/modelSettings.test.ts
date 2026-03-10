@@ -3,9 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// ---------------------------------------------------------------------------
-// Module under test (imported after the mock is in place)
-// ---------------------------------------------------------------------------
+// Module under test
 
 import {
   getModelOptionsForModel,

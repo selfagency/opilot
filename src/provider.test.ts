@@ -1129,6 +1129,67 @@ describe('OllamaChatModelProvider chat response', () => {
     expect(allValues.some((v: string) => v.includes('The answer is 42.'))).toBe(true);
   });
 
+  it('strips raw <think>...</think> tags from local model content stream', async () => {
+    const chat = vi.fn().mockResolvedValue(
+      (async function* () {
+        yield { message: { content: '<think>let me reason step 1' } };
+        yield { message: { content: ' step 2</think>' } };
+        yield { message: { content: 'The answer is 42.' } };
+        yield { message: {}, done: true };
+      })(),
+    );
+
+    vi.mocked(getOllamaClient).mockResolvedValueOnce({ chat, abort: vi.fn() } as unknown as Ollama);
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger(),
+    );
+
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false };
+
+    const model = {
+      id: 'qwen3:8b',
+      name: 'Qwen3 8B',
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      maxInputTokens: 100,
+      maxOutputTokens: 100,
+      capabilities: { imageInput: false, toolCalling: false },
+    };
+
+    const message = {
+      role: LanguageModelChatMessageRole.User,
+      name: undefined,
+      content: [new LanguageModelTextPart('what is the meaning of life?')],
+    };
+
+    await provider.provideLanguageModelChatResponse(
+      model,
+      [message as unknown as LanguageModelChatRequestMessage],
+      { tools: [], toolMode: 'auto' } as unknown as ProvideLanguageModelChatResponseOptions,
+      progress as unknown as Progress<LanguageModelResponsePart>,
+      token as unknown as CancellationToken,
+    );
+
+    const allValues = progress.report.mock.calls.map((c: any[]) => c[0]?.value ?? '');
+    const joined = allValues.join('');
+
+    // Raw <think> tags must never appear in output
+    expect(joined).not.toContain('<think>');
+    expect(joined).not.toContain('</think>');
+    // Thinking section header should be emitted
+    expect(allValues.some((v: string) => v.includes('Thinking') || v.includes('thinking'))).toBe(true);
+    // Thinking content should be visible
+    expect(allValues.some((v: string) => v.includes('let me reason step 1'))).toBe(true);
+    // Separator before response
+    expect(allValues.some((v: string) => v.includes('---'))).toBe(true);
+    // Final answer should be present
+    expect(allValues.some((v: string) => v.includes('The answer is 42.'))).toBe(true);
+  });
+
   it('streams XML-like assistant output as raw text per chunk', async () => {
     const chat = vi.fn().mockResolvedValue(
       (async function* () {
