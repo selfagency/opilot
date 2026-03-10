@@ -37,11 +37,12 @@ export interface HealthCheckResult {
   checkedAt: Date;
 }
 
-/** Format bytes as a human-readable string (e.g. "3.2 GB"). */
+/** Format bytes as a human-readable string (e.g. "3.72 GB"). */
 function formatBytes(bytes: number): string {
-  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
-  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`;
-  return `${(bytes / 1_024).toFixed(0)} KB`;
+  if (bytes < 1_024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1_024).toFixed(1)} KB`;
+  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
 }
 
 /**
@@ -135,11 +136,19 @@ export function registerStatusBarHeartbeat(
   item.show();
 
   let consecutiveFailures = 0;
-  let intervalHandle: ReturnType<typeof setInterval>;
+  let intervalHandle: ReturnType<typeof setInterval> | undefined;
+  /** Monotonically increasing ID; only the latest check's result is applied. */
+  let currentRequestId = 0;
+  /** The last result that was applied to the status bar. */
+  let lastApplied: HealthCheckResult | undefined;
 
   const runCheck = async () => {
-    item.text = `$(loading~spin) Ollama…`;
+    const requestId = ++currentRequestId;
     const result = await checkOllamaHealth(client, host);
+
+    // Discard stale results when a newer check was triggered concurrently.
+    if (requestId !== currentRequestId) return;
+
     diagnostics.debug(
       `[statusBar] health check: ${result.online ? `online, ${result.runningCount} running` : 'offline'}`,
     );
@@ -153,12 +162,16 @@ export function registerStatusBarHeartbeat(
     // Only flip to offline display after DEBOUNCE_FAILURE_COUNT consecutive failures
     // to avoid flicker on transient network errors.
     if (result.online || consecutiveFailures >= DEBOUNCE_FAILURE_COUNT) {
+      lastApplied = result;
       applyState(item, result);
+    } else if (lastApplied !== undefined) {
+      // Re-apply last known state so the loading spinner doesn't stay visible.
+      applyState(item, lastApplied);
     }
   };
 
   const scheduleInterval = () => {
-    clearInterval(intervalHandle);
+    if (intervalHandle !== undefined) clearInterval(intervalHandle);
     intervalHandle = setInterval(() => void runCheck(), getHeartbeatIntervalMs());
   };
 
@@ -176,7 +189,7 @@ export function registerStatusBarHeartbeat(
 
   return {
     dispose: () => {
-      clearInterval(intervalHandle);
+      if (intervalHandle !== undefined) clearInterval(intervalHandle);
       configListener.dispose();
       item.dispose();
     },

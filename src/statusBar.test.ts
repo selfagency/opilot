@@ -44,7 +44,7 @@ vi.mock('vscode', () => ({
 import type { Ollama } from 'ollama';
 import { checkOllamaHealth, registerStatusBarHeartbeat } from './statusBar.js';
 
-/** Flush the microtask queue so async chains (like await client.list()) complete.
+/** Flush the microtask queue so async chains (like await client.ps()) complete.
  * Each `await Promise.resolve()` processes one tick — 5 ticks covers a 3-level deep chain.
  * Does NOT use setTimeout so it's safe with vi.useFakeTimers(). */
 const flushPromises = async (): Promise<void> => {
