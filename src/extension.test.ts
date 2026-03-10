@@ -1267,6 +1267,84 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
     expect(allCalls.some((v: string) => v.includes('The answer is 42.'))).toBe(true);
   });
 
+  it('strips raw <think>...</think> tags from local model content stream', async () => {
+    vi.doMock('./client.js', () => ({ getOllamaClient: vi.fn(), testConnection: vi.fn() }));
+    vi.doMock('./diagnostics.js', () => ({
+      createDiagnosticsLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+        exception: vi.fn(),
+      }),
+      getConfiguredLogLevel: vi.fn(() => 'info'),
+    }));
+    vi.doMock('./provider.js', () => ({
+      OllamaChatModelProvider: class {
+        setAuthToken = vi.fn();
+        prefetchModels = vi.fn();
+      },
+      isThinkingModelId: (id: string) => /(qwen3|qwq|deepseek-?r1|cogito|phi\d+-reasoning)/i.test(id),
+    }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
+    vi.doMock('vscode', () => ({
+      LanguageModelTextPart: class {
+        constructor(public value: string) {}
+      },
+      LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
+      ChatRequestTurn: class {},
+      ChatResponseTurn: class {},
+      ChatResponseMarkdownPart: class {},
+      LanguageModelChatMessage: {
+        User: (content: string) => ({ role: 1, content }),
+        Assistant: (content: string) => ({ role: 2, content }),
+      },
+      lm: { selectChatModels: vi.fn().mockResolvedValue([]) },
+      workspace: { getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }) },
+    }));
+
+    const ext = await import('./extension.js');
+
+    const mockMarkdown = vi.fn();
+    const stream = { markdown: mockMarkdown };
+    const token = { isCancellationRequested: false };
+
+    // Simulate an older Ollama / model that emits raw <think> tags in content
+    const mockClient = {
+      chat: vi.fn().mockResolvedValue(
+        (async function* () {
+          yield { message: { content: '<think>let me reason step 1' } };
+          yield { message: { content: ' step 2</think>' } };
+          yield { message: { content: 'The answer is 42.' } };
+          yield { message: {}, done: true };
+        })(),
+      ),
+    };
+
+    const request = {
+      prompt: 'what is the meaning of life?',
+      model: { vendor: 'selfagency-opilot', id: 'qwen3:8b' },
+    };
+
+    await ext.handleChatRequest(request as any, { history: [] } as any, stream as any, token as any, mockClient as any);
+
+    const allCalls = mockMarkdown.mock.calls.map((c: any[]) => c[0] as string);
+    const joined = allCalls.join('');
+
+    // Raw <think> tags must never reach the markdown stream
+    expect(joined).not.toContain('<think>');
+    expect(joined).not.toContain('</think>');
+    // Thinking section header should appear
+    expect(allCalls.some((v: string) => v.includes('Thinking') || v.includes('thinking'))).toBe(true);
+    // Thinking content should be visible
+    expect(allCalls.some((v: string) => v.includes('let me reason step 1'))).toBe(true);
+    // Separator before response
+    expect(allCalls.some((v: string) => v.includes('---'))).toBe(true);
+    // Final answer present
+    expect(allCalls.some((v: string) => v.includes('The answer is 42.'))).toBe(true);
+  });
+
   it('passes think: true for known thinking model IDs', async () => {
     vi.doMock('./client.js', () => ({ getOllamaClient: vi.fn(), testConnection: vi.fn() }));
     vi.doMock('./diagnostics.js', () => ({

@@ -951,9 +951,12 @@ export async function handleChatRequest(
       let thinkingStarted = false;
       let contentStarted = false;
       const xmlFilter = createXmlStreamFilter();
-      // Only parse <think> tags client-side on the cloud/OpenAI-compat path.
-      // Native SDK path gets message.thinking pre-split by Ollama's server-side parser.
-      const thinkingParser = isCloudModel && shouldThink ? new ThinkingParser() : null;
+      // Parse <think> tags on both cloud and local paths.
+      // For local models Ollama normally pre-splits thinking into message.thinking, but
+      // some model/version combinations still emit raw <think> tags in message.content.
+      // Applying the parser unconditionally is safe: if content is already clean the
+      // parser transitions through lookingForOpening → thinkingDone and passes it unchanged.
+      const thinkingParser = shouldThink ? new ThinkingParser() : null;
 
       for await (const chunk of response) {
         if (token.isCancellationRequested) {
