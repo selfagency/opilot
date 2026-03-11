@@ -7,20 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.1] - 2026-03-11
-
-## What's Changed
-
-- chore(deps): bump tar from 7.5.10 to 7.5.11 in the npm_and_yarn group across 1 directory by @dependabot[bot] in https://github.com/selfagency/opilot/pull/61
-
-## New Contributors
-
-- @dependabot[bot] made their first contribution in https://github.com/selfagency/opilot/pull/61
-
-**Full Changelog**: https://github.com/selfagency/opilot/compare/v1.2.0...v1.2.1
-
-_Source: changes from v1.2.0 to v1.2.1._
-
 ## [1.2.0] - 2026-03-11
 
 ## What's Changed
