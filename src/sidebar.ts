@@ -1461,6 +1461,15 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
   }
 
   /**
+   * Re-render the tree without clearing any cached data.
+   * Use this when only the display mode changes (grouping, filtering) so we
+   * don't trigger unnecessary network re-fetches.
+   */
+  softRefresh(): void {
+    this.treeChangeEmitter.fire(null);
+  }
+
+  /**
    * Notify VS Code that variant check-icons may be stale (e.g. after a local
    * model is pulled or deleted). Raw variant metadata is preserved; items are
    * re-materialized from the current local model set on the next getChildren call.
@@ -1982,6 +1991,15 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     this.catalogModelNames = [];
     this.cloudCapabilitiesByBase.clear();
     void this.context.globalState?.update(CloudModelsProvider.CLOUD_CATALOG_STORAGE_KEY, undefined);
+    this.treeChangeEmitter.fire(null);
+  }
+
+  /**
+   * Re-render the tree without clearing any cached data.
+   * Use this when only the display mode changes (grouping, filtering) so we
+   * don't trigger unnecessary network re-fetches.
+   */
+  softRefresh(): void {
     this.treeChangeEmitter.fire(null);
   }
 
@@ -2771,7 +2789,7 @@ export function registerSidebar(
         cloudProvider.grouped = !cloudProvider.grouped;
         void context.globalState.update('ollama.cloudGrouped', cloudProvider.grouped);
         void commands.executeCommand('setContext', 'ollama.cloudGrouped', cloudProvider.grouped);
-        cloudProvider.refresh();
+        cloudProvider.softRefresh();
       };
       return commands.registerCommand('opilot.toggleCloudGrouping', toggleCloud);
     })(),
@@ -2786,7 +2804,7 @@ export function registerSidebar(
         libraryProvider.grouped = !libraryProvider.grouped;
         void context.globalState.update('ollama.libraryGrouped', libraryProvider.grouped);
         void commands.executeCommand('setContext', 'ollama.libraryGrouped', libraryProvider.grouped);
-        libraryProvider.refresh();
+        libraryProvider.softRefresh();
       };
       return commands.registerCommand('opilot.toggleLibraryGrouping', toggleLibrary);
     })(),
