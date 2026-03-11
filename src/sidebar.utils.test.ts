@@ -168,4 +168,166 @@ describe('sidebar utility helpers', () => {
     expect(getLibraryModelUrl('org/model name')).toBe('https://ollama.com/library/org/model%20name');
     expect(getLibraryModelUrl('../bad')).toBe('https://ollama.com/library/%2E%2E/bad');
   });
+
+  describe('extractParamsBillions', () => {
+    it('parses colon-separated size tags', async () => {
+      const { extractParamsBillions } = await import('./sidebar.js');
+      expect(extractParamsBillions('llama3.2:3b')).toBe(3);
+      expect(extractParamsBillions('qwen2.5:72b')).toBe(72);
+      expect(extractParamsBillions('mistral:7b-instruct')).toBe(7);
+    });
+
+    it('parses dash-separated size tokens', async () => {
+      const { extractParamsBillions } = await import('./sidebar.js');
+      expect(extractParamsBillions('llama-7b')).toBe(7);
+      expect(extractParamsBillions('model-3b-instruct')).toBe(3);
+    });
+
+    it('parses underscore-separated size tokens', async () => {
+      const { extractParamsBillions } = await import('./sidebar.js');
+      expect(extractParamsBillions('model_72b')).toBe(72);
+    });
+
+    it('parses decimal parameter counts', async () => {
+      const { extractParamsBillions } = await import('./sidebar.js');
+      expect(extractParamsBillions('phi4:3.8b')).toBe(3.8);
+      expect(extractParamsBillions('gemma:0.6b')).toBe(0.6);
+    });
+
+    it('is case-insensitive for the B suffix', async () => {
+      const { extractParamsBillions } = await import('./sidebar.js');
+      expect(extractParamsBillions('model:7B')).toBe(7);
+    });
+
+    it('returns null when no size token is present', async () => {
+      const { extractParamsBillions } = await import('./sidebar.js');
+      expect(extractParamsBillions('phi4')).toBeNull();
+      expect(extractParamsBillions('llama3.2:latest')).toBeNull();
+      expect(extractParamsBillions('')).toBeNull();
+    });
+  });
+
+  describe('isRecommendedForHardware', () => {
+    it('returns false when parameter count cannot be determined', async () => {
+      vi.doMock('node:os', () => ({ totalmem: () => 32 * 1024 ** 3 }));
+      const { isRecommendedForHardware } = await import('./sidebar.js');
+      expect(isRecommendedForHardware('phi4')).toBe(false);
+      expect(isRecommendedForHardware('llama3.2:latest')).toBe(false);
+    });
+
+    it('recommends small models when enough RAM is available', async () => {
+      // 32 GB total → available = 30 GB → threshold = 18 GB
+      // 3B model: memGB = 3 * 2 * 0.5 = 3 GB → fits
+      // 7B model: memGB = 7 * 2 * 0.5 = 7 GB → fits
+      vi.doMock('node:os', () => ({ totalmem: () => 32 * 1024 ** 3 }));
+      const { isRecommendedForHardware } = await import('./sidebar.js');
+      expect(isRecommendedForHardware('llama3.2:3b')).toBe(true);
+      expect(isRecommendedForHardware('mistral:7b')).toBe(true);
+    });
+
+    it('does not recommend large models that exceed the headroom threshold', async () => {
+      // 8 GB total → available = 6 GB → threshold = 3.6 GB
+      // 7B model: memGB = 7 * 2 * 0.5 = 7 GB → does not fit
+      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3 }));
+      const { isRecommendedForHardware } = await import('./sidebar.js');
+      expect(isRecommendedForHardware('mistral:7b')).toBe(false);
+    });
+
+    it('recommends models that just fit within the 60% threshold', async () => {
+      // 16 GB total → available = 14 GB → threshold = 8.4 GB
+      // 3B model: memGB = 3 GB → fits comfortably
+      vi.doMock('node:os', () => ({ totalmem: () => 16 * 1024 ** 3 }));
+      const { isRecommendedForHardware } = await import('./sidebar.js');
+      expect(isRecommendedForHardware('llama3.2:3b')).toBe(true);
+    });
+  });
+
+  describe('LibraryModelsProvider recommendedOnly behaviour', () => {
+    it('filters flat list to recommended models only when recommendedOnly=true', async () => {
+      // 8 GB total → available = 6 GB → threshold = 3.6 GB
+      // tiny-llama-3b: memGB = 3 * 2 * 0.5 = 3 GB → fits
+      // big-model-70b: memGB = 70 * 2 * 0.5 = 70 GB → does not fit
+      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3 }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          headers: { get: () => null },
+          text: async () => '<a href="/library/tiny-llama-3b"></a><a href="/library/big-model-70b"></a>',
+        }),
+      );
+
+      const { LibraryModelsProvider } = await import('./sidebar.js');
+      const provider = new LibraryModelsProvider(undefined);
+      provider.grouped = false;
+      provider.recommendedOnly = true;
+
+      const items = await provider.getChildren();
+      const labels = items.map((i: any) => i.label);
+      expect(labels).toContain('tiny-llama-3b');
+      expect(labels).not.toContain('big-model-70b');
+      provider.dispose();
+    });
+
+    it('shows all models when recommendedOnly=false', async () => {
+      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3 }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          headers: { get: () => null },
+          text: async () => '<a href="/library/tiny-llama-3b"></a><a href="/library/big-model-70b"></a>',
+        }),
+      );
+
+      const { LibraryModelsProvider } = await import('./sidebar.js');
+      const provider = new LibraryModelsProvider(undefined);
+      provider.grouped = false;
+      provider.recommendedOnly = false;
+
+      const items = await provider.getChildren();
+      const labels = items.map((i: any) => i.label);
+      expect(labels).toContain('tiny-llama-3b');
+      expect(labels).toContain('big-model-70b');
+      provider.dispose();
+    });
+
+    it('forces grouped=false on startup when both recommendedOnly and grouped are true', async () => {
+      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3 }));
+
+      const { registerSidebar } = await import('./sidebar.js');
+      const vscode = await import('vscode');
+
+      const state: Record<string, unknown> = {
+        'ollama.libraryGrouped': true,
+        'ollama.libraryRecommendedOnly': true,
+      };
+      const globalStateUpdate = vi.fn((key: string, value: unknown) => {
+        state[key] = value;
+      });
+      const mockContext = {
+        subscriptions: { push: vi.fn() },
+        secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
+        globalState: {
+          get: vi.fn((key: string, def: unknown) => (key in state ? state[key] : def)),
+          update: globalStateUpdate,
+        },
+      } as unknown as import('vscode').ExtensionContext;
+      const mockClient = {
+        list: vi.fn().mockResolvedValue({ models: [] }),
+        generate: vi.fn(),
+      } as unknown as import('ollama').Ollama;
+
+      registerSidebar(mockContext, mockClient);
+
+      // On startup, when recommendedOnly=true is restored alongside grouped=true,
+      // the reconciliation logic must persist grouped=false and update the context.
+      expect(globalStateUpdate).toHaveBeenCalledWith('ollama.libraryGrouped', false);
+      expect(vi.mocked(vscode.commands.executeCommand)).toHaveBeenCalledWith(
+        'setContext',
+        'ollama.libraryGrouped',
+        false,
+      );
+    });
+  });
 });

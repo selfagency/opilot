@@ -43,7 +43,7 @@
 
 ## 🔧 Requirements
 
-- **VS Code** 1.109.0 or higher
+- **VS Code** 1.111.0 or higher
 - **GitHub Copilot Chat** extension installed and active
 - **Ollama** installed locally ([Download](https://ollama.ai/download)) **or** a remote Ollama instance you control
 
@@ -212,7 +212,7 @@ For more information on Ollama's security and privacy model, see the [Ollama Git
 
 - [Node.js](https://nodejs.org/) 20+
 - [pnpm](https://pnpm.io/) (version pinned in `package.json`)
-- [VS Code](https://code.visualstudio.com/) 1.109.0+
+- [VS Code](https://code.visualstudio.com/) 1.111.0+
 
 ### Build
 

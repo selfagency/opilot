@@ -10,7 +10,7 @@ This guide covers everything you need to build, test, and contribute to **Opilot
 | ------------------- | ------------------------ |
 | Node.js             | 20+                      |
 | pnpm                | pinned in `package.json` |
-| VS Code             | 1.109.0+                 |
+| VS Code             | 1.111.0+                 |
 | Ollama              | latest                   |
 | GitHub Copilot Chat | latest                   |
 

@@ -61,7 +61,7 @@ title: Opilot — Ollama for GitHub Copilot VS Code Extension
 
 ## Requirements
 
-- **VS Code** 1.109.0 or higher
+- **VS Code** 1.111.0 or higher
 - **GitHub Copilot Chat** extension installed and active
 - **Ollama** installed locally ([Download](https://ollama.ai/download)) **or** a remote Ollama instance you control
 - For cloud models: run `ollama login` to authenticate

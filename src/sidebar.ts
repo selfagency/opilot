@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { Ollama } from 'ollama';
@@ -26,6 +26,48 @@ import { reportError } from './errorHandler.js';
 import { isThinkingModelId } from './provider.js';
 
 const execAsync = promisify(exec);
+
+/**
+ * Returns available system RAM in GB minus a fixed overhead for the OS and
+ * background processes.  On Apple Silicon (unified memory) totalmem() covers
+ * both RAM and GPU VRAM, so this is the correct budget for model inference.
+ * On discrete-GPU machines we are conservatively using RAM as the budget;
+ * it may under-recommend but will never over-recommend.
+ */
+function getAvailableMemoryGb(): number {
+  return totalmem() / 1024 ** 3 - 2;
+}
+
+/**
+ * Extract the parameter count in billions from a model name or variant tag.
+ * Examples: "llama3.2:3b" → 3, "qwen2.5:72b" → 72, "phi4" → null (no explicit size).
+ */
+export function extractParamsBillions(modelName: string): number | null {
+  // Match a size token like ":3b", "-7b", "_72b", ".6b" anywhere in the name.
+  const m = /(?:[:\-_.])(\d+(?:\.\d+)?)b\b/i.exec(modelName);
+  return m ? parseFloat(m[1]) : null;
+}
+
+/**
+ * Returns true when the model is likely to run with comfortable speed on the
+ * current machine.
+ *
+ * The formula:
+ *   memGB = params × 2 × 0.5   (FP16 weight size × INT4 quantisation factor)
+ *   fits  = memGB ≤ availableGB × 0.6
+ *
+ * The 0.6 headroom factor ensures at least 40 % of RAM remains free for the
+ * KV-cache, context buffers, and OS processes.  A model that only barely fits
+ * will saturate memory bandwidth and run at unbearably slow speeds — so we
+ * exclude it.  When the parameter count cannot be determined from the name
+ * we return false (no recommendation).
+ */
+export function isRecommendedForHardware(modelName: string): boolean {
+  const params = extractParamsBillions(modelName);
+  if (params === null) return false;
+  const memGb = params * 2 * 0.5; // INT4 quant: ~1 GB per billion params
+  return memGb <= getAvailableMemoryGb() * 0.6;
+}
 
 /**
  * Validates that a fetch response carries an HTML Content-Type.
@@ -1155,6 +1197,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
 
   filterText = '';
   grouped = true;
+  recommendedOnly = false;
 
   private cache: string[] = [];
   private cacheTimeMs = 0;
@@ -1289,34 +1332,41 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           allItems.push(model);
         }
 
-        // Fetch and add variants
-        const cachedVariants = this.variantsCache.get(model.label);
-        if (cachedVariants) {
-          const variants = this.materializeVariants(cachedVariants, localNames);
-          const filteredVariants = variants.filter(
-            v =>
-              !filterLower ||
-              v.label.toLowerCase().includes(filterLower) ||
-              (typeof v.tooltip === 'string' && v.tooltip.toLowerCase().includes(filterLower)),
-          );
-          allItems.push(...filteredVariants);
-        } else {
-          // Fetch variants asynchronously
-          void this.fetchModelVariants(model.label).then(
-            raw => {
-              if (raw) {
-                this.variantsCache.set(model.label, raw);
-                this.treeChangeEmitter.fire(null); // Refresh to show new variants
-              }
-            },
-            () => {
-              // Silently skip on error
-            },
-          );
+        // Fetch and add variants — skip when recommendedOnly to avoid firing
+        // hundreds of concurrent requests after a cache-clearing refresh.
+        if (!this.recommendedOnly) {
+          const cachedVariants = this.variantsCache.get(model.label);
+          if (cachedVariants) {
+            const variants = this.materializeVariants(cachedVariants, localNames);
+            const filteredVariants = variants.filter(
+              v =>
+                !filterLower ||
+                v.label.toLowerCase().includes(filterLower) ||
+                (typeof v.tooltip === 'string' && v.tooltip.toLowerCase().includes(filterLower)),
+            );
+            allItems.push(...filteredVariants);
+          } else {
+            // Fetch variants asynchronously
+            void this.fetchModelVariants(model.label).then(
+              raw => {
+                if (raw) {
+                  this.variantsCache.set(model.label, raw);
+                  this.treeChangeEmitter.fire(null); // Refresh to show new variants
+                }
+              },
+              () => {
+                // Silently skip on error
+              },
+            );
+          }
         }
       }
 
-      return allItems.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+      const filteredItems = this.recommendedOnly
+        ? allItems.filter(item => item.type === 'status' || isRecommendedForHardware(item.label))
+        : allItems;
+
+      return filteredItems.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
     }
 
     // Group models by family
@@ -1327,13 +1377,14 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     const filteredEntries = Array.from(groups.entries())
       .filter(
         ([familyName, familyModels]) =>
-          !filterLower ||
-          familyName.toLowerCase().includes(filterLower) ||
-          familyModels.some(
-            m =>
-              m.label.toLowerCase().includes(filterLower) ||
-              (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
-          ),
+          (!filterLower ||
+            familyName.toLowerCase().includes(filterLower) ||
+            familyModels.some(
+              m =>
+                m.label.toLowerCase().includes(filterLower) ||
+                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+            )) &&
+          (!this.recommendedOnly || familyModels.some(m => isRecommendedForHardware(m.label))),
       )
       .sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -1432,10 +1483,15 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           if (preview.capabilities.vision) badges.push('👁️');
           if (preview.capabilities.embedding) badges.push('🧩');
 
+          const isRecommended = isRecommendedForHardware(name);
+          if (isRecommended) {
+            badges.push('👍');
+          }
+
           if (badges.length > 0) {
             const existing = (item.description ?? '').toString();
             // Remove previously appended capability badges, keep size text intact.
-            const cleaned = existing.replace(/\s*(?:☁️|🧠|🛠️|👁️|🧩)(?:\s+(?:☁️|🧠|🛠️|👁️|🧩))*\s*$/, '').trim();
+            const cleaned = existing.replace(/\s*(?:☁️|🧠|🛠️|👁️|🧩|👍)(?:\s+(?:☁️|🧠|🛠️|👁️|🧩|👍))*\s*$/, '').trim();
             const badgeStr = badges.join(' ');
             item.description = cleaned ? `${cleaned} ${badgeStr}` : badgeStr;
           }
@@ -1444,6 +1500,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           if (isCloudVariant) tooltipLines.push('☁️ Cloud');
           const capLine = buildCapabilityLines(preview.capabilities);
           if (capLine) tooltipLines.push(capLine);
+          if (isRecommended) tooltipLines.push('👍 Recommended for your hardware');
           if (preview.description) tooltipLines.push(preview.description);
           item.tooltip = tooltipLines.join('\n');
           this.treeChangeEmitter.fire(item);
@@ -1644,6 +1701,10 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           if (preview.capabilities.tools) badges.push('🛠️');
           if (preview.capabilities.vision) badges.push('👁️');
           if (preview.capabilities.embedding) badges.push('🧩');
+          if (isRecommendedForHardware(name)) {
+            badges.push('👍');
+            tooltipLines.push('👍 Recommended for your hardware');
+          }
           if (badges.length > 0) {
             item.description = badges.join(' ');
           }
@@ -2622,6 +2683,33 @@ export function registerSidebar(
     })(),
     commands.registerCommand('opilot.toggleLibraryGroupingToTree', () => {
       void commands.executeCommand('opilot.toggleLibraryGrouping');
+    }),
+    (() => {
+      const initialRecommendedOnly = context.globalState.get<boolean>('ollama.libraryRecommendedOnly', false);
+      libraryProvider.recommendedOnly = initialRecommendedOnly;
+      void commands.executeCommand('setContext', 'ollama.libraryRecommendedOnly', initialRecommendedOnly);
+      // Reconcile: if recommended-only is active on startup, ensure flat (ungrouped) mode.
+      if (initialRecommendedOnly && libraryProvider.grouped) {
+        libraryProvider.grouped = false;
+        void context.globalState.update('ollama.libraryGrouped', false);
+        void commands.executeCommand('setContext', 'ollama.libraryGrouped', false);
+      }
+      const toggleRecommended = () => {
+        libraryProvider.recommendedOnly = !libraryProvider.recommendedOnly;
+        void context.globalState.update('ollama.libraryRecommendedOnly', libraryProvider.recommendedOnly);
+        void commands.executeCommand('setContext', 'ollama.libraryRecommendedOnly', libraryProvider.recommendedOnly);
+        // Enabling recommended-only forces flat mode so individual model names are visible.
+        if (libraryProvider.recommendedOnly && libraryProvider.grouped) {
+          libraryProvider.grouped = false;
+          void context.globalState.update('ollama.libraryGrouped', false);
+          void commands.executeCommand('setContext', 'ollama.libraryGrouped', false);
+        }
+        libraryProvider.refresh();
+      };
+      return commands.registerCommand('opilot.toggleLibraryRecommended', toggleRecommended);
+    })(),
+    commands.registerCommand('opilot.toggleLibraryRecommendedOff', () => {
+      void commands.executeCommand('opilot.toggleLibraryRecommended');
     }),
     commands.registerCommand('opilot.refreshSidebar', () => handleRefreshLocalModels(localProvider)),
     commands.registerCommand('opilot.refreshLocalModels', () => handleRefreshLocalModels(localProvider)),

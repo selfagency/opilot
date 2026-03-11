@@ -198,6 +198,18 @@
         "category": "Ollama"
       },
       {
+        "command": "opilot.toggleLibraryRecommended",
+        "title": "Show Recommended Models",
+        "icon": "$(thumbsup)",
+        "category": "Ollama"
+      },
+      {
+        "command": "opilot.toggleLibraryRecommendedOff",
+        "title": "Show All Models",
+        "icon": "$(thumbsup-filled)",
+        "category": "Ollama"
+      },
+      {
         "command": "opilot.collapseLocalModels",
         "title": "Collapse All Local Models",
         "icon": "$(collapse-all)",
@@ -463,34 +475,44 @@
           "group": "navigation@5"
         },
         {
+          "command": "opilot.toggleLibraryRecommended",
+          "when": "view == ollama-library-models && !ollama.libraryRecommendedOnly",
+          "group": "navigation@0"
+        },
+        {
+          "command": "opilot.toggleLibraryRecommendedOff",
+          "when": "view == ollama-library-models && ollama.libraryRecommendedOnly",
+          "group": "navigation@0"
+        },
+        {
           "command": "opilot.filterLibraryModels",
           "when": "view == ollama-library-models && !ollama.libraryFilterActive",
-          "group": "navigation@0"
+          "group": "navigation@1"
         },
         {
           "command": "opilot.clearLibraryFilter",
           "when": "view == ollama-library-models && ollama.libraryFilterActive",
-          "group": "navigation@0"
+          "group": "navigation@1"
         },
         {
           "command": "opilot.toggleLibraryGrouping",
           "when": "view == ollama-library-models && ollama.libraryGrouped",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "opilot.toggleLibraryGroupingToTree",
           "when": "view == ollama-library-models && !ollama.libraryGrouped",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "opilot.refreshLibrary",
           "when": "view == ollama-library-models",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "opilot.collapseLibrary",
           "when": "view == ollama-library-models",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "opilot.loginCloud",
