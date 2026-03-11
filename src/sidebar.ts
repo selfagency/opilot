@@ -1483,8 +1483,8 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           if (preview.capabilities.vision) badges.push('👁️');
           if (preview.capabilities.embedding) badges.push('🧩');
 
-          const recommended = isRecommendedForHardware(name);
-          if (recommended) {
+          const isRecommended = isRecommendedForHardware(name);
+          if (isRecommended) {
             badges.push('👍');
           }
 
@@ -1500,7 +1500,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           if (isCloudVariant) tooltipLines.push('☁️ Cloud');
           const capLine = buildCapabilityLines(preview.capabilities);
           if (capLine) tooltipLines.push(capLine);
-          if (recommended) tooltipLines.push('👍 Recommended for your hardware');
+          if (isRecommended) tooltipLines.push('👍 Recommended for your hardware');
           if (preview.description) tooltipLines.push(preview.description);
           item.tooltip = tooltipLines.join('\n');
           this.treeChangeEmitter.fire(item);

@@ -191,7 +191,7 @@ describe('sidebar utility helpers', () => {
     it('parses decimal parameter counts', async () => {
       const { extractParamsBillions } = await import('./sidebar.js');
       expect(extractParamsBillions('phi4:3.8b')).toBe(3.8);
-      expect(extractParamsBillions('gemma:0.6b')).toBeCloseTo(0.6);
+      expect(extractParamsBillions('gemma:0.6b')).toBe(0.6);
     });
 
     it('is case-insensitive for the B suffix', async () => {
@@ -209,7 +209,7 @@ describe('sidebar utility helpers', () => {
 
   describe('isRecommendedForHardware', () => {
     it('returns false when parameter count cannot be determined', async () => {
-      vi.doMock('node:os', () => ({ totalmem: () => 32 * 1024 ** 3, homedir: () => '/home/user' }));
+      vi.doMock('node:os', () => ({ totalmem: () => 32 * 1024 ** 3 }));
       const { isRecommendedForHardware } = await import('./sidebar.js');
       expect(isRecommendedForHardware('phi4')).toBe(false);
       expect(isRecommendedForHardware('llama3.2:latest')).toBe(false);
@@ -219,7 +219,7 @@ describe('sidebar utility helpers', () => {
       // 32 GB total → available = 30 GB → threshold = 18 GB
       // 3B model: memGB = 3 * 2 * 0.5 = 3 GB → fits
       // 7B model: memGB = 7 * 2 * 0.5 = 7 GB → fits
-      vi.doMock('node:os', () => ({ totalmem: () => 32 * 1024 ** 3, homedir: () => '/home/user' }));
+      vi.doMock('node:os', () => ({ totalmem: () => 32 * 1024 ** 3 }));
       const { isRecommendedForHardware } = await import('./sidebar.js');
       expect(isRecommendedForHardware('llama3.2:3b')).toBe(true);
       expect(isRecommendedForHardware('mistral:7b')).toBe(true);
@@ -228,7 +228,7 @@ describe('sidebar utility helpers', () => {
     it('does not recommend large models that exceed the headroom threshold', async () => {
       // 8 GB total → available = 6 GB → threshold = 3.6 GB
       // 7B model: memGB = 7 * 2 * 0.5 = 7 GB → does not fit
-      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3, homedir: () => '/home/user' }));
+      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3 }));
       const { isRecommendedForHardware } = await import('./sidebar.js');
       expect(isRecommendedForHardware('mistral:7b')).toBe(false);
     });
@@ -236,7 +236,7 @@ describe('sidebar utility helpers', () => {
     it('recommends models that just fit within the 60% threshold', async () => {
       // 16 GB total → available = 14 GB → threshold = 8.4 GB
       // 3B model: memGB = 3 GB → fits comfortably
-      vi.doMock('node:os', () => ({ totalmem: () => 16 * 1024 ** 3, homedir: () => '/home/user' }));
+      vi.doMock('node:os', () => ({ totalmem: () => 16 * 1024 ** 3 }));
       const { isRecommendedForHardware } = await import('./sidebar.js');
       expect(isRecommendedForHardware('llama3.2:3b')).toBe(true);
     });
@@ -247,7 +247,7 @@ describe('sidebar utility helpers', () => {
       // 8 GB total → available = 6 GB → threshold = 3.6 GB
       // tiny-llama-3b: memGB = 3 * 2 * 0.5 = 3 GB → fits
       // big-model-70b: memGB = 70 * 2 * 0.5 = 70 GB → does not fit
-      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3, homedir: () => '/home/user' }));
+      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3 }));
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue({
@@ -270,7 +270,7 @@ describe('sidebar utility helpers', () => {
     });
 
     it('shows all models when recommendedOnly=false', async () => {
-      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3, homedir: () => '/home/user' }));
+      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3 }));
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue({
@@ -292,8 +292,8 @@ describe('sidebar utility helpers', () => {
       provider.dispose();
     });
 
-    it('keeps grouped mode consistent with recommendedOnly via registerSidebar', async () => {
-      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3, homedir: () => '/home/user' }));
+    it('forces grouped=false on startup when both recommendedOnly and grouped are true', async () => {
+      vi.doMock('node:os', () => ({ totalmem: () => 8 * 1024 ** 3 }));
 
       const { registerSidebar } = await import('./sidebar.js');
       const vscode = await import('vscode');
