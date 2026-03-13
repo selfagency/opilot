@@ -1,3 +1,4 @@
+import { appendToBlockquote } from '@selfagency/llm-stream-parser/markdown';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -1560,17 +1561,6 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
  * Used as a fallback when the /api/show capabilities array is not yet cached.
  */
 const THINKING_MODEL_PATTERN = /qwen3|qwq|deepseek-?r1|phi\d+-reasoning|kimi|thinking/i;
-
-/**
- * Format a text chunk so it renders as a markdown blockquote.
- * `atLineStart` must be `true` for the first chunk (right after the blockquote header).
- * All subsequent chunks should pass `false` — internal newlines are already
- * followed by `> ` so the blockquote continues correctly across chunk boundaries.
- */
-function appendToBlockquote(text: string, atLineStart: boolean): string {
-  if (!text) return '';
-  return (atLineStart ? '> ' : '') + text.replace(/\n/g, '\n> ');
-}
 
 export function isThinkingModelId(modelId: string): boolean {
   return THINKING_MODEL_PATTERN.test(modelId);

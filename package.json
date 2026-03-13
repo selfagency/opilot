@@ -47,8 +47,8 @@
     "test:integration": "task integration-tests"
   },
   "dependencies": {
-    "ollama": "^0.6.3",
-    "saxophone": "^0.8.0"
+    "@selfagency/llm-stream-parser": "^0.1.4",
+    "ollama": "^0.6.3"
   },
   "devDependencies": {
     "@go-task/cli": "^3.49.1",

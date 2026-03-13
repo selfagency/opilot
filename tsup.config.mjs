@@ -8,7 +8,7 @@ export default defineConfig({
   format: ['cjs'],
   platform: 'node',
   external: ['vscode'],
-  noExternal: ['ollama', 'saxophone'],
+  noExternal: ['ollama'],
   sourcemap: !production,
   minify: production,
   clean: true,

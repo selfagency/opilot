@@ -782,7 +782,7 @@ describe('OllamaChatModelProvider chat response', () => {
     const message = {
       role: LanguageModelChatMessageRole.User,
       name: undefined,
-      content: [new LanguageModelTextPart('hello '), new LanguageModelDataPart(Buffer.from('image data'), 'image/png')],
+      content: [new LanguageModelTextPart('hello'), new LanguageModelDataPart(Buffer.from('image data'), 'image/png')],
     };
 
     await provider.provideLanguageModelChatResponse(

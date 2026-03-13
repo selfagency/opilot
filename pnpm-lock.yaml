@@ -27,6 +27,9 @@ importers:
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
+      '@selfagency/llm-stream-parser':
+        specifier: ^0.1.4
+        version: 0.1.4
       '@types/node':
         specifier: ^25.3.5
         version: 25.3.5
@@ -1003,6 +1006,9 @@ packages:
     resolution: {integrity: sha512-2HRCml6OztYXyJXAvdDXPKcawukWY2GpR5/nxKp4iBgiO3wcoEGkAaqctIbZcNB6KlUQBIqt8VYkNSj2397EfA==}
     cpu: [x64]
     os: [win32]
+
+  '@selfagency/llm-stream-parser@0.1.4':
+    resolution: {integrity: sha512-hvo80Ziw6pe71nYcM3BzswYgsEsYrG4rZ/v4KcZt5BateE68nRGx5GYyx0beW7n1rwRarfa+cB8jseBWar34TQ==}
 
   '@shikijs/core@2.5.0':
     resolution: {integrity: sha512-uu/8RExTKtavlpH7XqnVYBrfBkUc20ngXiX9NSrBhOVZYv/7XQRKUyhtkeflY5QsxC0GbJThCerruZfsUaSldg==}
@@ -3734,6 +3740,8 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
+
+  '@selfagency/llm-stream-parser@0.1.4': {}
 
   '@shikijs/core@2.5.0':
     dependencies:

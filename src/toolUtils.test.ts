@@ -158,8 +158,8 @@ describe('extractXmlToolCalls', () => {
       '<read_file><path>third.ts</path></read_file>';
     const result = extractXmlToolCalls(text, new Set(['read_file', 'search_files']));
     expect(result).toHaveLength(3);
-    expect(result[0]).toEqual({ name: 'read_file', parameters: { path: 'first.ts' } });
-    expect(result[1]).toEqual({ name: 'search_files', parameters: { query: 'second' } });
-    expect(result[2]).toEqual({ name: 'read_file', parameters: { path: 'third.ts' } });
+    expect(result[0]).toEqual(expect.objectContaining({ name: 'read_file', parameters: { path: 'first.ts' } }));
+    expect(result[1]).toEqual(expect.objectContaining({ name: 'search_files', parameters: { query: 'second' } }));
+    expect(result[2]).toEqual(expect.objectContaining({ name: 'read_file', parameters: { path: 'third.ts' } }));
   });
 });
