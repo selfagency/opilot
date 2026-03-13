@@ -73,17 +73,6 @@
     "vitest": "^4.0.18",
     "zx": "^8.8.5"
   },
-  "lint-staged": {
-    "scripts/*.mjs": [
-      "task precommit -- "
-    ],
-    "src/**/*.ts": [
-      "task precommit -- "
-    ],
-    "**/*.{json,yml,yaml,md}": [
-      "oxfmt --write -- "
-    ]
-  },
   "contributes": {
     "chatParticipants": [
       {
