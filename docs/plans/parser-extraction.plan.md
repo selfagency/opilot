@@ -210,7 +210,7 @@ The library does NOT import or depend on any provider SDK. Mapping is the caller
 
 Inspired by LangChain output parsers, llm-output-parser, langschema, and Vercel AI SDK's `Output.object()`.
 
-```typescript
+````typescript
 // structured/parseJson.ts
 export interface ParseJsonOptions {
   /** When multiple JSON objects found, return the most comprehensive one. Default: true */
@@ -234,7 +234,7 @@ export function parseJson(text: string, options?: ParseJsonOptions): unknown | n
 export function validateJsonSchema<T = unknown>(
   text: string,
   schema: Record<string, unknown>,
-  options?: ParseJsonOptions
+  options?: ParseJsonOptions,
 ): { success: true; data: T } | { success: false; errors: string[] };
 
 // structured/buildFormatInstructions.ts
@@ -258,7 +258,7 @@ export function buildRepairPrompt(options: {
   schema?: Record<string, unknown>;
   originalPrompt?: string;
 }): string;
-```
+````
 
 **Design decisions**:
 
@@ -334,9 +334,15 @@ The flat `thinking`/`content`/`toolCalls` fields remain for backward compat and 
 ```typescript
 for (const part of output.parts) {
   switch (part.type) {
-    case 'text': stream.markdown(part.text); break;
-    case 'thinking': blockquote(part.text); break;
-    case 'tool_call': await executeTool(part.call); break;
+    case 'text':
+      stream.markdown(part.text);
+      break;
+    case 'thinking':
+      blockquote(part.text);
+      break;
+    case 'tool_call':
+      await executeTool(part.call);
+      break;
   }
 }
 ```
@@ -354,11 +360,7 @@ export type Parser<In, Out> = (input: In) => Out;
  * Enables: pipe(parseJson, validateSchema(mySchema))
  */
 export function pipe<A, B, C>(first: Parser<A, B>, second: Parser<B, C>): Parser<A, C>;
-export function pipe<A, B, C, D>(
-  first: Parser<A, B>,
-  second: Parser<B, C>,
-  third: Parser<C, D>
-): Parser<A, D>;
+export function pipe<A, B, C, D>(first: Parser<A, B>, second: Parser<B, C>, third: Parser<C, D>): Parser<A, D>;
 ```
 
 This is intentionally minimal — functional composition, not a class hierarchy. Parsers are plain functions. Example usage:
@@ -368,7 +370,7 @@ import { parseJson, pipe } from 'llm-stream-parser';
 
 const parseAndValidate = pipe(
   (text: string) => parseJson(text),
-  (json) => myZodSchema.parse(json)
+  json => myZodSchema.parse(json),
 );
 const result = parseAndValidate(llmOutput);
 ```
@@ -441,7 +443,7 @@ Port from formatting.ts. Converts `<note>text</note>` → `**Note**\ntext`. This
 
 LLMs frequently wrap valid JSON in markdown fences, conversational prose ("Here's the JSON:"), or produce multiple objects per response. The `parseJson()` utility (Section 5d) handles all these cases robustly:
 
-- **Markdown fence stripping**: detect and unwrap `` ```json ``` `` blocks (from llm-output-parser)
+- **Markdown fence stripping**: detect and unwrap ` ```json ``` ` blocks (from llm-output-parser)
 - **Prose wrapping**: strip leading/trailing conversational text around JSON (from llm-output-parser, Reddit discussion)
 - **Multi-object selection**: when multiple JSON objects are found, return the most comprehensive one by key count + depth (from llm-output-parser)
 - **Incomplete JSON recovery**: optionally attempt to close unclosed brackets for truncated responses (from llm-output-parser, simmering.dev discussion of retry strategies)
@@ -564,7 +566,7 @@ Consumers who only need a subset can import from subpaths to keep bundle size mi
   "./markdown": "./dist/markdown/index.js",
   "./processor": "./dist/processor/index.js",
   "./adapters/vscode": "./dist/adapters/vscode.js",
-  "./adapters/generic": "./dist/adapters/generic.js"
+  "./adapters/generic": "./dist/adapters/generic.js",
 }
 ```
 

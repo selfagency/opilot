@@ -9,9 +9,11 @@ updated_at: 2026-03-11T16:34:56Z
 ---
 
 ## Context
+
 Apply review feedback to docs/plans/parser-extraction.plan.md for factual accuracy, feature completeness, best practices, and security.
 
 ## Todo
+
 - [x] Correct API terminology and claims (OpenAI/Anthropic/LangChain citations)
 - [x] Add explicit security limits and threat-model guidance
 - [x] Add validation-engine contract and streaming edge-case behavior
@@ -21,6 +23,7 @@ Apply review feedback to docs/plans/parser-extraction.plan.md for factual accura
 - [x] Standardize citation tone phrasing across sections
 
 ## Summary of Changes
+
 - Updated OpenAI terminology to use Responses API `text.format` / strict tool schemas where relevant.
 - Clarified Anthropic helper inspirations and modernized LangChain citation wording.
 - Added a validation engine contract section with optional validator adapter model.
