@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-03-13
+
+## What's Changed
+
+- feat: replace local parser implementations with @selfagency/llm-stream-parser by @selfagency in https://github.com/selfagency/opilot/pull/68
+
+**Full Changelog**: https://github.com/selfagency/opilot/compare/v1.2.1...v1.3.0
+
+_Source: changes from v1.2.1 to v1.3.0._
+
 ## [1.2.1] - 2026-03-11
 
 ## What's Changed
