@@ -55,7 +55,7 @@
     "@octokit/rest": "^22.0.1",
     "@types/node": "^25.5.0",
     "@types/vscode": "^1.110.0",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/coverage-v8": "^4.1.0",
     "@vscode/dts": "^0.4.1",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
@@ -70,7 +70,7 @@
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitepress": "^1.6.4",
-    "vitest": "^4.0.18",
+    "vitest": "^4.1.0",
     "zx": "^8.8.5"
   },
   "contributes": {
