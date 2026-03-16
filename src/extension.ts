@@ -902,7 +902,9 @@ export async function handleChatRequest(
         typeof modelOptions.think === 'boolean' ? modelOptions.think : isThinkingModelId(modelId);
 
       // Check if user wants to hide thinking content (only show header)
-      const hideThinkingContent = vscode.workspace.getConfiguration('ollama').get<boolean>('hideThinkingContent', false);
+      const hideThinkingContent = vscode.workspace
+        .getConfiguration('ollama')
+        .get<boolean>('hideThinkingContent', false);
 
       let shouldThink = shouldThinkInitial;
       let response: AsyncIterable<ChatResponse>;
