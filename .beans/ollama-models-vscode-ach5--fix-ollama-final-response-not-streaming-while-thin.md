@@ -1,11 +1,11 @@
 ---
 # ollama-models-vscode-ach5
 title: Fix Ollama final response not streaming while thinking streams
-status: in-progress
+status: completed
 type: bug
 priority: high
 created_at: 2026-03-16T22:03:11Z
-updated_at: 2026-03-16T22:12:37Z
+updated_at: 2026-03-16T22:14:07Z
 ---
 
 ## Context
@@ -25,3 +25,8 @@ The thinking stream from Ollama is visible progressively, but the assistant fina
 
 ## Tracking
 - Branch: `fix/ach5-stream-final-response`
+
+## Follow-up (Cancellation)
+- Added `token.isCancellationRequested` guard inside the VS Code LM API `for await (const chunk of response.stream)` loop and break early on cancellation.
+- Added regression test to verify chunks after cancellation are not emitted.
+- Verified with targeted `src/extension.test.ts` run (pass).
