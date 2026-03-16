@@ -39,8 +39,8 @@ vi.doMock('vscode', () => ({
   LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
   LanguageModelDataPart: class DataPart {
     constructor(
-      public mimeType: string,
       public data: Uint8Array,
+      public mimeType: string,
     ) {}
   },
   LanguageModelTextPart: class TextPart {

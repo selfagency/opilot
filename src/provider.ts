@@ -1178,7 +1178,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             }
           } else {
             const extractedText = this.extractTextFromDataPart(part);
-            if (extractedText) {
+            if (extractedText !== undefined) {
               textContent += extractedText;
             } else {
               strippedBinaryDataCount++;
@@ -1280,15 +1280,15 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     return (mimeType ?? '').split(';', 1)[0]?.trim().toLowerCase();
   }
 
-  private extractTextFromDataPart(part: LanguageModelDataPart): string {
+  private extractTextFromDataPart(part: LanguageModelDataPart): string | undefined {
     if (!this.isTextualMimeType(part.mimeType)) {
-      return '';
+      return undefined;
     }
 
     try {
       return new TextDecoder('utf-8').decode(part.data);
     } catch {
-      return '';
+      return undefined;
     }
   }
 
