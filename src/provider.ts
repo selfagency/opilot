@@ -34,6 +34,7 @@ import {
 } from './formatting';
 import { chatCompletionsOnce, initiateChatCompletionsStream } from './openaiCompat.js';
 import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openaiCompatMapping.js';
+import { getSetting } from './settings.js';
 import { ThinkingParser } from './thinkingParser.js';
 import { isToolsNotSupportedError, normalizeToolParameters } from './toolUtils.js';
 
@@ -774,7 +775,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     const initialShouldThink = shouldThink;
 
     // Check if user wants to hide thinking content (only show header)
-    const hideThinkingContent = workspace.getConfiguration('ollama').get<boolean>('hideThinkingContent', false);
+    const hideThinkingContent = getSetting<boolean>('hideThinkingContent', false);
 
     try {
       let response: AsyncIterable<ChatResponse>;

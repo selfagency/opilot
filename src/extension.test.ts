@@ -529,7 +529,7 @@ describe('activate', () => {
     await new Promise(resolve => setTimeout(resolve, 10));
 
     expect(showErrorMessage).toHaveBeenCalled();
-    expect(executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', 'ollama');
+    expect(executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', 'opilot');
   });
 
   it('enables log streaming on autoStartLogStreaming true', async () => {
@@ -1662,7 +1662,7 @@ describe('handleConnectionTestFailure', () => {
       'Open Settings',
       'Open Logs',
     );
-    expect(executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', 'ollama');
+    expect(executeCommand).toHaveBeenCalledWith('workbench.action.openSettings', 'opilot');
   });
 
   it('shows error message but does not execute command when not selected', async () => {

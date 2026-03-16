@@ -5,6 +5,7 @@ import type { CreateRequest, Message, Ollama } from 'ollama';
 import * as vscode from 'vscode';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
+import { affectsSetting, getSetting } from './settings.js';
 
 // ---------------------------------------------------------------------------
 // Hover documentation for Modelfile keywords
@@ -267,7 +268,9 @@ export class ModelfilesProvider implements vscode.TreeDataProvider<ModelfileItem
     private readonly log?: DiagnosticsLogger,
   ) {
     this.folderPath = getModelfilesFolder(
-      vscode.workspace.getConfiguration('ollama'),
+      {
+        get: <T>(_key: string) => getSetting<T>('modelfilesPath') as T,
+      },
       homedir(),
       vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     );
@@ -282,9 +285,11 @@ export class ModelfilesProvider implements vscode.TreeDataProvider<ModelfileItem
 
     context.subscriptions.push(
       vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('ollama.modelfilesPath')) {
+        if (affectsSetting(e, 'modelfilesPath')) {
           this.folderPath = getModelfilesFolder(
-            vscode.workspace.getConfiguration('ollama'),
+            {
+              get: <T>(_key: string) => getSetting<T>('modelfilesPath') as T,
+            },
             homedir(),
             vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
           );

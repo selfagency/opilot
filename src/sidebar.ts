@@ -24,6 +24,7 @@ import { fetchModelCapabilities, getCloudOllamaClient, type ModelCapabilities } 
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
 import { isThinkingModelId } from './provider.js';
+import { affectsSetting, getSetting } from './settings.js';
 
 const execAsync = promisify(exec);
 
@@ -615,7 +616,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
 
     // Register config listener once — not inside startAutoRefresh() which can be called multiple times
     this.configListenerDisposable = workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('ollama.localModelRefreshInterval')) {
+      if (affectsSetting(e, 'localModelRefreshInterval')) {
         this.logChannel?.debug('[client] ollama settings changed, restarting auto-refresh');
         this.stopAutoRefresh();
         this.startAutoRefresh();
@@ -919,7 +920,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
    * Start auto-refresh timer for local models
    */
   private startAutoRefresh(): void {
-    const localRefreshSecs = workspace.getConfiguration('ollama').get<number>('localModelRefreshInterval') || 30;
+    const localRefreshSecs = getSetting<number>('localModelRefreshInterval', 30);
 
     // Auto-refresh local/running models
     if (localRefreshSecs > 0) {

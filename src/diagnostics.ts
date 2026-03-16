@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getSetting } from './settings.js';
 
 export type DiagnosticsLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -18,7 +19,7 @@ export interface DiagnosticsLogger {
 }
 
 export function getConfiguredLogLevel(): DiagnosticsLogLevel {
-  const value = vscode.workspace.getConfiguration('ollama').get<string>('diagnostics.logLevel');
+  const value = getSetting<string>('diagnostics.logLevel');
   if (value === 'debug' || value === 'info' || value === 'warn' || value === 'error') {
     return value;
   }

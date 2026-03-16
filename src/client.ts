@@ -1,9 +1,9 @@
 import { Ollama } from 'ollama';
-import { ExtensionContext, workspace } from 'vscode';
+import { ExtensionContext } from 'vscode';
+import { getSetting } from './settings.js';
 
 export function getOllamaHost(): string {
-  const config = workspace.getConfiguration('ollama');
-  return config.get<string>('host') || 'http://localhost:11434';
+  return getSetting<string>('host', 'http://localhost:11434') || 'http://localhost:11434';
 }
 
 export async function getOllamaAuthToken(context: ExtensionContext): Promise<string | undefined> {
@@ -31,7 +31,8 @@ export async function getOllamaAuthHeaders(context: ExtensionContext): Promise<R
  *   the Ollama JS library surfaces `ResponseError` objects containing the server
  *   response body (which does not echo back request headers), and network-level
  *   `TypeError` messages that contain no credentials.
- * - The `host` value is user-controlled via `ollama.host` setting. If a user
+ * - The `host` value is user-controlled via `opilot.host` (with fallback to
+ *   legacy `ollama.host`). If a user
  *   embeds credentials in the URL (e.g. `http://user:pass@host`) the URL will
  *   appear in connection-failure error dialogs — users should use the token
  *   mechanism instead.

@@ -17,7 +17,13 @@ type PackageJson = {
     configuration?: {
       properties?: Record<
         string,
-        { type?: string; default?: unknown; description?: string; markdownDescription?: string }
+        {
+          type?: string;
+          default?: unknown;
+          description?: string;
+          markdownDescription?: string;
+          deprecationMessage?: string;
+        }
       >;
     };
   };
@@ -111,19 +117,39 @@ describe('package contributes integrity', () => {
     expect(missingIcon).toEqual([]);
   });
 
-  it('declares ollama.completionModel configuration property', () => {
+  it('declares opilot.completionModel configuration property', () => {
     const pkg = loadPackageJson();
-    const prop = pkg.contributes?.configuration?.properties?.['ollama.completionModel'];
+    const prop = pkg.contributes?.configuration?.properties?.['opilot.completionModel'];
     expect(prop).toBeDefined();
     expect(prop?.type).toBe('string');
   });
 
-  it('declares ollama.enableInlineCompletions configuration property', () => {
+  it('declares opilot.enableInlineCompletions configuration property', () => {
     const pkg = loadPackageJson();
-    const prop = pkg.contributes?.configuration?.properties?.['ollama.enableInlineCompletions'];
+    const prop = pkg.contributes?.configuration?.properties?.['opilot.enableInlineCompletions'];
     expect(prop).toBeDefined();
     expect(prop?.type).toBe('boolean');
     expect(prop?.default).toBe(true);
+  });
+
+  it('marks legacy ollama.* settings as deprecated', () => {
+    const pkg = loadPackageJson();
+    const properties = pkg.contributes?.configuration?.properties ?? {};
+    const legacyKeys = [
+      'ollama.host',
+      'ollama.localModelRefreshInterval',
+      'ollama.libraryRefreshInterval',
+      'ollama.streamLogs',
+      'ollama.diagnostics.logLevel',
+      'ollama.modelfilesPath',
+      'ollama.completionModel',
+      'ollama.enableInlineCompletions',
+      'ollama.hideThinkingContent',
+    ];
+
+    for (const key of legacyKeys) {
+      expect(properties[key]?.deprecationMessage).toContain('Deprecated: use opilot.');
+    }
   });
 
   it('does not declare the ollama-model-preview webview view', () => {

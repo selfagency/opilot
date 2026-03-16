@@ -28,6 +28,7 @@ import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './opena
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settingsWebview.js';
 import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
+import { affectsSetting, getSetting, migrateLegacySettings, SETTINGS_NAMESPACE } from './settings.js';
 import { registerStatusBarHeartbeat } from './statusBar.js';
 import { ThinkingParser } from './thinkingParser.js';
 import {
@@ -381,16 +382,16 @@ export function handleConfigurationChange(
   onLogLevelChange?: () => void,
   onAutoStartChange?: (enabled: boolean) => void,
 ): void {
-  if (event.affectsConfiguration('ollama.diagnostics.logLevel')) {
+  if (affectsSetting(event, 'diagnostics.logLevel')) {
     diagnostics.info(`[client] Diagnostics log level changed to: ${getConfiguredLogLevel()}`);
     onLogLevelChange?.();
   }
 
-  if (!event.affectsConfiguration('ollama.streamLogs')) {
+  if (!affectsSetting(event, 'streamLogs')) {
     return;
   }
 
-  const enabled = vscode.workspace.getConfiguration('ollama').get<boolean>('streamLogs') ?? true;
+  const enabled = getSetting<boolean>('streamLogs', true);
   diagnostics.info(`[client] Auto-start log streaming setting changed: ${enabled ? 'enabled' : 'disabled'}`);
   onAutoStartChange?.(enabled);
 }
@@ -439,12 +440,12 @@ export async function handleConnectionTestFailure(
   const commands = commandsApi || vscode.commands;
 
   const selection = await window.showErrorMessage(
-    `Cannot connect to Ollama server at ${host}. Please check your ollama.host setting and authentication token.`,
+    `Cannot connect to Ollama server at ${host}. Please check your ${SETTINGS_NAMESPACE}.host / ollama.host settings and authentication token.`,
     'Open Settings',
     'Open Logs',
   );
   if (selection === 'Open Settings') {
-    await commands.executeCommand('workbench.action.openSettings', 'ollama');
+    await commands.executeCommand('workbench.action.openSettings', SETTINGS_NAMESPACE);
     return;
   }
 
@@ -902,9 +903,7 @@ export async function handleChatRequest(
         typeof modelOptions.think === 'boolean' ? modelOptions.think : isThinkingModelId(modelId);
 
       // Check if user wants to hide thinking content (only show header)
-      const hideThinkingContent = vscode.workspace
-        .getConfiguration('ollama')
-        .get<boolean>('hideThinkingContent', false);
+      const hideThinkingContent = getSetting<boolean>('hideThinkingContent', false);
 
       let shouldThink = shouldThinkInitial;
       let response: AsyncIterable<ChatResponse>;
@@ -1232,10 +1231,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
   diagnostics.info('[client] activating extension...');
 
+  await migrateLegacySettings(diagnostics);
+
   const client = await getOllamaClient(context);
-  const config = vscode.workspace.getConfiguration('ollama');
-  const host = config.get<string>('host') || 'http://localhost:11434';
-  const autoStartLogStreaming = config.get<boolean>('streamLogs') ?? true;
+  const host = getSetting<string>('host', 'http://localhost:11434');
+  const autoStartLogStreaming = getSetting<boolean>('streamLogs', true);
   diagnostics.info(`[client] configured host: ${host}`);
   diagnostics.info(`[client] auto-start log streaming: ${autoStartLogStreaming ? 'enabled' : 'disabled'}`);
   diagnostics.info(`[client] diagnostics log level: ${getConfiguredLogLevel()}`);

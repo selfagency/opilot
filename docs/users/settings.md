@@ -2,14 +2,16 @@
 title: Settings Reference
 ---
 
-All settings are in the `ollama.*` namespace. Open them via:
+Settings now use the `opilot.*` namespace. Legacy `ollama.*` keys are still supported and automatically migrated on activation.
+
+Open settings via:
 
 - **File → Preferences → Settings** then search "Ollama"
 - Or edit `settings.json` directly
 
 ## Connection
 
-### `ollama.host`
+### `opilot.host`
 
 | Type     | Default                    |
 | -------- | -------------------------- |
@@ -20,12 +22,12 @@ The URL of your Ollama server. Supports local and remote instances.
 **Examples:**
 
 ```json
-"ollama.host": "http://localhost:11434"
-"ollama.host": "https://my-ollama-server.example.com"
-"ollama.host": "http://192.168.1.50:11434"
+"opilot.host": "http://localhost:11434"
+"opilot.host": "https://my-ollama-server.example.com"
+"opilot.host": "http://192.168.1.50:11434"
 ```
 
-For remote instances that require authentication, also set `ollama.authToken` (via the **Manage Ollama Auth Token** command — it is stored securely in the VS Code secret store, not in settings.json).
+For remote instances that require authentication, also set an auth token via the **Manage Ollama Auth Token** command — it is stored securely in the VS Code secret store, not in settings.json.
 
 ## Model Parameters
 
@@ -52,7 +54,7 @@ Use the webview for these values rather than editing the file directly.
 
 ## Sidebar Refresh Intervals
 
-### `ollama.localModelRefreshInterval`
+### `opilot.localModelRefreshInterval`
 
 | Type     | Default |
 | -------- | ------- |
@@ -62,7 +64,7 @@ How often (in seconds) to auto-refresh the **local models** and **running models
 
 This interval also drives the status bar heartbeat polling cadence.
 
-### `ollama.libraryRefreshInterval`
+### `opilot.libraryRefreshInterval`
 
 | Type     | Default |
 | -------- | ------- |
@@ -72,7 +74,7 @@ How often (in seconds) to auto-refresh the **Ollama Library** and **Cloud** mode
 
 ## Logging
 
-### `ollama.streamLogs`
+### `opilot.streamLogs`
 
 | Type      | Default |
 | --------- | ------- |
@@ -86,7 +88,7 @@ When enabled, streams Ollama server log output to the **Opilot** output channel 
 
 Disable if stream output is noisy or you prefer a quiet channel.
 
-### `ollama.diagnostics.logLevel`
+### `opilot.diagnostics.logLevel`
 
 | Type     | Default  | Options                                  |
 | -------- | -------- | ---------------------------------------- |
@@ -105,7 +107,7 @@ Use `"debug"` when troubleshooting connection or provider issues.
 
 ## Modelfiles
 
-### `ollama.modelfilesPath`
+### `opilot.modelfilesPath`
 
 | Type     | Default      |
 | -------- | ------------ |
@@ -114,12 +116,12 @@ Use `"debug"` when troubleshooting connection or provider issues.
 Path to the folder containing your Modelfiles. Leave empty to use the default: `~/.ollama/modelfiles`.
 
 ```json
-"ollama.modelfilesPath": "/Users/yourname/projects/my-modelfiles"
+"opilot.modelfilesPath": "/Users/yourname/projects/my-modelfiles"
 ```
 
 ## Inline Completions
 
-### `ollama.completionModel`
+### `opilot.completionModel`
 
 | Type     | Default         |
 | -------- | --------------- |
@@ -130,12 +132,12 @@ The Ollama model to use for inline code completions. Must be a locally installed
 Best results with small, fast code models:
 
 ```json
-"ollama.completionModel": "qwen2.5-coder:1.5b"
-"ollama.completionModel": "deepseek-coder:1.3b"
-"ollama.completionModel": "starcoder2:3b"
+"opilot.completionModel": "qwen2.5-coder:1.5b"
+"opilot.completionModel": "deepseek-coder:1.3b"
+"opilot.completionModel": "starcoder2:3b"
 ```
 
-### `ollama.enableInlineCompletions`
+### `opilot.enableInlineCompletions`
 
 | Type      | Default |
 | --------- | ------- |
@@ -144,7 +146,7 @@ Best results with small, fast code models:
 Master toggle for inline code completions. Set to `false` to temporarily disable without clearing your `completionModel`.
 
 ```json
-"ollama.enableInlineCompletions": false
+"opilot.enableInlineCompletions": false
 ```
 
 ## Recommended Configuration
@@ -153,12 +155,12 @@ A sensible starting configuration for local development:
 
 ```json
 {
-  "ollama.host": "http://localhost:11434",
-  "ollama.localModelRefreshInterval": 30,
-  "ollama.libraryRefreshInterval": 21600,
-  "ollama.streamLogs": true,
-  "ollama.diagnostics.logLevel": "info",
-  "ollama.completionModel": "qwen2.5-coder:1.5b",
-  "ollama.enableInlineCompletions": true
+  "opilot.host": "http://localhost:11434",
+  "opilot.localModelRefreshInterval": 30,
+  "opilot.libraryRefreshInterval": 21600,
+  "opilot.streamLogs": true,
+  "opilot.diagnostics.logLevel": "info",
+  "opilot.completionModel": "qwen2.5-coder:1.5b",
+  "opilot.enableInlineCompletions": true
 }
 ```

@@ -1,13 +1,14 @@
 import type { Ollama } from 'ollama';
 import * as vscode from 'vscode';
 import type { DiagnosticsLogger } from './diagnostics.js';
+import { affectsSetting, getSetting } from './settings.js';
 
 /** Minimum poll interval enforced regardless of setting value (5 seconds). */
 const MIN_INTERVAL_MS = 5_000;
 const DEBOUNCE_FAILURE_COUNT = 2;
 
 function getHeartbeatIntervalMs(): number {
-  const seconds = vscode.workspace.getConfiguration('ollama').get<number>('localModelRefreshInterval') ?? 30;
+  const seconds = getSetting<number>('localModelRefreshInterval', 30);
   return Math.max(seconds * 1_000, MIN_INTERVAL_MS);
 }
 
@@ -181,7 +182,7 @@ export function registerStatusBarHeartbeat(
 
   // Re-schedule if the refresh interval setting changes.
   const configListener = vscode.workspace.onDidChangeConfiguration(event => {
-    if (event.affectsConfiguration('ollama.localModelRefreshInterval')) {
+    if (affectsSetting(event, 'localModelRefreshInterval')) {
       diagnostics.debug('[statusBar] refresh interval changed, rescheduling heartbeat');
       scheduleInterval();
     }

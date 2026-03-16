@@ -55,22 +55,24 @@
 4. Pull a model from the **Library** panel (e.g., `llama3.2:3b`)
 5. Open Copilot Chat, click the model picker, and select your Ollama model — or type `@ollama` to chat
 
-The extension auto-detects your local Ollama instance at `http://localhost:11434`. To use cloud models, run `ollama login` first. To use a remote instance, set `ollama.host` in VS Code settings.
+The extension auto-detects your local Ollama instance at `http://localhost:11434`. To use cloud models, run `ollama login` first. To use a remote instance, set `opilot.host` in VS Code settings (legacy `ollama.host` is still supported).
 
 ## ⚙️ Configuration
 
-Open VS Code Settings (`Ctrl+,` / `Cmd+,`) and search for "Ollama":
+Open VS Code Settings (`Ctrl+,` / `Cmd+,`) and search for "Opilot":
 
-- **`ollama.host`** - Ollama server address (default: `http://localhost:11434`)
-- **`ollama.streamLogs`** - Stream Ollama server logs to output channel (default: `true`)
-- **`ollama.localModelRefreshInterval`** - Auto-refresh interval for local and running models, in seconds (default: `30`)
-- **`ollama.libraryRefreshInterval`** - Reserved refresh interval for library and cloud model catalogs, in seconds (default: `21600`); panels currently refresh on startup and via the manual refresh button
-- **`ollama.completionModel`** - Model used for inline code completions (e.g. `qwen2.5-coder:1.5b`). Leave empty to disable.
-- **`ollama.enableInlineCompletions`** - Enable or disable inline code completions (default: `true`)
-- **`ollama.modelfilesPath`** - Folder where modelfiles are stored (default: `~/.ollama/modelfiles`)
-- **`ollama.diagnostics.logLevel`** - Verbosity of the Ollama output channel (`debug`, `info`, `warn`, `error`; default: `info`)
+- **`opilot.host`** - Ollama server address (default: `http://localhost:11434`)
+- **`opilot.streamLogs`** - Stream Ollama server logs to output channel (default: `true`)
+- **`opilot.localModelRefreshInterval`** - Auto-refresh interval for local and running models, in seconds (default: `30`)
+- **`opilot.libraryRefreshInterval`** - Reserved refresh interval for library and cloud model catalogs, in seconds (default: `21600`); panels currently refresh on startup and via the manual refresh button
+- **`opilot.completionModel`** - Model used for inline code completions (e.g. `qwen2.5-coder:1.5b`). Leave empty to disable.
+- **`opilot.enableInlineCompletions`** - Enable or disable inline code completions (default: `true`)
+- **`opilot.modelfilesPath`** - Folder where modelfiles are stored (default: `~/.ollama/modelfiles`)
+- **`opilot.diagnostics.logLevel`** - Verbosity of the Ollama output channel (`debug`, `info`, `warn`, `error`; default: `info`)
 
-To use a remote Ollama instance, update `ollama.host` to point to your remote server.
+Legacy `ollama.*` settings continue to work and are migrated automatically on activation.
+
+To use a remote Ollama instance, update `opilot.host` to point to your remote server.
 
 ## 💬 Usage
 
@@ -95,13 +97,13 @@ The participant is sticky — once invoked, it stays active for the thread.
 
 ### Inline Code Completions
 
-Set `ollama.completionModel` to a locally-installed model to get inline code completions as you type. Smaller, fast models work best:
+Set `opilot.completionModel` to a locally-installed model to get inline code completions as you type. Smaller, fast models work best:
 
 - `qwen2.5-coder:1.5b`
 - `deepseek-coder:1.3b`
 - `starcoder2:3b`
 
-Completions use fill-in-the-middle (FIM) when the model supports it, and can be toggled with `ollama.enableInlineCompletions`.
+Completions use fill-in-the-middle (FIM) when the model supports it, and can be toggled with `opilot.enableInlineCompletions`.
 
 ### Sidebar: Model Management
 
@@ -116,7 +118,7 @@ The Ollama activity bar icon opens a sidebar with four panels:
 - Inline buttons per model: **Start** (▶), **Stop** (⏹), **Delete** (🗑)
 - Running models show VRAM usage and how long they've been loaded
 - Model capability badges: 🧠 thinking, 🛠️ tools, 👁️ vision, 🧩 embedding
-- Auto-refreshes every 30 seconds (configurable via `ollama.localModelRefreshInterval`); refresh interval restarts automatically when the setting changes
+- Auto-refreshes every 30 seconds (configurable via `opilot.localModelRefreshInterval`); refresh interval restarts automatically when the setting changes
 
 ### Model Settings Panel
 

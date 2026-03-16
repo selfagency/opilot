@@ -346,27 +346,27 @@
     "configuration": {
       "title": "Ollama",
       "properties": {
-        "ollama.host": {
+        "opilot.host": {
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server URL (local or remote)"
         },
-        "ollama.localModelRefreshInterval": {
+        "opilot.localModelRefreshInterval": {
           "type": "number",
           "default": 30,
           "description": "Auto-refresh local and running models interval in seconds"
         },
-        "ollama.libraryRefreshInterval": {
+        "opilot.libraryRefreshInterval": {
           "type": "number",
           "default": 21600,
           "description": "Auto-refresh library and cloud model catalogs interval in seconds (default 6 hours)"
         },
-        "ollama.streamLogs": {
+        "opilot.streamLogs": {
           "type": "boolean",
           "default": true,
           "description": "Stream Ollama server logs to output channel"
         },
-        "ollama.diagnostics.logLevel": {
+        "opilot.diagnostics.logLevel": {
           "type": "string",
           "default": "info",
           "enum": [
@@ -377,25 +377,85 @@
           ],
           "description": "Controls Ollama extension diagnostics verbosity in the output channel"
         },
-        "ollama.modelfilesPath": {
+        "opilot.modelfilesPath": {
           "type": "string",
           "default": "",
           "description": "Path to folder containing Modelfiles. Leave empty to use ~/.ollama/modelfiles"
         },
-        "ollama.completionModel": {
+        "opilot.completionModel": {
           "type": "string",
           "default": "",
           "markdownDescription": "Model used for inline code completions. Leave empty to disable. Smaller, faster models work best (e.g. `qwen2.5-coder:1.5b`, `deepseek-coder:1.3b`)."
         },
-        "ollama.enableInlineCompletions": {
+        "opilot.enableInlineCompletions": {
           "type": "boolean",
           "default": true,
           "description": "Enable Ollama inline code completions."
         },
-        "ollama.hideThinkingContent": {
+        "opilot.hideThinkingContent": {
           "type": "boolean",
           "default": false,
           "markdownDescription": "Hide thinking/reasoning content in chat responses. When disabled (default), reasoning tokens stream as a blockquote before the response. When enabled, the thinking block is suppressed entirely."
+        },
+        "ollama.host": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama server URL (local or remote)",
+          "deprecationMessage": "Deprecated: use opilot.host instead. Existing values are migrated automatically."
+        },
+        "ollama.localModelRefreshInterval": {
+          "type": "number",
+          "default": 30,
+          "description": "Auto-refresh local and running models interval in seconds",
+          "deprecationMessage": "Deprecated: use opilot.localModelRefreshInterval instead. Existing values are migrated automatically."
+        },
+        "ollama.libraryRefreshInterval": {
+          "type": "number",
+          "default": 21600,
+          "description": "Auto-refresh library and cloud model catalogs interval in seconds (default 6 hours)",
+          "deprecationMessage": "Deprecated: use opilot.libraryRefreshInterval instead. Existing values are migrated automatically."
+        },
+        "ollama.streamLogs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stream Ollama server logs to output channel",
+          "deprecationMessage": "Deprecated: use opilot.streamLogs instead. Existing values are migrated automatically."
+        },
+        "ollama.diagnostics.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "description": "Controls Ollama extension diagnostics verbosity in the output channel",
+          "deprecationMessage": "Deprecated: use opilot.diagnostics.logLevel instead. Existing values are migrated automatically."
+        },
+        "ollama.modelfilesPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to folder containing Modelfiles. Leave empty to use ~/.ollama/modelfiles",
+          "deprecationMessage": "Deprecated: use opilot.modelfilesPath instead. Existing values are migrated automatically."
+        },
+        "ollama.completionModel": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Model used for inline code completions. Leave empty to disable. Smaller, faster models work best (e.g. `qwen2.5-coder:1.5b`, `deepseek-coder:1.3b`).",
+          "deprecationMessage": "Deprecated: use opilot.completionModel instead. Existing values are migrated automatically."
+        },
+        "ollama.enableInlineCompletions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Ollama inline code completions.",
+          "deprecationMessage": "Deprecated: use opilot.enableInlineCompletions instead. Existing values are migrated automatically."
+        },
+        "ollama.hideThinkingContent": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Hide thinking/reasoning content in chat responses. When disabled (default), reasoning tokens stream as a blockquote before the response. When enabled, the thinking block is suppressed entirely.",
+          "deprecationMessage": "Deprecated: use opilot.hideThinkingContent instead. Existing values are migrated automatically."
         }
       }
     },
