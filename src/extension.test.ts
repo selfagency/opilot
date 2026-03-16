@@ -1848,6 +1848,61 @@ describe('handleChatRequest model selection', () => {
     expect(mockSelectChatModels).not.toHaveBeenCalled();
   });
 
+  it('streams text chunks immediately in VS Code LM API path (no buffering until completion)', async () => {
+    const LMTextPart = class {
+      constructor(public value: string) {}
+    };
+
+    let releaseSecondChunk: (() => void) | undefined;
+    const waitForSecondChunk = new Promise<void>(resolve => {
+      releaseSecondChunk = resolve;
+    });
+
+    const mockSendRequest = vi.fn().mockResolvedValue({
+      stream: (async function* () {
+        yield new LMTextPart('first chunk ');
+        await waitForSecondChunk;
+        yield new LMTextPart('second chunk');
+      })(),
+    });
+
+    vi.doMock('vscode', () => ({
+      LanguageModelTextPart: LMTextPart,
+      ChatRequestTurn: class {},
+      ChatResponseTurn: class {},
+      ChatResponseMarkdownPart: class {},
+      LanguageModelChatMessage: {
+        User: (content: string) => ({ content }),
+        Assistant: (content: string) => ({ content }),
+      },
+      lm: { selectChatModels: vi.fn().mockResolvedValue([]), tools: [] },
+      workspace: { getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }) },
+    }));
+
+    const ext = await import('./extension.js');
+    const mockMarkdown = vi.fn();
+    const mockRequest = {
+      prompt: 'test',
+      model: { vendor: 'selfagency-opilot', sendRequest: mockSendRequest },
+    };
+
+    const pending = ext.handleChatRequest(
+      mockRequest as any,
+      { history: [] } as any,
+      { markdown: mockMarkdown } as any,
+      { isCancellationRequested: false } as any,
+    );
+
+    // Allow the first streamed chunk to flow before the stream completes.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mockMarkdown).toHaveBeenCalledWith('first chunk ');
+
+    releaseSecondChunk?.();
+    await pending;
+
+    expect(mockMarkdown).toHaveBeenCalledWith('second chunk');
+  });
+
   it('invokes tools and feeds results back when toolInvocationToken is present', async () => {
     vi.resetModules();
 

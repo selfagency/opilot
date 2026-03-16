@@ -1085,6 +1085,9 @@ export async function handleChatRequest(
       for await (const chunk of response.stream) {
         if (chunk instanceof vscode.LanguageModelTextPart) {
           assistantTextParts.push(chunk);
+          // Stream textual output immediately so users see incremental tokens
+          // instead of waiting for the full round to complete.
+          stream.markdown(chunk.value);
         } else if (chunk instanceof vscode.LanguageModelToolCallPart) {
           pendingToolCalls.push(chunk);
         }
@@ -1092,10 +1095,8 @@ export async function handleChatRequest(
 
       const hasTaskComplete = pendingToolCalls.some(tc => tc.name === TASK_COMPLETE_TOOL_NAME);
       if (pendingToolCalls.length === 0 || !request.toolInvocationToken || hasTaskComplete) {
-        // No more tool calls (or task_complete was invoked) — stream buffered text and finish.
-        for (const part of assistantTextParts) {
-          stream.markdown(part.value);
-        }
+        // No more tool calls (or task_complete was invoked) — text was already
+        // streamed incrementally while reading response.stream.
         // Invoke task_complete for VS Code Autopilot bookkeeping.
         if (hasTaskComplete && request.toolInvocationToken) {
           const tc = pendingToolCalls.find(c => c.name === TASK_COMPLETE_TOOL_NAME)!;
