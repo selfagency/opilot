@@ -117,25 +117,61 @@
       {
         "command": "opilot.filterLocalModels",
         "title": "Filter Local Models",
-        "icon": "$(filter)",
+        "icon": "$(search)",
         "category": "Ollama"
       },
       {
         "command": "opilot.clearLocalFilter",
         "title": "Clear Local Models Filter",
-        "icon": "$(clear-all)",
+        "icon": "$(close)",
+        "category": "Ollama"
+      },
+      {
+        "command": "opilot.filterLocalCapabilities",
+        "title": "Filter Local Models by Capability",
+        "icon": "$(filter)",
+        "category": "Ollama"
+      },
+      {
+        "command": "opilot.filterLocalCapabilitiesActive",
+        "title": "Filter Local Models by Capability (Active)",
+        "icon": "$(filter-filled)",
+        "category": "Ollama"
+      },
+      {
+        "command": "opilot.toggleLocalRecommended",
+        "title": "Show Only Recommended Local Models",
+        "icon": "$(star-empty)",
+        "category": "Ollama"
+      },
+      {
+        "command": "opilot.toggleLocalRecommendedOff",
+        "title": "Show All Local Models (Recommended Filter Active)",
+        "icon": "$(star-full)",
         "category": "Ollama"
       },
       {
         "command": "opilot.filterCloudModels",
         "title": "Filter Cloud Models",
-        "icon": "$(filter)",
+        "icon": "$(search)",
         "category": "Ollama"
       },
       {
         "command": "opilot.clearCloudFilter",
         "title": "Clear Cloud Models Filter",
-        "icon": "$(clear-all)",
+        "icon": "$(close)",
+        "category": "Ollama"
+      },
+      {
+        "command": "opilot.filterCloudCapabilities",
+        "title": "Filter Cloud Models by Capability",
+        "icon": "$(filter)",
+        "category": "Ollama"
+      },
+      {
+        "command": "opilot.filterCloudCapabilitiesActive",
+        "title": "Filter Cloud Models by Capability (Active)",
+        "icon": "$(filter-filled)",
         "category": "Ollama"
       },
       {
@@ -496,44 +532,64 @@
           "group": "navigation@0"
         },
         {
+          "command": "opilot.toggleLocalRecommended",
+          "when": "view == ollama-local-models && !ollama.localRecommendedOnly",
+          "group": "navigation@1"
+        },
+        {
+          "command": "opilot.toggleLocalRecommendedOff",
+          "when": "view == ollama-local-models && ollama.localRecommendedOnly",
+          "group": "navigation@1"
+        },
+        {
+          "command": "opilot.filterLocalCapabilities",
+          "when": "view == ollama-local-models && !ollama.localCapabilityFilterActive",
+          "group": "navigation@2"
+        },
+        {
+          "command": "opilot.filterLocalCapabilitiesActive",
+          "when": "view == ollama-local-models && ollama.localCapabilityFilterActive",
+          "group": "navigation@2"
+        },
+        {
           "command": "opilot.filterLocalModels",
           "when": "view == ollama-local-models && !ollama.localFilterActive",
-          "group": "navigation@1"
+          "group": "navigation@3"
         },
         {
           "command": "opilot.clearLocalFilter",
           "when": "view == ollama-local-models && ollama.localFilterActive",
-          "group": "navigation@1"
+          "group": "navigation@3"
         },
         {
           "command": "opilot.toggleLocalGrouping",
           "when": "view == ollama-local-models && ollama.localGrouped",
-          "group": "navigation@2"
+          "group": "navigation@4"
         },
         {
           "command": "opilot.toggleLocalGroupingToTree",
           "when": "view == ollama-local-models && !ollama.localGrouped",
-          "group": "navigation@2"
+          "group": "navigation@4"
         },
         {
           "command": "opilot.refreshLocalModels",
           "when": "view == ollama-local-models",
-          "group": "navigation@3"
+          "group": "navigation@5"
         },
         {
           "command": "opilot.collapseLocalModels",
           "when": "view == ollama-local-models",
-          "group": "navigation@4"
+          "group": "navigation@6"
         },
         {
           "command": "opilot.openModelSettings",
           "when": "view == ollama-local-models",
-          "group": "navigation@5"
+          "group": "navigation@7"
         },
         {
           "command": "opilot.openModelSettings",
           "when": "view == ollama-cloud-models",
-          "group": "navigation@5"
+          "group": "navigation@7"
         },
         {
           "command": "opilot.toggleLibraryRecommended",
@@ -591,34 +647,44 @@
           "group": "navigation@0"
         },
         {
+          "command": "opilot.filterCloudCapabilities",
+          "when": "view == ollama-cloud-models && !ollama.cloudCapabilityFilterActive",
+          "group": "navigation@1"
+        },
+        {
+          "command": "opilot.filterCloudCapabilitiesActive",
+          "when": "view == ollama-cloud-models && ollama.cloudCapabilityFilterActive",
+          "group": "navigation@1"
+        },
+        {
           "command": "opilot.filterCloudModels",
           "when": "view == ollama-cloud-models && !ollama.cloudFilterActive",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "opilot.clearCloudFilter",
           "when": "view == ollama-cloud-models && ollama.cloudFilterActive",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "opilot.toggleCloudGrouping",
           "when": "view == ollama-cloud-models && ollama.cloudGrouped",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "opilot.toggleCloudGroupingToTree",
           "when": "view == ollama-cloud-models && !ollama.cloudGrouped",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "opilot.refreshCloudModels",
           "when": "view == ollama-cloud-models",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "opilot.collapseCloudModels",
           "when": "view == ollama-cloud-models",
-          "group": "navigation@4"
+          "group": "navigation@5"
         },
         {
           "command": "opilot.newModelfile",
