@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-03-25
+
+## What's Changed
+
+- Feat/model response quality improvements by @selfagency in https://github.com/selfagency/opilot/pull/79
+
+**Full Changelog**: https://github.com/selfagency/opilot/compare/v1.3.2...v1.4.0
+
+_Source: changes from v1.3.2 to v1.4.0._
+
 ## [1.3.2] - 2026-03-16
 
 ## What's Changed
