@@ -964,10 +964,11 @@ export async function handleChatRequest(
       let contentStarted = false;
       let emittedContent = false;
       let responseBuffer = '';
-      const repSensitivity = getSetting<string>('repetitionDetection', 'conservative') as
-        | 'off'
-        | 'conservative'
-        | 'moderate';
+      const rawRepSensitivity = getSetting<string>('repetitionDetection', 'conservative');
+      const repSensitivity: 'off' | 'conservative' | 'moderate' =
+        rawRepSensitivity === 'off' || rawRepSensitivity === 'conservative' || rawRepSensitivity === 'moderate'
+          ? rawRepSensitivity
+          : 'conservative';
       const xmlFilter = createXmlStreamFilter();
       // Parse <think> tags on both cloud and local paths.
       // For local models Ollama normally pre-splits thinking into message.thinking, but

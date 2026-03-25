@@ -1,5 +1,19 @@
 {
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "oxc.enable": true,
-  "beans.mcp.showStartupNotification": false
+  "beans.mcp.showStartupNotification": false,
+  "workbench.colorCustomizations": {
+    "activityBar.background": "#2E2267",
+    "titleBar.activeBackground": "#412F90",
+    "titleBar.activeForeground": "#FBFBFE",
+    "titleBar.inactiveBackground": "#2E2267",
+    "titleBar.inactiveForeground": "#FBFBFE",
+    "statusBar.background": "#2E2267",
+    "statusBar.foreground": "#FBFBFE",
+    "statusBar.debuggingBackground": "#2E2267",
+    "statusBar.debuggingForeground": "#FBFBFE",
+    "statusBar.noFolderBackground": "#2E2267",
+    "statusBar.noFolderForeground": "#FBFBFE"
+  },
+  "windowColors.baseColor": "#3a2a80"
 }

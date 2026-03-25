@@ -115,6 +115,12 @@
         "category": "Ollama"
       },
       {
+        "command": "opilot.openModelSettingsForModel",
+        "title": "Open Model Settings for Model",
+        "icon": "$(edit)",
+        "category": "Ollama"
+      },
+      {
         "command": "opilot.filterLocalModels",
         "title": "Filter Local Models",
         "icon": "$(search)",
@@ -552,64 +558,54 @@
           "group": "navigation@0"
         },
         {
-          "command": "opilot.toggleLocalRecommended",
-          "when": "view == ollama-local-models && !ollama.localRecommendedOnly",
-          "group": "navigation@1"
-        },
-        {
-          "command": "opilot.toggleLocalRecommendedOff",
-          "when": "view == ollama-local-models && ollama.localRecommendedOnly",
-          "group": "navigation@1"
-        },
-        {
           "command": "opilot.filterLocalCapabilities",
           "when": "view == ollama-local-models && !ollama.localCapabilityFilterActive",
-          "group": "navigation@2"
+          "group": "navigation@1"
         },
         {
           "command": "opilot.filterLocalCapabilitiesActive",
           "when": "view == ollama-local-models && ollama.localCapabilityFilterActive",
-          "group": "navigation@2"
+          "group": "navigation@1"
         },
         {
           "command": "opilot.filterLocalModels",
           "when": "view == ollama-local-models && !ollama.localFilterActive",
-          "group": "navigation@3"
+          "group": "navigation@2"
         },
         {
           "command": "opilot.clearLocalFilter",
           "when": "view == ollama-local-models && ollama.localFilterActive",
-          "group": "navigation@3"
+          "group": "navigation@2"
         },
         {
           "command": "opilot.toggleLocalGrouping",
           "when": "view == ollama-local-models && ollama.localGrouped",
-          "group": "navigation@4"
+          "group": "navigation@3"
         },
         {
           "command": "opilot.toggleLocalGroupingToTree",
           "when": "view == ollama-local-models && !ollama.localGrouped",
-          "group": "navigation@4"
+          "group": "navigation@3"
         },
         {
           "command": "opilot.refreshLocalModels",
           "when": "view == ollama-local-models",
-          "group": "navigation@5"
+          "group": "navigation@4"
+        },
+        {
+          "command": "opilot.openModelSettings",
+          "when": "view == ollama-local-models",
+          "group": "navigation@4"
         },
         {
           "command": "opilot.collapseLocalModels",
           "when": "view == ollama-local-models",
-          "group": "navigation@6"
+          "group": "navigation@5"
         },
         {
-          "command": "opilot.openModelSettings",
-          "when": "view == ollama-local-models",
-          "group": "navigation@7"
-        },
-        {
-          "command": "opilot.openModelSettings",
-          "when": "view == ollama-cloud-models",
-          "group": "navigation@7"
+          "command": "opilot.openModelSettingsForModel",
+          "when": "view == ollama-local-models && ollama.localModel =~ /;hasPencil$/",
+          "group": "inline@1"
         },
         {
           "command": "opilot.toggleLibraryRecommended",
@@ -734,9 +730,19 @@
           "group": "inline@2"
         },
         {
-          "command": "opilot.startModel",
-          "when": "view == ollama-local-models && viewItem == local-stopped",
-          "group": "inline@1"
+          "command": "opilot.openModelSettingsForModel",
+          "when": "view == ollama-local-models && viewItem == local-stopped;hasPencil",
+          "group": "inline@2"
+        },
+        {
+          "command": "opilot.openModelSettingsForModel",
+          "when": "view == ollama-local-models && viewItem == local-running;hasPencil",
+          "group": "inline@2"
+        },
+        {
+          "command": "opilot.stopModel",
+          "when": "view == ollama-local-models && viewItem == local-running",
+          "group": "inline@3"
         },
         {
           "command": "opilot.pullModelFromLibrary",
@@ -759,9 +765,19 @@
           "group": "inline@1"
         },
         {
+          "command": "opilot.openModelSettingsForModel",
+          "when": "view == ollama-cloud-models && viewItem == cloud-stopped;hasPencil",
+          "group": "inline@2"
+        },
+        {
+          "command": "opilot.openModelSettingsForModel",
+          "when": "view == ollama-cloud-models && viewItem == cloud-running;hasPencil",
+          "group": "inline@2"
+        },
+        {
           "command": "opilot.startCloudModel",
           "when": "view == ollama-cloud-models && viewItem == cloud-stopped",
-          "group": "inline@2"
+          "group": "inline@3"
         },
         {
           "command": "opilot.deleteModel",
