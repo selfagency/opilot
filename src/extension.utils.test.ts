@@ -131,6 +131,16 @@ describe('extension utility helpers', () => {
     expect(formatBytes(5 * 1024 ** 3)).toBe('5.00 GB');
   });
 
+  it('isLocalHost identifies localhost variants as local', async () => {
+    const { isLocalHost } = await import('./extension.js');
+    expect(isLocalHost('http://localhost:11434')).toBe(true);
+    expect(isLocalHost('http://127.0.0.1:11434')).toBe(true);
+    expect(isLocalHost('http://[::1]:11434')).toBe(true);
+    expect(isLocalHost('http://remote-server:11434')).toBe(false);
+    expect(isLocalHost('http://192.168.1.100:11434')).toBe(false);
+    expect(isLocalHost('not-a-url')).toBe(false);
+  });
+
   it('getOllamaServerLogPath returns null on linux (journalctl path)', async () => {
     const { getOllamaServerLogPath } = await import('./extension.js');
     const result = getOllamaServerLogPath();

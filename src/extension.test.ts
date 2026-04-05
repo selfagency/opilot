@@ -1679,6 +1679,23 @@ describe('handleConnectionTestFailure', () => {
     );
     expect(executeCommand).not.toHaveBeenCalled();
   });
+
+  it('shows extension output channel when Open Logs is selected for a remote host', async () => {
+    const showErrorMessage = vi.fn().mockResolvedValue('Open Logs');
+    const showInformationMessage = vi.fn().mockResolvedValue(undefined);
+    const logOutputChannel = { show: vi.fn() };
+
+    const ext = await import('./extension.js');
+    await ext.handleConnectionTestFailure(
+      'http://remote-server:11434',
+      { showErrorMessage, showInformationMessage },
+      { executeCommand: vi.fn() },
+      logOutputChannel,
+    );
+
+    expect(logOutputChannel.show).toHaveBeenCalled();
+    expect(showInformationMessage).toHaveBeenCalledWith(expect.stringContaining('remote Ollama connection'));
+  });
 });
 
 describe('setupChatParticipant', () => {

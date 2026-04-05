@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promises as fsPromises } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { URL } from 'node:url';
 import type { ChatResponse, Message, Ollama, Options, Tool } from 'ollama';
 import * as vscode from 'vscode';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost, testConnection } from './client.js';
@@ -432,10 +433,21 @@ function logPerformanceSnapshot(
 
   diagnostics.info(`[client] ${JSON.stringify(payload)}`);
 }
+export function isLocalHost(host: string): boolean {
+  try {
+    const { hostname } = new URL(host);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
 export async function handleConnectionTestFailure(
   host: string,
-  windowApi?: Pick<typeof vscode.window, 'showErrorMessage'>,
+  windowApi?: Pick<typeof vscode.window, 'showErrorMessage'> &
+    Partial<Pick<typeof vscode.window, 'showInformationMessage' | 'showWarningMessage'>>,
   commandsApi?: Pick<typeof vscode.commands, 'executeCommand'>,
+  logOutputChannel?: { show: () => void },
 ): Promise<void> {
   const window = windowApi || vscode.window;
   const commands = commandsApi || vscode.commands;
@@ -451,7 +463,18 @@ export async function handleConnectionTestFailure(
   }
 
   if (selection === 'Open Logs') {
-    // Attempt to open the Ollama server log file for the current platform
+    if (!isLocalHost(host)) {
+      // Remote connection — local Ollama log files won't exist here.
+      // Show the extension output channel (which has the connection error) and
+      // tell the user where to find the remote server logs.
+      logOutputChannel?.show();
+      void (window.showInformationMessage ?? vscode.window.showInformationMessage)(
+        `This is a remote Ollama connection. Check the Ollama server logs on the remote machine at ${host}. Extension connection details are shown in the Opilot output channel.`,
+      );
+      return;
+    }
+
+    // Local connection — attempt to open the platform-specific Ollama log file.
     const logsPath = getOllamaServerLogPath();
     if (logsPath) {
       try {
@@ -459,11 +482,13 @@ export async function handleConnectionTestFailure(
         await vscode.window.showTextDocument(document, { preview: false });
         return;
       } catch {
-        void vscode.window.showWarningMessage(`Could not open Ollama logs at ${logsPath}.`);
+        void (window.showWarningMessage ?? vscode.window.showWarningMessage)(
+          `Could not open Ollama logs at ${logsPath}.`,
+        );
         return;
       }
     }
-    void vscode.window.showWarningMessage(
+    void (window.showWarningMessage ?? vscode.window.showWarningMessage)(
       'Ollama logs are not available on this platform via file; try journalctl or check Ollama documentation.',
     );
   }
@@ -1422,7 +1447,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('opilot.checkServerHealth', async () => {
       const isConnected = await testConnection(client);
       if (!isConnected) {
-        await handleConnectionTestFailure(host);
+        await handleConnectionTestFailure(host, undefined, undefined, logOutputChannel);
       } else {
         void vscode.window.showInformationMessage('Ollama server is reachable.');
       }
@@ -1464,7 +1489,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const isConnected = await testConnection(client);
       diagnostics.info(`[client] Connection test result: ${isConnected ? 'connected' : 'not connected'}`);
       if (!isConnected) {
-        await handleConnectionTestFailure(host);
+        await handleConnectionTestFailure(host, undefined, undefined, logOutputChannel);
       }
     } catch (error) {
       reportError(diagnostics, 'Connection test failed', error, { showToUser: true });
