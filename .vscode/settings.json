@@ -1,5 +1,9 @@
 {
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "oxc.enable": true,
-  "beans.mcp.showStartupNotification": false
+  "beans.mcp.showStartupNotification": false,
+  "sonarlint.connectedMode.project": {
+    "connectionId": "selfagency",
+    "projectKey": "selfagency_opilot"
+  }
 }
