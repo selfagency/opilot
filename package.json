@@ -863,6 +863,11 @@
       "minimatch": "^10.2.4",
       "serialize-javascript": "^7.0.5",
       "diff": "^8.0.3"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@go-task/cli",
+      "esbuild",
+      "msw"
+    ]
   }
 }
