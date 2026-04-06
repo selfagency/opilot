@@ -136,14 +136,14 @@ export const DEFAULT_CONTEXT_TOKENS = 8192;
  * Resolve the effective context-window token limit for message truncation.
  *
  * Priority:
- * 1. Model-reported maxInputTokens (from Ollama /api/show metadata)
- * 2. Per-model num_ctx override from model settings
+ * 1. Per-model num_ctx override from model settings (user explicitly set this — wins over all)
+ * 2. Model-reported maxInputTokens (from Ollama /api/show metadata)
  * 3. User-configured opilot.maxContextTokens setting
  * 4. Built-in default of 8 192 tokens
  */
 export function resolveContextLimit(modelReported: number, modelOptNumCtx?: number, settingMax?: number): number {
-  if (modelReported > 0) return modelReported;
   if (modelOptNumCtx && modelOptNumCtx > 0) return modelOptNumCtx;
+  if (modelReported > 0) return modelReported;
   if (settingMax && settingMax > 0) return settingMax;
   return DEFAULT_CONTEXT_TOKENS;
 }

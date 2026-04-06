@@ -1380,7 +1380,7 @@ export async function activate(context: vscode.ExtensionContext) {
         };
   diagnostics.info('[model-settings] View provider registered');
 
-  const provider = new OllamaChatModelProvider(context, client, diagnostics);
+  const provider = new OllamaChatModelProvider(context, client, diagnostics, () => modelSettingsStore);
   let lmProviderDisposable: vscode.Disposable | undefined;
   try {
     lmProviderDisposable = vscode.lm.registerLanguageModelChatProvider(LANGUAGE_MODEL_VENDOR, provider);

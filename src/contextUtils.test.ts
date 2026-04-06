@@ -154,9 +154,14 @@ describe('detectsRepetition', () => {
 });
 
 describe('resolveContextLimit', () => {
-  it('returns modelReported when > 0', () => {
+  it('returns modelOptNumCtx when set (highest priority, overrides model-reported)', () => {
+    expect(resolveContextLimit(4096, 8192)).toBe(8192);
+    expect(resolveContextLimit(4096, 2048, 16384)).toBe(2048);
+  });
+
+  it('returns modelReported when modelOptNumCtx is not set', () => {
     expect(resolveContextLimit(4096)).toBe(4096);
-    expect(resolveContextLimit(4096, 2048, 16384)).toBe(4096);
+    expect(resolveContextLimit(4096, 0, 16384)).toBe(4096);
   });
 
   it('returns modelOptNumCtx when modelReported is 0', () => {

@@ -2,7 +2,7 @@ import { appendToBlockquote } from '@selfagency/llm-stream-parser/markdown';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { Ollama, type ChatResponse, type Message, type ShowResponse } from 'ollama';
+import { Ollama, type ChatResponse, type Message, type Options, type ShowResponse } from 'ollama';
 import {
   CancellationToken,
   EventEmitter,
@@ -34,6 +34,7 @@ import {
 } from './formatting';
 import { chatCompletionsOnce, initiateChatCompletionsStream } from './openaiCompat.js';
 import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openaiCompatMapping.js';
+import { getModelOptionsForModel, type ModelOptionOverrides, type ModelSettingsStore } from './modelSettings.js';
 import { getSetting } from './settings.js';
 import { ThinkingParser } from './thinkingParser.js';
 import { isToolsNotSupportedError, normalizeToolParameters } from './toolUtils.js';
@@ -77,7 +78,20 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     readonly context: ExtensionContext,
     private client: Ollama,
     private outputChannel: DiagnosticsLogger,
+    private getModelSettings?: () => ModelSettingsStore,
   ) {}
+
+  private buildSdkOptions(overrides: ModelOptionOverrides): Partial<Options> | undefined {
+    const { temperature, top_p, top_k, num_ctx, num_predict, think_budget } = overrides;
+    const opts: Record<string, number> = {};
+    if (temperature !== undefined) opts['temperature'] = temperature;
+    if (top_p !== undefined) opts['top_p'] = top_p;
+    if (top_k !== undefined) opts['top_k'] = top_k;
+    if (num_ctx !== undefined) opts['num_ctx'] = num_ctx;
+    if (num_predict !== undefined) opts['num_predict'] = num_predict;
+    if (think_budget !== undefined) opts['think_budget'] = think_budget;
+    return Object.keys(opts).length > 0 ? (opts as Partial<Options>) : undefined;
+  }
 
   /**
    * Provide information about available chat models
@@ -552,7 +566,9 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     shouldThink: boolean,
     fallbackClient: Ollama,
     signal?: AbortSignal,
+    modelOptions?: ModelOptionOverrides,
   ): Promise<AsyncIterable<ChatResponse>> {
+    const { temperature, top_p, top_k, num_ctx, num_predict, think_budget } = modelOptions ?? {};
     let stream: AsyncIterable<import('./openaiCompat.js').OpenAICompatChatCompletionChunk>;
     try {
       const baseUrl = getOllamaHost();
@@ -570,15 +586,23 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           messages: ollamaMessagesToOpenAICompat(messages),
           tools: ollamaToolsToOpenAICompat(tools),
           ...(shouldThink ? { think: true } : {}),
+          ...(temperature !== undefined ? { temperature } : {}),
+          ...(top_p !== undefined ? { top_p } : {}),
+          ...(num_predict !== undefined ? { max_tokens: num_predict } : {}),
+          ...(top_k !== undefined ? { top_k } : {}),
+          ...(num_ctx !== undefined ? { num_ctx } : {}),
+          ...(think_budget !== undefined ? { think_budget } : {}),
         },
       });
     } catch {
+      const sdkOptions = modelOptions ? this.buildSdkOptions(modelOptions) : undefined;
       return fallbackClient.chat({
         model: runtimeModelId,
         messages,
         stream: true,
         tools,
         ...(shouldThink ? { think: true } : {}),
+        ...(sdkOptions ? { options: sdkOptions } : {}),
       });
     }
 
@@ -612,7 +636,9 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     shouldThink: boolean,
     fallbackClient: Ollama,
     signal?: AbortSignal,
+    modelOptions?: ModelOptionOverrides,
   ): Promise<ChatResponse> {
+    const { temperature, top_p, top_k, num_ctx, num_predict, think_budget } = modelOptions ?? {};
     let response: import('./openaiCompat.js').OpenAICompatChatCompletionResponse;
     try {
       const baseUrl = getOllamaHost();
@@ -627,15 +653,23 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           messages: ollamaMessagesToOpenAICompat(messages),
           tools: ollamaToolsToOpenAICompat(tools),
           ...(shouldThink ? { think: true } : {}),
+          ...(temperature !== undefined ? { temperature } : {}),
+          ...(top_p !== undefined ? { top_p } : {}),
+          ...(num_predict !== undefined ? { max_tokens: num_predict } : {}),
+          ...(top_k !== undefined ? { top_k } : {}),
+          ...(num_ctx !== undefined ? { num_ctx } : {}),
+          ...(think_budget !== undefined ? { think_budget } : {}),
         },
       });
     } catch {
+      const sdkOptions = modelOptions ? this.buildSdkOptions(modelOptions) : undefined;
       return (await fallbackClient.chat({
         model: runtimeModelId,
         messages,
         stream: false,
         tools,
         ...(shouldThink ? { think: true } : {}),
+        ...(sdkOptions ? { options: sdkOptions } : {}),
       })) as ChatResponse;
     }
 
@@ -661,13 +695,16 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     tools: Parameters<typeof this.client.chat>[0]['tools'] | undefined,
     shouldThink: boolean,
     client: Ollama,
+    modelOptions?: ModelOptionOverrides,
   ): Promise<AsyncIterable<ChatResponse>> {
+    const sdkOptions = modelOptions ? this.buildSdkOptions(modelOptions) : undefined;
     return client.chat({
       model: runtimeModelId,
       messages,
       stream: true,
       tools,
       ...(shouldThink ? { think: true } : {}),
+      ...(sdkOptions ? { options: sdkOptions } : {}),
     });
   }
 
@@ -677,13 +714,16 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     tools: Parameters<typeof this.client.chat>[0]['tools'] | undefined,
     shouldThink: boolean,
     client: Ollama,
+    modelOptions?: ModelOptionOverrides,
   ): Promise<ChatResponse> {
+    const sdkOptions = modelOptions ? this.buildSdkOptions(modelOptions) : undefined;
     return (await client.chat({
       model: runtimeModelId,
       messages,
       stream: false,
       tools,
       ...(shouldThink ? { think: true } : {}),
+      ...(sdkOptions ? { options: sdkOptions } : {}),
     })) as ChatResponse;
   }
 
@@ -737,9 +777,13 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     this.outputChannel.info(
       `[context] before truncation: ${effectiveMessages.length} messages, ${JSON.stringify(effectiveMessages, null, 2).length} chars, model.maxInputTokens=${model.maxInputTokens}`,
     );
+    const modelSettings = this.getModelSettings?.();
+    const modelOptions: ModelOptionOverrides = modelSettings
+      ? getModelOptionsForModel(modelSettings, runtimeModelId)
+      : {};
     const maxInputTokens = resolveContextLimit(
       model.maxInputTokens ?? 0,
-      undefined,
+      modelOptions.num_ctx,
       getSetting<number>('maxContextTokens', 0),
     );
     const ollamaMessages = truncateMessages(effectiveMessages, maxInputTokens);
@@ -789,9 +833,9 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       // Choose API path: native Ollama SDK for local models, OpenAI-compat for cloud
       const streamFn = isCloudModel
         ? (think: boolean, t?: typeof tools) =>
-            this.openAiCompatStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient)
+            this.openAiCompatStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient, undefined, modelOptions)
         : (think: boolean, t?: typeof tools) =>
-            this.nativeSdkStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient);
+            this.nativeSdkStreamChat(runtimeModelId, ollamaMessages as Message[], t, think, perRequestClient, modelOptions);
 
       try {
         this.outputChannel.info(
@@ -974,6 +1018,8 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
                 effectiveTools,
                 think,
                 perRequestClient,
+                undefined,
+                modelOptions,
               )
           : (think: boolean) =>
               this.nativeSdkChatOnce(
@@ -982,6 +1028,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
                 effectiveTools,
                 think,
                 perRequestClient,
+                modelOptions,
               );
 
         const fallback = await fallbackFn(shouldThink);
@@ -1050,6 +1097,8 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
               attempt.tools,
               attempt.think,
               perRequestClient,
+              undefined,
+              modelOptions,
             );
 
             const hasContent =
