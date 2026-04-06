@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-04-06
+
+## What's Changed
+
+- chore(deps): bump yaml from 2.8.2 to 2.8.3 in the npm_and_yarn group across 1 directory by @dependabot[bot] in https://github.com/selfagency/opilot/pull/80
+- feat: pipe to output tab when encountering issue with remote connection by @danielimmke in https://github.com/selfagency/opilot/pull/83
+- fix: per-model num_ctx sidebar settings no longer overridden by Ollama app context window by @selfagency in https://github.com/selfagency/opilot/pull/85
+- chore(deps): bump the npm_and_yarn group across 1 directory with 2 updates by @dependabot[bot] in https://github.com/selfagency/opilot/pull/84
+- feat(testing): add MSW for centralised HTTP mocking in unit tests by @selfagency in https://github.com/selfagency/opilot/pull/86
+
+## New Contributors
+
+- @danielimmke made their first contribution in https://github.com/selfagency/opilot/pull/83
+
+**Full Changelog**: https://github.com/selfagency/opilot/compare/v1.4.1...v1.5.0
+
+_Source: changes from v1.4.1 to v1.5.0._
+
 ## [1.4.1] - 2026-03-25
 
 **Full Changelog**: https://github.com/selfagency/opilot/compare/v1.4.0...v1.4.1
