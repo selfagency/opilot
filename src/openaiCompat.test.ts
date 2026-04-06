@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { describe, expect, it } from 'vitest';
+import { server } from './mocks/node.js';
 import {
   buildOpenAICompatHeaders,
   chatCompletionsOnce,
@@ -142,20 +144,20 @@ describe('parseSseDataPayloadsFromTextChunks', () => {
 
 describe('chatCompletionsOnce', () => {
   it('posts with stream=false and returns parsed JSON body', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
+    let captured: Request | undefined;
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', async ({ request }) => {
+        captured = request.clone();
+        return HttpResponse.json({
           id: 'resp-1',
           choices: [{ index: 0, message: { role: 'assistant', content: 'hello' } }],
-        }),
-        { status: 200 },
-      ),
+        });
+      }),
     );
 
     const result = await chatCompletionsOnce({
       baseUrl: 'http://localhost:11434',
       authToken: 'abc',
-      fetchFn,
       request: {
         model: 'llama3.2',
         messages: [{ role: 'user', content: 'hi' }],
@@ -163,27 +165,24 @@ describe('chatCompletionsOnce', () => {
     });
 
     expect(result.choices?.[0]?.message?.content).toBe('hello');
-    expect(fetchFn).toHaveBeenCalledTimes(1);
-    const [calledUrl, calledInit] = fetchFn.mock.calls[0] as [string, RequestInit];
-    expect(calledUrl).toBe('http://localhost:11434/v1/chat/completions');
-    expect(calledInit.method).toBe('POST');
-    expect(calledInit.headers).toEqual({
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer abc',
-    });
-    expect(JSON.parse(String(calledInit.body))).toMatchObject({
-      model: 'llama3.2',
-      stream: false,
-    });
+    expect(captured?.url).toBe('http://localhost:11434/v1/chat/completions');
+    expect(captured?.method).toBe('POST');
+    expect(captured?.headers.get('Content-Type')).toBe('application/json');
+    expect(captured?.headers.get('Authorization')).toBe('Bearer abc');
+    const body = await captured?.json();
+    expect(body).toMatchObject({ model: 'llama3.2', stream: false });
   });
 
   it('throws with response body when non-OK', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(new Response('server exploded', { status: 500 }));
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        HttpResponse.text('server exploded', { status: 500 }),
+      ),
+    );
 
     await expect(
       chatCompletionsOnce({
         baseUrl: 'http://localhost:11434',
-        fetchFn,
         request: {
           model: 'llama3.2',
           messages: [{ role: 'user', content: 'hi' }],
@@ -195,17 +194,24 @@ describe('chatCompletionsOnce', () => {
 
 describe('chatCompletionsStream', () => {
   it('posts with stream=true and yields parsed SSE JSON payloads', async () => {
-    const stream = streamFromChunks([
-      'data: {"id":"c1","choices":[{"index":0,"delta":{"content":"hello"}}]}\n\n',
-      'data: {"id":"c2","choices":[{"index":0,"delta":{"content":" world"}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]);
+    let captured: Request | undefined;
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', async ({ request }) => {
+        captured = request.clone();
+        return new HttpResponse(
+          streamFromChunks([
+            'data: {"id":"c1","choices":[{"index":0,"delta":{"content":"hello"}}]}\n\n',
+            'data: {"id":"c2","choices":[{"index":0,"delta":{"content":" world"}}]}\n\n',
+            'data: [DONE]\n\n',
+          ]),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        );
+      }),
+    );
 
-    const fetchFn = vi.fn().mockResolvedValue(new Response(stream, { status: 200 }));
     const chunks = await collect(
       chatCompletionsStream({
         baseUrl: 'http://localhost:11434',
-        fetchFn,
         request: {
           model: 'llama3.2',
           messages: [{ role: 'user', content: 'hi' }],
@@ -216,23 +222,27 @@ describe('chatCompletionsStream', () => {
     expect(chunks).toHaveLength(2);
     expect(chunks[0]?.choices?.[0]?.delta?.content).toBe('hello');
     expect(chunks[1]?.choices?.[0]?.delta?.content).toBe(' world');
-
-    const [, calledInit] = fetchFn.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(String(calledInit.body))).toMatchObject({ stream: true });
+    const body = await captured?.json();
+    expect(body).toMatchObject({ stream: true });
   });
 
   it('skips malformed JSON payloads and continues stream', async () => {
-    const stream = streamFromChunks([
-      'data: {not-json}\n\n',
-      'data: {"choices":[{"index":0,"delta":{"content":"ok"}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]);
-    const fetchFn = vi.fn().mockResolvedValue(new Response(stream, { status: 200 }));
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        new HttpResponse(
+          streamFromChunks([
+            'data: {not-json}\n\n',
+            'data: {"choices":[{"index":0,"delta":{"content":"ok"}}]}\n\n',
+            'data: [DONE]\n\n',
+          ]),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        ),
+      ),
+    );
 
     const chunks = await collect(
       chatCompletionsStream({
         baseUrl: 'http://localhost:11434',
-        fetchFn,
         request: {
           model: 'llama3.2',
           messages: [{ role: 'user', content: 'hi' }],
@@ -245,13 +255,16 @@ describe('chatCompletionsStream', () => {
   });
 
   it('throws when stream response is non-OK', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(new Response('bad', { status: 502 }));
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        HttpResponse.text('bad', { status: 502 }),
+      ),
+    );
 
     await expect(
       collect(
         chatCompletionsStream({
           baseUrl: 'http://localhost:11434',
-          fetchFn,
           request: {
             model: 'llama3.2',
             messages: [{ role: 'user', content: 'hi' }],
@@ -262,18 +275,16 @@ describe('chatCompletionsStream', () => {
   });
 
   it('throws when stream response has no body', async () => {
-    const responseWithoutBody = {
-      ok: true,
-      status: 200,
-      body: null,
-    } as Response;
-    const fetchFn = vi.fn().mockResolvedValue(responseWithoutBody);
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        new HttpResponse(null, { status: 200 }),
+      ),
+    );
 
     await expect(
       collect(
         chatCompletionsStream({
           baseUrl: 'http://localhost:11434',
-          fetchFn,
           request: {
             model: 'llama3.2',
             messages: [{ role: 'user', content: 'hi' }],
@@ -286,16 +297,21 @@ describe('chatCompletionsStream', () => {
 
 describe('initiateChatCompletionsStream', () => {
   it('eagerly establishes connection and yields parsed SSE JSON payloads', async () => {
-    const stream = streamFromChunks([
-      'data: {"id":"c1","choices":[{"index":0,"delta":{"content":"hello"}}]}\n\n',
-      'data: {"id":"c2","choices":[{"index":0,"delta":{"content":" world"}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]);
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        new HttpResponse(
+          streamFromChunks([
+            'data: {"id":"c1","choices":[{"index":0,"delta":{"content":"hello"}}]}\n\n',
+            'data: {"id":"c2","choices":[{"index":0,"delta":{"content":" world"}}]}\n\n',
+            'data: [DONE]\n\n',
+          ]),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        ),
+      ),
+    );
 
-    const fetchFn = vi.fn().mockResolvedValue(new Response(stream, { status: 200 }));
     const generator = await initiateChatCompletionsStream({
       baseUrl: 'http://localhost:11434',
-      fetchFn,
       request: {
         model: 'llama3.2',
         messages: [{ role: 'user', content: 'hi' }],
@@ -303,19 +319,21 @@ describe('initiateChatCompletionsStream', () => {
     });
 
     const chunks = await collect(generator);
-    expect(fetchFn).toHaveBeenCalledTimes(1);
     expect(chunks).toHaveLength(2);
     expect(chunks[0]?.choices?.[0]?.delta?.content).toBe('hello');
     expect(chunks[1]?.choices?.[0]?.delta?.content).toBe(' world');
   });
 
   it('throws synchronously when non-OK response is returned', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(new Response('unauthorized', { status: 401 }));
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        HttpResponse.text('unauthorized', { status: 401 }),
+      ),
+    );
 
     await expect(
       initiateChatCompletionsStream({
         baseUrl: 'http://localhost:11434',
-        fetchFn,
         request: {
           model: 'llama3.2',
           messages: [{ role: 'user', content: 'hi' }],
@@ -325,17 +343,15 @@ describe('initiateChatCompletionsStream', () => {
   });
 
   it('throws synchronously when response body is empty', async () => {
-    const responseWithoutBody = {
-      ok: true,
-      status: 200,
-      body: null,
-    } as Response;
-    const fetchFn = vi.fn().mockResolvedValue(responseWithoutBody);
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        new HttpResponse(null, { status: 200 }),
+      ),
+    );
 
     await expect(
       initiateChatCompletionsStream({
         baseUrl: 'http://localhost:11434',
-        fetchFn,
         request: {
           model: 'llama3.2',
           messages: [{ role: 'user', content: 'hi' }],
@@ -345,16 +361,21 @@ describe('initiateChatCompletionsStream', () => {
   });
 
   it('skips malformed JSON payloads and continues stream', async () => {
-    const stream = streamFromChunks([
-      'data: {not-json}\n\n',
-      'data: {"choices":[{"index":0,"delta":{"content":"ok"}}]}\n\n',
-      'data: [DONE]\n\n',
-    ]);
-    const fetchFn = vi.fn().mockResolvedValue(new Response(stream, { status: 200 }));
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        new HttpResponse(
+          streamFromChunks([
+            'data: {not-json}\n\n',
+            'data: {"choices":[{"index":0,"delta":{"content":"ok"}}]}\n\n',
+            'data: [DONE]\n\n',
+          ]),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        ),
+      ),
+    );
 
     const generator = await initiateChatCompletionsStream({
       baseUrl: 'http://localhost:11434',
-      fetchFn,
       request: {
         model: 'llama3.2',
         messages: [{ role: 'user', content: 'hi' }],
@@ -367,12 +388,15 @@ describe('initiateChatCompletionsStream', () => {
   });
 
   it('reads error body when fetch fails and includes it in error message', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(new Response('rate limited', { status: 429 }));
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', () =>
+        HttpResponse.text('rate limited', { status: 429 }),
+      ),
+    );
 
     await expect(
       initiateChatCompletionsStream({
         baseUrl: 'http://localhost:11434',
-        fetchFn,
         request: {
           model: 'llama3.2',
           messages: [{ role: 'user', content: 'hi' }],
@@ -381,14 +405,20 @@ describe('initiateChatCompletionsStream', () => {
     ).rejects.toThrow('OpenAI-compat stream request failed (429): rate limited');
   });
 
-  it('posts with stream=true in the request body', async () => {
-    const stream = streamFromChunks(['data: [DONE]\n\n']);
-    const fetchFn = vi.fn().mockResolvedValue(new Response(stream, { status: 200 }));
+  it('posts with stream=true in the request body and sends correct headers', async () => {
+    let captured: Request | undefined;
+    server.use(
+      http.post('http://localhost:11434/v1/chat/completions', async ({ request }) => {
+        captured = request.clone();
+        return new HttpResponse(streamFromChunks(['data: [DONE]\n\n']), {
+          headers: { 'Content-Type': 'text/event-stream' },
+        });
+      }),
+    );
 
     const generator = await initiateChatCompletionsStream({
       baseUrl: 'http://localhost:11434',
       authToken: 'tok',
-      fetchFn,
       request: {
         model: 'llama3.2',
         messages: [{ role: 'user', content: 'hi' }],
@@ -397,13 +427,12 @@ describe('initiateChatCompletionsStream', () => {
 
     await collect(generator);
 
-    const [calledUrl, calledInit] = fetchFn.mock.calls[0] as [string, RequestInit];
-    expect(calledUrl).toBe('http://localhost:11434/v1/chat/completions');
-    expect(calledInit.method).toBe('POST');
-    expect(calledInit.headers).toEqual({
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer tok',
-    });
-    expect(JSON.parse(String(calledInit.body))).toMatchObject({ stream: true });
+    expect(captured?.url).toBe('http://localhost:11434/v1/chat/completions');
+    expect(captured?.method).toBe('POST');
+    expect(captured?.headers.get('Content-Type')).toBe('application/json');
+    expect(captured?.headers.get('Authorization')).toBe('Bearer tok');
+    const body = await captured?.json();
+    expect(body).toMatchObject({ stream: true });
   });
 });
+

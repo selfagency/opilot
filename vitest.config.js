@@ -13,6 +13,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     restoreMocks: true,
+    unstubGlobals: true,
+    setupFiles: ['./src/test/setup.ts'],
     exclude: ['node_modules/**', 'dist/**', 'out/**', 'scripts/**', 'test/integration/**'],
     coverage: {
       exclude: ['scripts/**', '**/test/**'],

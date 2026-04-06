@@ -60,7 +60,6 @@ export interface OpenAICompatRequestOptions {
   baseUrl: string;
   request: OpenAICompatChatRequest;
   authToken?: string;
-  fetchFn?: typeof fetch;
   signal?: AbortSignal;
 }
 
@@ -188,10 +187,9 @@ export async function* parseSseDataPayloadsFromTextChunks(chunks: AsyncIterable<
 export async function* chatCompletionsStream(
   options: OpenAICompatRequestOptions,
 ): AsyncGenerator<OpenAICompatChatCompletionChunk> {
-  const fetchFn = options.fetchFn ?? fetch;
   const url = createOpenAICompatUrl(options.baseUrl);
 
-  const response = await fetchFn(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: buildOpenAICompatHeaders(options.authToken),
     body: JSON.stringify({ ...options.request, stream: true }),
@@ -231,10 +229,9 @@ export async function* chatCompletionsStream(
 export async function initiateChatCompletionsStream(
   options: OpenAICompatRequestOptions,
 ): Promise<AsyncGenerator<OpenAICompatChatCompletionChunk>> {
-  const fetchFn = options.fetchFn ?? fetch;
   const url = createOpenAICompatUrl(options.baseUrl);
 
-  const response = await fetchFn(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: buildOpenAICompatHeaders(options.authToken),
     body: JSON.stringify({ ...options.request, stream: true }),
@@ -270,10 +267,9 @@ export async function initiateChatCompletionsStream(
 export async function chatCompletionsOnce(
   options: OpenAICompatRequestOptions,
 ): Promise<OpenAICompatChatCompletionResponse> {
-  const fetchFn = options.fetchFn ?? fetch;
   const url = createOpenAICompatUrl(options.baseUrl);
 
-  const response = await fetchFn(url, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: buildOpenAICompatHeaders(options.authToken),
     body: JSON.stringify({ ...options.request, stream: false }),
