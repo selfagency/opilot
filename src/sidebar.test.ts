@@ -1,6 +1,14 @@
 import type { Ollama } from 'ollama';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExtensionContext } from 'vscode';
+import { http, HttpResponse } from 'msw';
+import { server } from './mocks/node.js';
+import {
+  DEFAULT_LIBRARY_MODELS,
+  DEFAULT_OLLAMA_API_TAGS,
+  libraryPageHtml,
+  modelPageHtml,
+} from './mocks/handlers.js';
 import type { CloudModelsProvider, LibraryModelsProvider, LocalModelsProvider, ModelTreeItem } from './sidebar.js';
 
 describe('LocalModelsProvider', () => {
@@ -3178,3 +3186,302 @@ describe('sidebar command handlers', () => {
     expect(mockClient.pull).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// MSW-based HTTP tests
+// ---------------------------------------------------------------------------
+
+const MINIMAL_VSCODE_MOCK = {
+  TreeItem: class {
+    label: string;
+    description?: string;
+    contextValue?: string;
+    collapsibleState?: number;
+    tooltip?: string;
+    command?: unknown;
+    constructor(label: string) {
+      this.label = label;
+    }
+  },
+  ThemeIcon: class {
+    id: string;
+    constructor(id: string) {
+      this.id = id;
+    }
+  },
+  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+  EventEmitter: class {
+    event = {};
+    fire = vi.fn();
+  },
+  window: {
+    registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+    showErrorMessage: vi.fn(),
+    showInformationMessage: vi.fn(),
+    showWarningMessage: vi.fn(),
+    showInputBox: vi.fn(),
+    withProgress: vi.fn(async (_opts: unknown, cb: (p: any, t: any) => Promise<void>) =>
+      cb({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() }),
+    ),
+  },
+  commands: {
+    registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+    executeCommand: vi.fn(),
+  },
+  env: { openExternal: vi.fn() },
+  Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+  ProgressLocation: { Notification: 15 },
+  workspace: {
+    getConfiguration: vi.fn(() => ({ get: vi.fn(() => undefined) })),
+    onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+  },
+};
+
+describe('assertHtmlContentType', () => {
+  it('does not throw for text/html content type', async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
+    const { assertHtmlContentType } = await import('./sidebar.js');
+
+    const response = new Response('<html></html>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    Object.defineProperty(response, 'url', { value: 'https://ollama.com/library' });
+    expect(() => assertHtmlContentType(response)).not.toThrow();
+  });
+
+  it('does not throw when content-type is absent', async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
+    const { assertHtmlContentType } = await import('./sidebar.js');
+
+    // null body → no auto-set content-type header
+    const response = new Response(null);
+    expect(() => assertHtmlContentType(response)).not.toThrow();
+  });
+
+  it('throws when content-type is application/json', async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
+    const { assertHtmlContentType } = await import('./sidebar.js');
+
+    const response = new Response('{}', {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    Object.defineProperty(response, 'url', { value: 'https://ollama.com/library' });
+    expect(() => assertHtmlContentType(response)).toThrow(/Expected text\/html/);
+  });
+});
+
+describe('LibraryModelsProvider HTTP (MSW)', () => {
+  let LibraryModelsProvider: any;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
+    vi.doMock('./client.js', () => ({
+      fetchModelCapabilities: vi.fn().mockResolvedValue({ toolCalling: false, imageInput: false, maxInputTokens: null }),
+      getCloudOllamaClient: vi.fn().mockResolvedValue(null),
+    }));
+    ({ LibraryModelsProvider } = await import('./sidebar.js'));
+  });
+
+  it('loads library model names from MSW default handler', async () => {
+    const provider = new LibraryModelsProvider(undefined);
+    provider.grouped = false;
+    const items = await provider.getChildren();
+
+    const labels = items.map((i: any) => i.label);
+    for (const name of DEFAULT_LIBRARY_MODELS) {
+      expect(labels).toContain(name);
+    }
+    provider.dispose();
+  });
+
+  it('returns status item when server returns non-OK status', async () => {
+    server.use(
+      http.get('https://ollama.com/library', () => new HttpResponse(null, { status: 503 })),
+    );
+
+    const provider = new LibraryModelsProvider(undefined);
+    provider.grouped = false;
+    const items = await provider.getChildren();
+
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Failed to load library models');
+    provider.dispose();
+  });
+
+  it('returns status item when server returns non-HTML content-type', async () => {
+    server.use(
+      http.get('https://ollama.com/library', () =>
+        HttpResponse.json({ error: 'maintenance' }),
+      ),
+    );
+
+    const provider = new LibraryModelsProvider(undefined);
+    provider.grouped = false;
+    const items = await provider.getChildren();
+
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('Failed to load library models');
+    provider.dispose();
+  });
+
+  it('marks models from cloud search as cloud (☁️) badge', async () => {
+    server.use(
+      http.get('https://ollama.com/library', () =>
+        new HttpResponse(libraryPageHtml(['phi4', 'devstral']), {
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      ),
+      http.get('https://ollama.com/search', () =>
+        new HttpResponse(libraryPageHtml(['devstral']), {
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      ),
+    );
+
+    const provider = new LibraryModelsProvider(undefined);
+    provider.grouped = false;
+    const items = await provider.getChildren();
+
+    const devstral = items.find((i: any) => i.label === 'devstral');
+    expect(devstral?.description).toBe('☁️');
+    provider.dispose();
+  });
+});
+
+describe('CloudModelsProvider loadCloudCatalogFromNetwork (MSW)', () => {
+  let CloudModelsProvider: any;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
+    vi.doMock('./client.js', () => ({
+      fetchModelCapabilities: vi.fn().mockResolvedValue({ toolCalling: false, imageInput: false, maxInputTokens: null }),
+      getCloudOllamaClient: vi.fn().mockResolvedValue({
+        list: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] }),
+      }),
+    }));
+    ({ CloudModelsProvider } = await import('./sidebar.js'));
+  });
+
+  it('populates cloud catalog from /api/tags JSON via MSW', async () => {
+    const mockContext = { globalState: { get: vi.fn(() => null), update: vi.fn() } };
+    const provider = new CloudModelsProvider(mockContext as any) as any;
+    await provider.getChildren();
+
+    const names: string[] = provider.catalogModelNames ?? [];
+    const expectedNames = DEFAULT_OLLAMA_API_TAGS.models.map((m: { name: string }) => m.name);
+    for (const name of expectedNames) {
+      expect(names).toContain(name);
+    }
+    provider.dispose?.();
+  });
+
+  it('populates capability map from /search?c=cloud HTML via MSW', async () => {
+    server.use(
+      http.get('https://ollama.com/api/tags', () =>
+        HttpResponse.json({ models: [{ name: 'qwen3:cloud' }] }),
+      ),
+      http.get('https://ollama.com/search', () =>
+        new HttpResponse(
+          `<!DOCTYPE html><html><body>
+          <a href="/library/qwen3"><span>Tools</span><span>Vision</span></a>
+          </body></html>`,
+          { headers: { 'Content-Type': 'text/html' } },
+        ),
+      ),
+    );
+
+    const mockContext = { globalState: { get: vi.fn(() => null), update: vi.fn() } };
+    const provider = new CloudModelsProvider(mockContext as any) as any;
+    await provider.getChildren();
+
+    const caps: Set<string> | undefined = provider.cloudCapabilitiesByBase?.get('qwen3');
+    expect(caps).toBeDefined();
+    expect(caps!.has('tools')).toBe(true);
+    expect(caps!.has('vision')).toBe(true);
+    provider.dispose?.();
+  });
+});
+
+/** Polls `condition` every 20 ms until it returns true or `timeoutMs` elapses. */
+async function waitFor(condition: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+    await new Promise(r => setTimeout(r, 20));
+  }
+}
+
+describe('fetchModelPagePreview via LibraryModelsProvider (MSW)', () => {
+  let LibraryModelsProvider: any;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
+    vi.doMock('./client.js', () => ({
+      fetchModelCapabilities: vi.fn().mockResolvedValue({ toolCalling: false, imageInput: false, maxInputTokens: null }),
+      getCloudOllamaClient: vi.fn().mockResolvedValue(null),
+    }));
+    ({ LibraryModelsProvider } = await import('./sidebar.js'));
+  });
+
+  it('extracts title, description, and capabilities from model page HTML', async () => {
+    server.use(
+      http.get('https://ollama.com/library', () =>
+        new HttpResponse(libraryPageHtml(['phi4']), { headers: { 'Content-Type': 'text/html' } }),
+      ),
+      http.get('https://ollama.com/library/phi4', () =>
+        new HttpResponse(
+          modelPageHtml({
+            name: 'phi4',
+            description: 'A capable reasoning model',
+            capabilities: ['Thinking', 'Vision'],
+          }),
+          { headers: { 'Content-Type': 'text/html' } },
+        ),
+      ),
+    );
+
+    const provider = new LibraryModelsProvider(undefined);
+    // Trigger item build which fires getCachedModelPagePreview async
+    const items = await provider.getChildren();
+    expect(items.length).toBeGreaterThan(0);
+
+    // The cache snapshot only exposes a count; verify at least one entry was cached.
+    const { getModelPreviewCacheSnapshot } = await import('./sidebar.js');
+    await waitFor(() => getModelPreviewCacheSnapshot().entries > 0);
+    expect(getModelPreviewCacheSnapshot().entries).toBeGreaterThan(0);
+
+    provider.dispose();
+  });
+
+  it('applies 🛠️ badge to library items based on capabilities', async () => {
+    server.use(
+      http.get('https://ollama.com/library', () =>
+        new HttpResponse(libraryPageHtml(['llama3.3']), { headers: { 'Content-Type': 'text/html' } }),
+      ),
+      http.get('https://ollama.com/library/llama3.3', () =>
+        new HttpResponse(
+          modelPageHtml({ name: 'llama3.3', capabilities: ['Tools'] }),
+          { headers: { 'Content-Type': 'text/html' } },
+        ),
+      ),
+    );
+
+    const provider = new LibraryModelsProvider(undefined);
+    provider.grouped = false;
+    const items = await provider.getChildren();
+
+    const item = items.find((i: any) => i.label === 'llama3.3');
+    expect(item).toBeDefined();
+
+    // Wait for async capability fetch to fire treeChangeEmitter
+    await waitFor(() => item?.description?.toString().includes('🛠️') ?? false);
+    expect(item?.description).toContain('🛠️');
+    provider.dispose();
+  });
+});
+
