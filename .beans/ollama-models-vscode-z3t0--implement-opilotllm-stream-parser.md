@@ -1,11 +1,11 @@
 ---
 # ollama-models-vscode-z3t0
 title: Implement @opilot/llm-stream-parser
-status: in-progress
+status: completed
 type: milestone
 priority: high
 created_at: 2026-03-11T16:57:13Z
-updated_at: 2026-03-13T15:05:17Z
+updated_at: 2026-04-14T21:30:53Z
 ---
 
 ## Todo
