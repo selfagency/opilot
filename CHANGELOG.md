@@ -173,7 +173,7 @@ _Source: changes from v0.1.0-pre to v0.1.2-pre._
 - feat(sidebar): improve logging, reorder panels, add library and running model enhancements by @selfagency in https://github.com/selfagency/opilot/pull/3
 - feat(commands): add Ollama category to all contributed commands by @selfagency in https://github.com/selfagency/opilot/pull/6
 - feat(sidebar): streaming pull progress and model capability badges by @selfagency in https://github.com/selfagency/opilot/pull/5
-- feat: Modelfile Manager sidebar pane (ollama-models-vscode-b14z) by @selfagency in https://github.com/selfagency/opilot/pull/8
+- feat: Modelfile Manager sidebar pane (opilot-b14z) by @selfagency in https://github.com/selfagency/opilot/pull/8
 - fix: stream LM response chunks per-token (s90p) by @selfagency in https://github.com/selfagency/opilot/pull/9
 - fix(0i0b): replace text labels with key icon buttons in panel headers by @selfagency in https://github.com/selfagency/opilot/pull/10
 - fix(22ff): remove model details view and associated commands by @selfagency in https://github.com/selfagency/opilot/pull/12
@@ -184,7 +184,7 @@ _Source: changes from v0.1.0-pre to v0.1.2-pre._
 - Fix cloud model run flow: pull before start and improve cloud/library UX by @selfagency in https://github.com/selfagency/opilot/pull/18
 - Fix cloud model run flow: use proper model suffixes by @selfagency in https://github.com/selfagency/opilot/pull/21
 - fix: correctness, security & completeness review by @selfagency in https://github.com/selfagency/opilot/pull/24
-- test: increase unit test coverage (ollama-models-vscode-7not) by @selfagency in https://github.com/selfagency/opilot/pull/26
+- test: increase unit test coverage (opilot-7not) by @selfagency in https://github.com/selfagency/opilot/pull/26
 - fix(provider,sidebar): inject cloud API key for cloud-tagged model requests [6ogy] by @selfagency in https://github.com/selfagency/opilot/pull/27
 - docs: Update funding sources in FUNDING.yml by @selfagency in https://github.com/selfagency/opilot/pull/39
 - docs: Fix funding model format for GitHub entry by @selfagency in https://github.com/selfagency/opilot/pull/40

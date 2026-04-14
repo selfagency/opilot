@@ -1,8 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls -la /Users/daniel/Developer/ollama-models-vscode/src/*.test.ts)",
-      "Read(//Users/daniel/Library/Mobile Documents/com~apple~CloudDocs/Claude/projects/-Users-daniel-Developer-ollama-models-vscode/2d107382-7791-4450-98dc-2c4fe670674f/tool-results/**)",
+      "Bash(ls -la /Users/daniel/Developer/opilot/src/*.test.ts)",
+      "Read(//Users/daniel/Library/Mobile Documents/com~apple~CloudDocs/Claude/projects/-Users-daniel-Developer-opilot/2d107382-7791-4450-98dc-2c4fe670674f/tool-results/**)",
       "mcp__io_github_wonderwhy-er_desktop-commander__get_file_info",
       "mcp__io_github_wonderwhy-er_desktop-commander__read_file",
       "WebFetch(domain:raw.githubusercontent.com)",
@@ -27,9 +27,9 @@
       "Bash(npx vitest run src/contextUtils.test.ts)",
       "mcp__cognitionai_deepwiki__read_wiki_contents",
       "Bash(python3 -c \":*)",
-      "Bash(ls /Users/daniel/Developer/ollama-models-vscode/node_modules/.pnpm/@types+vscode*/node_modules/@types/vscode/)",
-      "Bash(cat /Users/daniel/Developer/ollama-models-vscode/node_modules/.pnpm/@types+vscode*/node_modules/@types/vscode/package.json)",
-      "Bash(grep -n \"ThinkingPart\\\\|Thinking\\\\b\" /Users/daniel/Developer/ollama-models-vscode/node_modules/.pnpm/@types+vscode*/node_modules/@types/vscode/index.d.ts)",
+      "Bash(ls /Users/daniel/Developer/opilot/node_modules/.pnpm/@types+vscode*/node_modules/@types/vscode/)",
+      "Bash(cat /Users/daniel/Developer/opilot/node_modules/.pnpm/@types+vscode*/node_modules/@types/vscode/package.json)",
+      "Bash(grep -n \"ThinkingPart\\\\|Thinking\\\\b\" /Users/daniel/Developer/opilot/node_modules/.pnpm/@types+vscode*/node_modules/@types/vscode/index.d.ts)",
       "Bash(curl -s \"https://raw.githubusercontent.com/selfagency/mistral-models-vscode/refs/heads/main/src/provider.ts\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/selfagency/mistral-models-vscode/refs/heads/main/src/extension.ts\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/selfagency/mistral-models-vscode/refs/heads/main/package.json\")"
