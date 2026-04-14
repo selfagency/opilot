@@ -5,7 +5,8 @@ status: todo
 type: epic
 priority: normal
 created_at: 2026-04-14T21:37:16Z
-updated_at: 2026-04-14T21:39:39Z
+updated_at: 2026-04-14T21:43:48Z
+parent: opilot-fu6s
 ---
 
 Align the extension with current VS Code platform guidance where implementation gaps are already known.

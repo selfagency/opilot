@@ -5,7 +5,8 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-04-14T21:37:16Z
-updated_at: 2026-04-14T21:39:39Z
+updated_at: 2026-04-14T21:43:49Z
+parent: opilot-fu6s
 ---
 
 Improve reliability under timeouts, retries, and interruption scenarios called out in the review.

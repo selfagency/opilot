@@ -5,7 +5,8 @@ status: todo
 type: epic
 priority: high
 created_at: 2026-04-14T21:37:16Z
-updated_at: 2026-04-14T21:39:39Z
+updated_at: 2026-04-14T21:43:48Z
+parent: opilot-fu6s
 ---
 
 Improve diagnostic quality and graceful failure behavior for chat, transport, and tool execution flows.

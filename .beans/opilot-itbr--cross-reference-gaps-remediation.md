@@ -5,7 +5,8 @@ status: todo
 type: epic
 priority: low
 created_at: 2026-04-14T21:37:16Z
-updated_at: 2026-04-14T21:39:38Z
+updated_at: 2026-04-14T21:43:49Z
+parent: opilot-fu6s
 ---
 
 Track the alignment opportunities identified by comparing the codebase to VS Code AI and Ollama documentation.
