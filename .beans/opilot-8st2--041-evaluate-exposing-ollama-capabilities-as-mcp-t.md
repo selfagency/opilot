@@ -1,13 +1,12 @@
 ---
 # opilot-8st2
 title: 041 Evaluate exposing Ollama capabilities as MCP tools
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-04-14T21:40:18Z
-updated_at: 2026-04-14T21:40:18Z
+updated_at: 2026-04-15T08:06:00Z
 parent: opilot-itbr
-id: opilot-8st2
 ---
 
 Source issue 041 from `docs/plans/remediation-plan.md`.
@@ -27,8 +26,24 @@ Assess whether MCP exposure is worthwhile and realistic for this extension witho
 
 ## Todo
 
-- [ ] Review the current capability surface that could sensibly be exposed through MCP
-- [ ] Identify likely user value, implementation cost, and maintenance burden
-- [ ] Determine whether MCP exposure should be additive, experimental, or deferred
-- [ ] Capture any architectural constraints or security concerns discovered during evaluation
-- [ ] Publish a recommendation and next-step proposal
+- [x] Review the current capability surface that could sensibly be exposed through MCP
+- [x] Identify likely user value, implementation cost, and maintenance burden
+- [x] Determine whether MCP exposure should be additive, experimental, or deferred
+- [x] Capture any architectural constraints or security concerns discovered during evaluation
+- [x] Publish a recommendation and next-step proposal
+
+## Summary of Changes
+
+Evaluation decision: **defer MCP exposure** for now.
+
+Rationale:
+
+- Current extension value is centered on VS Code chat/provider/sidebar flows; adding MCP exposure now introduces substantial API hardening and maintenance burden.
+- Safe MCP exposure would require explicit capability boundaries, auth/scope controls, and long-term compatibility commitments not currently in scope for this remediation pass.
+- Revisit when there is concrete user demand for external orchestration of model-management workflows.
+
+Decision recorded in this bean for durable project tracking.
+
+Validation run:
+
+- `pnpm run compile`
