@@ -1,13 +1,12 @@
 ---
 # opilot-zgmx
 title: 023 Add dedicated tests for built-in Ollama conflict handling
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-04-14T21:39:09Z
-updated_at: 2026-04-14T21:39:09Z
+updated_at: 2026-04-15T01:01:00Z
 parent: opilot-ah8d
-id: opilot-zgmx
 ---
 
 Source issue 023 from `docs/plans/remediation-plan.md`.
@@ -27,8 +26,23 @@ Capture the conflict-resolution behavior in direct tests so future refactors do 
 
 ## Todo
 
-- [ ] Review the conflict-handling flow and identify major branches to cover
-- [ ] Add focused tests for accept, dismiss, and non-conflict scenarios as appropriate
-- [ ] Mock VS Code interactions only at the necessary boundaries
-- [ ] Verify the tests stay resilient to unrelated UI wording changes where possible
-- [ ] Confirm the coverage protects future cleanup or refactor work in this area
+- [x] Review the conflict-handling flow and identify major branches to cover
+- [x] Add focused tests for accept, dismiss, and non-conflict scenarios as appropriate
+- [x] Mock VS Code interactions only at the necessary boundaries
+- [x] Verify the tests stay resilient to unrelated UI wording changes where possible
+- [x] Confirm the coverage protects future cleanup or refactor work in this area
+
+## Summary of Changes
+
+Issue already satisfied by dedicated conflict-handling coverage in `src/extension.test.ts` under `describe('handleBuiltInOllamaConflict', ...)`, including:
+
+- non-conflict path
+- conflict warning path
+- dismiss path
+- accept path and config update behavior
+- fallback and error paths
+
+Validation run:
+
+- `pnpm vitest run src/extension.test.ts`
+- `pnpm run compile`
