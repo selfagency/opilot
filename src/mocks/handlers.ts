@@ -63,10 +63,7 @@ export const DEFAULT_CHAT_RESPONSE = {
 };
 
 export const DEFAULT_OLLAMA_API_TAGS = {
-  models: [
-    { name: 'devstral:cloud' },
-    { name: 'llama4:cloud' },
-  ],
+  models: [{ name: 'devstral:cloud' }, { name: 'llama4:cloud' }],
 };
 
 export const DEFAULT_LIBRARY_MODELS = ['llama3.2', 'mistral', 'phi4'];
