@@ -1,11 +1,11 @@
 ---
 # opilot-tayj
 title: Documentation remediation
-status: todo
+status: completed
 type: epic
 priority: low
 created_at: 2026-04-14T21:37:16Z
-updated_at: 2026-04-14T21:43:48Z
+updated_at: 2026-04-15T07:38:00Z
 parent: opilot-fu6s
 ---
 
@@ -17,7 +17,15 @@ Improve internal documentation where the review found gaps in code-level guidanc
 
 ## Todo
 
-- [ ] Review documentation gaps and desired scope
-- [ ] Create child issue for the documentation finding
-- [ ] Ensure the resulting docs explain intent rather than obvious code behavior
-- [ ] Verify the epic covers all documentation findings from the plan
+- [x] Review documentation gaps and desired scope
+- [x] Create child issue for the documentation finding
+- [x] Ensure the resulting docs explain intent rather than obvious code behavior
+- [x] Verify the epic covers all documentation findings from the plan
+
+## Summary of Changes
+
+Completed child finding:
+
+- `opilot-5jlr` (028): added concise module-level responsibility documentation for `src/contextUtils.ts` and `src/diagnostics.ts`.
+
+The resulting documentation emphasizes module intent/boundaries and avoids redundant line-level comments.
