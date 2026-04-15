@@ -1,13 +1,12 @@
 ---
 # opilot-4kgr
 title: 031 Clarify the getSetting return-type API
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-04-14T21:40:17Z
-updated_at: 2026-04-14T21:40:17Z
+updated_at: 2026-04-15T01:13:00Z
 parent: opilot-g952
-id: opilot-4kgr
 ---
 
 Source issue 031 from `docs/plans/remediation-plan.md`.
@@ -27,8 +26,22 @@ Make the return type and call contract clearer without introducing unnecessary a
 
 ## Todo
 
-- [ ] Review the current `getSetting` API and identify the main ambiguity for callers
-- [ ] Choose the smallest API refinement that improves clarity
-- [ ] Update the implementation and any affected call sites
-- [ ] Add or update tests to lock in the intended contract
-- [ ] Verify the API now reads clearly to a new maintainer
+- [x] Review the current `getSetting` API and identify the main ambiguity for callers
+- [x] Choose the smallest API refinement that improves clarity
+- [x] Update the implementation and any affected call sites
+- [x] Add or update tests to lock in the intended contract
+- [x] Verify the API now reads clearly to a new maintainer
+
+## Summary of Changes
+
+This issue is satisfied by the existing `getSetting` overload contract in `src/settings.ts`:
+
+- `getSetting<T>(key): T | undefined`
+- `getSetting<T>(key, defaultValue: T): T`
+
+The tests in `src/settings.test.ts` verify the intended precedence and default-value behavior.
+
+Validation run:
+
+- `pnpm vitest run src/settings.test.ts`
+- `pnpm run compile`
