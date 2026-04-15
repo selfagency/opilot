@@ -94,20 +94,66 @@ export interface ModelCapabilities {
   maxOutputTokens: number;
 }
 
+export type ConnectionFailureKind = 'timeout' | 'connection-refused' | 'authentication' | 'cancelled' | 'unknown';
+
+export interface ConnectionFailureDetails {
+  kind: ConnectionFailureKind;
+  message: string;
+  error: unknown;
+}
+
+function classifyConnectionFailure(error: unknown): ConnectionFailureDetails {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error ? String((error as { code?: unknown }).code) : '';
+  const status =
+    typeof error === 'object' && error !== null && 'status' in error
+      ? Number((error as { status?: unknown }).status)
+      : undefined;
+  const name = error instanceof Error ? error.name : '';
+
+  if (code === 'ETIMEDOUT' || normalized.includes('timed out') || normalized.includes('timeout')) {
+    return { kind: 'timeout', message, error };
+  }
+
+  if (name === 'AbortError') {
+    return { kind: 'cancelled', message, error };
+  }
+
+  if (code === 'ECONNREFUSED' || normalized.includes('econnrefused') || normalized.includes('connection refused')) {
+    return { kind: 'connection-refused', message, error };
+  }
+
+  if (status === 401 || status === 403 || normalized.includes('unauthorized') || normalized.includes('forbidden')) {
+    return { kind: 'authentication', message, error };
+  }
+
+  return { kind: 'unknown', message, error };
+}
+
 /**
  * Test connection to Ollama server
  */
-export async function testConnection(client: Ollama, timeoutMs = 5_000): Promise<boolean> {
+export async function testConnection(
+  client: Ollama,
+  timeoutMs = 5_000,
+  onFailure?: (details: ConnectionFailureDetails) => void,
+): Promise<boolean> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
       client.list(),
       new Promise((_, reject) => {
-        timeoutHandle = setTimeout(() => reject(new Error('ETIMEDOUT')), timeoutMs);
+        timeoutHandle = setTimeout(
+          () => reject(Object.assign(new Error('Connection timed out'), { code: 'ETIMEDOUT' })),
+          timeoutMs,
+        );
       }),
     ]);
     return true;
-  } catch {
+  } catch (error) {
+    onFailure?.(classifyConnectionFailure(error));
     return false;
   } finally {
     if (timeoutHandle !== undefined) {

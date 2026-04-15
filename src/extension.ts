@@ -1195,7 +1195,9 @@ export async function activate(context: vscode.ExtensionContext) {
   // Test connection to Ollama server on startup (non-blocking)
   void (async () => {
     try {
-      const isConnected = await testConnection(client);
+      const isConnected = await testConnection(client, 5_000, details => {
+        diagnostics.warn(`[client] connection test failed (${details.kind}): ${details.message}`);
+      });
       diagnostics.info(`[client] Connection test result: ${isConnected ? 'connected' : 'not connected'}`);
       if (!isConnected) {
         await handleConnectionTestFailure(host, undefined, undefined, logOutputChannel);

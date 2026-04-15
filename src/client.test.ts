@@ -290,6 +290,22 @@ describe('testConnection', () => {
     expect(result).toBe(false);
   });
 
+  it('reports timeout failure details via callback', async () => {
+    vi.doMock('vscode', () => makeVscodeMock());
+    vi.doMock('ollama', () => ({ Ollama: class {} }));
+
+    const { testConnection } = await import('./client.js');
+    const onFailure = vi.fn();
+    const client = { list: vi.fn().mockImplementation(() => new Promise(() => {})) } as any;
+
+    const result = await testConnection(client, 5, onFailure);
+
+    expect(result).toBe(false);
+    expect(onFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'timeout', message: expect.stringContaining('timed out') }),
+    );
+  });
+
   it('returns false when list() is cancelled', async () => {
     vi.doMock('vscode', () => makeVscodeMock());
     vi.doMock('ollama', () => ({ Ollama: class {} }));
@@ -302,6 +318,21 @@ describe('testConnection', () => {
     const result = await testConnection(client);
 
     expect(result).toBe(false);
+  });
+
+  it('reports authentication failure details via callback', async () => {
+    vi.doMock('vscode', () => makeVscodeMock());
+    vi.doMock('ollama', () => ({ Ollama: class {} }));
+
+    const { testConnection } = await import('./client.js');
+    const onFailure = vi.fn();
+    const authError = Object.assign(new Error('Unauthorized'), { status: 401 });
+    const client = { list: vi.fn().mockRejectedValue(authError) } as any;
+
+    const result = await testConnection(client, 5_000, onFailure);
+
+    expect(result).toBe(false);
+    expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ kind: 'authentication' }));
   });
 });
 
