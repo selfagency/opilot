@@ -1,13 +1,12 @@
 ---
 # opilot-yqdn
 title: 040 Evaluate adopting prompt tsx for prompt composition
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-04-14T21:40:18Z
-updated_at: 2026-04-14T21:40:18Z
+updated_at: 2026-04-15T08:03:00Z
 parent: opilot-itbr
-id: opilot-yqdn
 ---
 
 Source issue 040 from `docs/plans/remediation-plan.md`.
@@ -27,8 +26,24 @@ Run an explicit evaluation rather than leaving prompt-tsx as an untracked archit
 
 ## Todo
 
-- [ ] Inventory current prompt construction paths and pain points
-- [ ] Compare those needs against what `@vscode/prompt-tsx` would actually solve
-- [ ] Produce a recommendation to adopt, defer, or reject with reasons
-- [ ] If adoption looks viable, outline the migration scope and risks
-- [ ] Record the decision in a durable location such as repo docs or an ADR
+- [x] Inventory current prompt construction paths and pain points
+- [x] Compare those needs against what `@vscode/prompt-tsx` would actually solve
+- [x] Produce a recommendation to adopt, defer, or reject with reasons
+- [x] If adoption looks viable, outline the migration scope and risks
+- [x] Record the decision in a durable location such as repo docs or an ADR
+
+## Summary of Changes
+
+Evaluation decision: **defer prompt-tsx adoption for now**.
+
+Rationale:
+
+- Current prompt composition and truncation controls are already implemented and functioning (system prompt shaping + context-window truncation).
+- Introducing `@vscode/prompt-tsx` now would add migration churn across both extension and provider prompt paths without immediate user-facing reliability gains.
+- Re-evaluate if prompt composition complexity increases (larger multi-part prompt trees, richer prioritization needs, or repeated prompt-assembly defects).
+
+Decision recorded in this bean for durable project tracking.
+
+Validation run:
+
+- `pnpm run compile`
