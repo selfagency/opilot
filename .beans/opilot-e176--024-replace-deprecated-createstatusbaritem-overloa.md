@@ -1,13 +1,12 @@
 ---
 # opilot-e176
 title: 024 Replace deprecated createStatusBarItem overload
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-04-14T21:39:33Z
-updated_at: 2026-04-14T21:39:33Z
+updated_at: 2026-04-15T00:50:00Z
 parent: opilot-9ycj
-id: opilot-e176
 ---
 
 Source issue 024 from `docs/plans/remediation-plan.md`.
@@ -26,8 +25,20 @@ Move to the supported API shape without changing status bar behavior or placemen
 
 ## Todo
 
-- [ ] Locate the deprecated overload usage and confirm the supported replacement signature
-- [ ] Update the status bar item creation to the current API form
-- [ ] Verify priority, alignment, and lifecycle behavior remain the same
-- [ ] Add or update tests if the surrounding abstraction is covered
-- [ ] Confirm the change removes the deprecation concern cleanly
+- [x] Locate the deprecated overload usage and confirm the supported replacement signature
+- [x] Update the status bar item creation to the current API form
+- [x] Verify priority, alignment, and lifecycle behavior remain the same
+- [x] Add or update tests if the surrounding abstraction is covered
+- [x] Confirm the change removes the deprecation concern cleanly
+
+## Summary of Changes
+
+- Updated status bar item creation in `src/statusBar.ts` to use the supported API form:
+  - from `createStatusBarItem(alignment, priority)`
+  - to `createStatusBarItem('opilot.status', alignment, priority)`
+- Preserved alignment (`Right`), priority (`100`), command binding, and lifecycle behavior.
+
+Validation run:
+
+- `pnpm vitest run src/statusBar.test.ts`
+- `pnpm run compile`
