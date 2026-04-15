@@ -10,10 +10,8 @@ import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMes
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
 import {
-  getOllamaServerLogPath,
   handleConfigurationChange,
   handleConnectionTestFailure,
-  isLocalHost,
   isSelectedAction,
   redactDisplayHost,
 } from './extensionHelpers.js';
@@ -25,14 +23,7 @@ import {
 } from './formatting';
 import { formatBytes } from './formatUtils.js';
 import { registerModelfileManager } from './modelfiles.js';
-import {
-  buildSdkOptions,
-  mapOpenAiToolCallsToOllamaLike,
-  nativeSdkChatOnce,
-  nativeSdkStreamChat,
-  openAiCompatChatOnce,
-  openAiCompatStreamChat,
-} from './chatUtils.js';
+import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
 import {
   getModelOptionsForModel,
   loadModelSettings,
@@ -41,7 +32,7 @@ import {
   type ModelSettingsStore,
 } from './modelSettings.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
-import { getSetting, migrateLegacySettings, SETTINGS_NAMESPACE } from './settings.js';
+import { getSetting, migrateLegacySettings } from './settings.js';
 import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settingsWebview.js';
 import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
 import { registerStatusBarHeartbeat } from './statusBar.js';

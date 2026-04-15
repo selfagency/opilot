@@ -200,12 +200,18 @@ function getNumberField(record: unknown, key: string): number | undefined {
   if (!record || typeof record !== 'object') {
     return undefined;
   }
+  if (!Object.hasOwn(record, key)) {
+    return undefined;
+  }
   const value = (record as Record<string, unknown>)[key];
   return typeof value === 'number' ? value : undefined;
 }
 
 function getStringField(record: unknown, key: string): string | undefined {
   if (!record || typeof record !== 'object') {
+    return undefined;
+  }
+  if (!Object.hasOwn(record, key)) {
     return undefined;
   }
   const value = (record as Record<string, unknown>)[key];

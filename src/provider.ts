@@ -23,13 +23,7 @@ import {
   workspace,
 } from 'vscode';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost } from './client';
-import {
-  buildSdkOptions,
-  nativeSdkChatOnce,
-  nativeSdkStreamChat,
-  openAiCompatChatOnce,
-  openAiCompatStreamChat,
-} from './chatUtils.js';
+import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
 import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages } from './contextUtils.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
