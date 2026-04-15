@@ -1,13 +1,12 @@
 ---
 # opilot-xdu8
 title: 017 Stop refreshing the sidebar tree on every tooltip update
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-04-14T21:39:09Z
-updated_at: 2026-04-14T21:39:09Z
+updated_at: 2026-04-15T09:01:00Z
 parent: opilot-wn59
-id: opilot-xdu8
 ---
 
 Source issue 017 from `docs/plans/remediation-plan.md`.
@@ -26,8 +25,19 @@ Limit tree refreshes to meaningful state changes instead of incidental tooltip m
 
 ## Todo
 
-- [ ] Trace the tooltip update path and current refresh triggers
-- [ ] Separate visual metadata updates from structural tree refresh conditions
-- [ ] Implement a narrower refresh strategy or debounce if appropriate
-- [ ] Add tests or instrumentation for refresh-trigger behavior
-- [ ] Verify the sidebar remains responsive without unnecessary redraws
+- [x] Trace the tooltip update path and current refresh triggers
+- [x] Separate visual metadata updates from structural tree refresh conditions
+- [x] Implement a narrower refresh strategy or debounce if appropriate
+- [x] Add tests or instrumentation for refresh-trigger behavior
+- [x] Verify the sidebar remains responsive without unnecessary redraws
+
+## Summary of Changes
+
+- Added `updateItemTooltip(...)` helper in `src/sidebar.ts` to avoid firing item-level tree updates when tooltip text is unchanged.
+- Applied conditional tooltip refreshes across asynchronous tooltip-update paths for local/library/cloud model entries.
+- This preserves existing tooltip enrichment behavior while reducing unnecessary UI redraw events.
+
+Validation run:
+
+- `pnpm vitest run src/sidebar.test.ts src/sidebar.utils.test.ts`
+- `pnpm run compile`

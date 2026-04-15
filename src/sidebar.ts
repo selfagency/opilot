@@ -196,6 +196,14 @@ function createThemeIcon(id: string): ThemeIcon {
   return new ThemeIconCtor(id);
 }
 
+function updateItemTooltip(item: ModelTreeItem, tooltip: string, emitter: EventEmitter<ModelTreeItem | null>): void {
+  if (typeof item.tooltip === 'string' && item.tooltip === tooltip) {
+    return;
+  }
+  item.tooltip = tooltip;
+  emitter.fire(item);
+}
+
 /**
  * Extract the base model family name from a full model name.
  * Examples:
@@ -827,8 +835,8 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           // Fetch tooltip description asynchronously
           void getCachedModelPagePreview(model.name).then(
             preview => {
-              item.tooltip = buildLocalModelTooltip(model.name, model.size, running, preview.description);
-              this.treeChangeEmitter.fire(item);
+              const nextTooltip = buildLocalModelTooltip(model.name, model.size, running, preview.description);
+              updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
             },
             () => {
               // Keep initial tooltip on error
@@ -858,12 +866,18 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
             // Update tooltip with capabilities
             void getCachedModelPagePreview(model.name).then(
               preview => {
-                item.tooltip = buildLocalModelTooltip(model.name, model.size, running, preview.description, cachedCaps);
-                this.treeChangeEmitter.fire(item);
+                const nextTooltip = buildLocalModelTooltip(
+                  model.name,
+                  model.size,
+                  running,
+                  preview.description,
+                  cachedCaps,
+                );
+                updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
               },
               () => {
-                item.tooltip = buildLocalModelTooltip(model.name, model.size, running, undefined, cachedCaps);
-                this.treeChangeEmitter.fire(item);
+                const nextTooltip = buildLocalModelTooltip(model.name, model.size, running, undefined, cachedCaps);
+                updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
               },
             );
           } else if (!this.localModelCapabilitiesInFlight.has(model.name)) {
@@ -877,12 +891,18 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
                 // Update tooltip with capabilities
                 void getCachedModelPagePreview(model.name).then(
                   preview => {
-                    item.tooltip = buildLocalModelTooltip(model.name, model.size, running, preview.description, caps);
-                    this.treeChangeEmitter.fire(item);
+                    const nextTooltip = buildLocalModelTooltip(
+                      model.name,
+                      model.size,
+                      running,
+                      preview.description,
+                      caps,
+                    );
+                    updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
                   },
                   () => {
-                    item.tooltip = buildLocalModelTooltip(model.name, model.size, running, undefined, caps);
-                    this.treeChangeEmitter.fire(item);
+                    const nextTooltip = buildLocalModelTooltip(model.name, model.size, running, undefined, caps);
+                    updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
                   },
                 );
               })
@@ -1655,8 +1675,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           if (isRecommended) tooltipLines.push('👍 Recommended for your hardware');
           if (preview.description) tooltipLines.push(preview.description);
 
-          item.tooltip = tooltipLines.join('\n');
-          this.treeChangeEmitter.fire(item);
+          updateItemTooltip(item, tooltipLines.join('\n'), this.treeChangeEmitter);
         },
         () => {
           // Keep initial tooltip.
@@ -1860,8 +1879,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
             item.description = badges.join(' ');
           }
 
-          item.tooltip = tooltipLines.join('\n');
-          this.treeChangeEmitter.fire(item);
+          updateItemTooltip(item, tooltipLines.join('\n'), this.treeChangeEmitter);
         },
         () => {
           item.tooltip = `Library model: ${name}`;
@@ -2417,13 +2435,16 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         if (capLine) {
           tooltipLines.push(capLine);
         }
-        item.tooltip = tooltipLines.join('\n');
+        const baseTooltip = tooltipLines.join('\n');
+        if (typeof item.tooltip !== 'string' || item.tooltip !== baseTooltip) {
+          item.tooltip = baseTooltip;
+        }
 
         void getCachedModelPagePreview(fullName).then(
           preview => {
             if (preview.description) {
-              item.tooltip = `${item.tooltip}\n${preview.description}`;
-              this.treeChangeEmitter.fire(item);
+              const nextTooltip = `${baseTooltip}\n${preview.description}`;
+              updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
             }
           },
           () => {
