@@ -5,9 +5,8 @@ status: completed
 type: task
 priority: low
 created_at: 2026-04-14T21:39:09Z
-updated_at: 2026-04-15T09:02:00Z
+updated_at: 2026-04-15T13:36:19Z
 parent: opilot-wn59
-id: opilot-64o2
 ---
 
 Source issue 016 from `docs/plans/remediation-plan.md`.
