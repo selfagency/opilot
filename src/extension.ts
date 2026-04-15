@@ -73,6 +73,19 @@ export {
   isSelectedAction,
 } from './extensionHelpers.js';
 
+export function getWindowsLogTailPowerShellArgs(
+  localAppData: string | undefined = process.env['LOCALAPPDATA'],
+): string[] {
+  const logPath = localAppData ? join(localAppData, 'Ollama', 'server.log') : '$env:LOCALAPPDATA\\Ollama\\server.log';
+  const escapedLogPath = logPath.replace(/'/g, "''");
+  const script =
+    `$p='${escapedLogPath}'; ` +
+    'if (Test-Path -LiteralPath $p) { Get-Content -LiteralPath $p -Tail 200 -Wait } ' +
+    'else { Write-Error ("Missing log file: " + $p) }';
+
+  return ['-NoProfile', '-Command', script];
+}
+
 // normalizeToolParameters/isToolsNotSupportedError moved to src/toolUtils.ts
 
 async function removeBuiltInOllamaFromChatLanguageModels(
@@ -965,10 +978,8 @@ export async function activate(context: vscode.ExtensionContext) {
         stdio: 'pipe',
       });
     } else if (platform === 'win32') {
-      const script =
-        '$p=Join-Path $env:LOCALAPPDATA \'Ollama\\server.log\'; if (Test-Path $p) { Get-Content -Path $p -Tail 200 -Wait } else { Write-Error "Missing log file: $p" }';
       output.info('[server] starting log stream from %LOCALAPPDATA%\\Ollama\\server.log');
-      logTailProcess = spawn('powershell', ['-NoProfile', '-Command', script], { stdio: 'pipe' });
+      logTailProcess = spawn('powershell', getWindowsLogTailPowerShellArgs(), { stdio: 'pipe' });
     } else {
       output.warn(`[server] log streaming not supported on platform: ${platform}`);
       return;
