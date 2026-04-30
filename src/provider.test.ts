@@ -593,7 +593,7 @@ describe('OllamaChatModelProvider error handling', () => {
       {} as unknown as CancellationToken,
     );
     expect(models1.map((m: { id: string }) => m.id)).toContain('ollama:deepseek-r1:8b');
-    void models0;
+    expect(models0).toBeDefined();
   });
 });
 

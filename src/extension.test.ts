@@ -2853,11 +2853,7 @@ describe('handleConfigurationChange', () => {
 
     const ext = await import('./extension.js');
     const event = {
-      affectsConfiguration: vi.fn((key: string) => {
-        if (key === 'ollama.diagnostics.logLevel') return false;
-        if (key === 'ollama.streamLogs') return false;
-        return false;
-      }),
+      affectsConfiguration: vi.fn(() => false),
     };
 
     ext.handleConfigurationChange(event as any, mockDiagnostics as any, undefined, onAutoStartChange);

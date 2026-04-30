@@ -91,7 +91,7 @@ export async function handleConnectionTestFailure(
       // Show the extension output channel (which has the connection error) and
       // tell the user where to find the remote server logs.
       logOutputChannel?.show();
-      void (window.showInformationMessage ?? vscode.window.showInformationMessage)(
+      (window.showInformationMessage ?? vscode.window.showInformationMessage)(
         `This is a remote Ollama connection. Check the Ollama server logs on the remote machine at ${safeHost}. Extension connection details are shown in the Opilot output channel.`,
       );
       return;

@@ -125,6 +125,62 @@ process.on('SIGTERM', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function ensureTagDoesNotExist(octokit, owner, repo, tag) {
+  try {
+    await octokit.git.getRef({ owner, repo, ref: `tags/${tag}` });
+    console.error(`❌ Remote tag ${tag} already exists.`);
+    process.exit(1);
+  } catch (err) {
+    if (err.status !== 404) {
+      throw err;
+    }
+    // 404 = tag does not exist; that's what we want.
+  }
+}
+
+function resolvePreviousTag(tagsResp, tag) {
+  const parseVersion = v => v.replace(/^v/, '').split('.').map(Number);
+  return (
+    tagsResp
+      .map(r => r.ref.replace('refs/tags/', ''))
+      .filter(t => t !== tag)
+      .sort((a, b) => {
+        const [aMaj, aMin, aPatch] = parseVersion(a);
+        const [bMaj, bMin, bPatch] = parseVersion(b);
+        return aMaj - bMaj || aMin - bMin || aPatch - bPatch;
+      })
+      .at(-1) ?? ''
+  );
+}
+
+function updateChangelogFile(changelogPath, heading, section) {
+  let original;
+  try {
+    original = readFileSync(changelogPath, 'utf8');
+  } catch {
+    original = '# Change Log\n\n## [Unreleased]\n';
+  }
+
+  if (!original.includes(heading)) {
+    const marker = '## [Unreleased]';
+    const idx = original.indexOf(marker);
+    const firstVersionIdx = original.search(/^## \[/m);
+    const updated =
+      idx >= 0
+        ? `${original.slice(0, idx + marker.length)}\n${section}${original.slice(idx + marker.length)}`
+        : firstVersionIdx >= 0
+          ? `${original.slice(0, firstVersionIdx)}${section}\n${original.slice(firstVersionIdx)}`
+          : `${original}\n${section}`;
+    writeFileSync(changelogPath, updated);
+  } else {
+    console.log('ℹ️  CHANGELOG already contains this release heading; skipping.');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main — wrapped so any unhandled error triggers rollback
 // ---------------------------------------------------------------------------
 
@@ -179,16 +235,7 @@ async function main() {
   const [, owner, repo] = repoMatch;
 
   // Check for existing remote tag via the API.
-  try {
-    await octokit.git.getRef({ owner, repo, ref: `tags/${tag}` });
-    console.error(`❌ Remote tag ${tag} already exists.`);
-    process.exit(1);
-  } catch (err) {
-    if (err.status !== 404) {
-      throw err;
-    }
-    // 404 = tag does not exist; that's what we want.
-  }
+  await ensureTagDoesNotExist(octokit, owner, repo, tag);
 
   // --- Previous tag (for release notes diff) --------------------------------
 
@@ -199,17 +246,7 @@ async function main() {
     per_page: 100,
   });
 
-  const previousTag =
-    tagsResp
-      .map(r => r.ref.replace('refs/tags/', ''))
-      .filter(t => t !== tag)
-      .sort((a, b) => {
-        const parse = v => v.replace(/^v/, '').split('.').map(Number);
-        const [aMaj, aMin, aPatch] = parse(a);
-        const [bMaj, bMin, bPatch] = parse(b);
-        return aMaj - bMaj || aMin - bMin || aPatch - bPatch;
-      })
-      .at(-1) ?? '';
+  const previousTag = resolvePreviousTag(tagsResp, tag);
 
   // --- Release notes --------------------------------------------------------
 
@@ -240,28 +277,7 @@ async function main() {
   const heading = `## [${version}] - ${date}`;
   const sourceLine = previousTag ? `\n\n_Source: changes from ${previousTag} to ${tag}._` : '';
   const section = `\n${heading}\n\n${releaseNotes}${sourceLine}\n`;
-
-  let original;
-  try {
-    original = readFileSync(changelogPath, 'utf8');
-  } catch {
-    original = '# Change Log\n\n## [Unreleased]\n';
-  }
-
-  if (!original.includes(heading)) {
-    const marker = '## [Unreleased]';
-    const idx = original.indexOf(marker);
-    const firstVersionIdx = original.search(/^## \[/m);
-    const updated =
-      idx >= 0
-        ? `${original.slice(0, idx + marker.length)}\n${section}${original.slice(idx + marker.length)}`
-        : firstVersionIdx >= 0
-          ? `${original.slice(0, firstVersionIdx)}${section}\n${original.slice(firstVersionIdx)}`
-          : `${original}\n${section}`;
-    writeFileSync(changelogPath, updated);
-  } else {
-    console.log('ℹ️  CHANGELOG already contains this release heading; skipping.');
-  }
+  updateChangelogFile(changelogPath, heading, section);
 
   // --- Commit + push --------------------------------------------------------
 

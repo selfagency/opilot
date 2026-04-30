@@ -1,30 +1,32 @@
 # yaml-language-server: $schema=https://taskfile.dev/schema.json
-
 version: '3'
+
+vars:
+  BIN: ./node_modules/.bin/
 
 tasks:
   check-types:
     desc: Check types
     cmds:
-      - ./node_modules/.bin/tsc --noEmit
+      - '{{.BIN}}tsc --noEmit'
     silent: false
 
   lint:
     desc: Run linter
     cmds:
-      - ./node_modules/.bin/oxlint .
+      - '{{.BIN}}oxlint .'
     silent: false
 
   lint-fix:
     desc: Run linter with auto-fix
     cmds:
-      - ./node_modules/.bin/oxlint . --fix
+      - '{{.BIN}}oxlint . --fix'
     silent: false
 
   check-formatting:
     desc: Check formatting
     cmds:
-      - ./node_modules/.bin/oxfmt . --check
+      - '{{.BIN}}oxfmt . --check'
     silent: false
 
   check-all:
@@ -40,25 +42,25 @@ tasks:
     env:
       NODE_ENV: production
     cmds:
-      - ./node_modules/.bin/tsup
+      - '{{.BIN}}tsup'
     silent: false
 
   format:
     desc: Format code
     cmds:
-      - ./node_modules/.bin/oxfmt . --write
+      - '{{.BIN}}oxfmt . --write'
     silent: false
 
   unit-tests:
     desc: Run unit tests
     cmds:
-      - ./node_modules/.bin/vitest run src {{.CLI_ARGS}}
+      - '{{.BIN}}vitest run src {{.CLI_ARGS}}'
     silent: false
 
   unit-test-coverage:
     desc: Run unit tests with coverage
     cmds:
-      - ./node_modules/.bin/vitest run src --coverage {{.CLI_ARGS}}
+      - '{{.BIN}}vitest run src --coverage {{.CLI_ARGS}}'
     silent: false
 
   extension-tests:
@@ -79,7 +81,7 @@ tasks:
     desc: Run integration tests
     deps: [pull-models]
     cmds:
-      - ./node_modules/.bin/vitest run -c vitest.integration.config.js test/integration {{.CLI_ARGS}}
+      - '{{.BIN}}vitest run -c vitest.integration.config.js test/integration {{.CLI_ARGS}}'
     silent: false
 
   precommit:
@@ -94,14 +96,14 @@ tasks:
     desc: Create a pre-release
     deps: [compile]
     cmds:
-      - ./node_modules/.bin/zx ./scripts/release.mjs -- --pre-release -- {{.CLI_ARGS}}
+      - '{{.BIN}}zx ./scripts/release.mjs -- --pre-release -- {{.CLI_ARGS}}'
     silent: false
 
   release:
     desc: Release the extension
     deps: [compile]
     cmds:
-      - ./node_modules/.bin/zx ./scripts/release.mjs {{.CLI_ARGS}}
+      - '{{.BIN}}zx ./scripts/release.mjs {{.CLI_ARGS}}'
     silent: false
 
   test-all:
@@ -122,5 +124,23 @@ tasks:
   watch:
     desc: Watch for changes and recompile
     cmds:
-      - ./node_modules/.bin/tsup --watch
+      - '{{.BIN}}tsup --watch'
+    silent: false
+
+  docs:dev:
+    desc: Start documentation development server
+    cmds:
+      - '{{.BIN}}vitepress dev docs'
+    silent: false
+
+  docs:build:
+    desc: Build documentation
+    cmds:
+      - '{{.BIN}}vitepress build'
+    silent: false
+
+  docs:preview:
+    desc: Preview built documentation
+    cmds:
+      - '{{.BIN}}vitepress preview docs/.vitepress/dist'
     silent: false

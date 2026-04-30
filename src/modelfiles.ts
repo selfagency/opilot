@@ -94,11 +94,96 @@ interface ParsedModelfile {
  *   key names (not the values) are used for hover documentation. No user-supplied
  *   parameter value reaches any context where injection is possible.
  */
+
+type ModelfileParseState = {
+  result: ParsedModelfile;
+  parameters: Record<string, unknown>;
+  messages: Message[];
+  licenses: string[];
+};
+
+function parseMultiLineTripleQuoted(
+  lines: string[],
+  startIdx: number,
+  afterOpen: string,
+): { value: string; endIdx: number } {
+  const parts = [afterOpen];
+  let i = startIdx + 1;
+  while (i < lines.length) {
+    const nextLine = lines[i];
+    if (nextLine.trim() === '"""' || nextLine.trimEnd().endsWith('"""')) {
+      const closing = nextLine.trimEnd();
+      if (closing !== '"""') {
+        parts.push(closing.substring(0, closing.length - 3));
+      }
+      break;
+    }
+    parts.push(nextLine);
+    i++;
+  }
+  return { value: parts.join('\n'), endIdx: i };
+}
+
+function resolveLineValue(value: string, lines: string[], lineIdx: number): { value: string; newIdx: number } {
+  if (value.startsWith('"""')) {
+    const afterOpen = value.substring(3);
+    if (afterOpen.endsWith('"""') && afterOpen.length > 3) {
+      return { value: afterOpen.substring(0, afterOpen.length - 3), newIdx: lineIdx };
+    }
+    const { value: multiValue, endIdx } = parseMultiLineTripleQuoted(lines, lineIdx, afterOpen);
+    return { value: multiValue, newIdx: endIdx };
+  }
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+    return { value: value.substring(1, value.length - 1), newIdx: lineIdx };
+  }
+  return { value, newIdx: lineIdx };
+}
+
+function applyKeyword(keyword: string, value: string, state: ModelfileParseState): void {
+  switch (keyword) {
+    case 'FROM':
+      state.result.from = value;
+      break;
+    case 'SYSTEM':
+      state.result.system = value;
+      break;
+    case 'TEMPLATE':
+      state.result.template = value;
+      break;
+    case 'LICENSE':
+      state.licenses.push(value);
+      break;
+    case 'ADAPTER':
+      if (!state.result.adapters) state.result.adapters = {};
+      state.result.adapters[value] = value;
+      break;
+    case 'PARAMETER': {
+      const paramSpaceIdx = value.indexOf(' ');
+      if (paramSpaceIdx !== -1) {
+        const paramName = value.substring(0, paramSpaceIdx);
+        const paramValue = value.substring(paramSpaceIdx + 1).trim();
+        const numVal = Number(paramValue);
+        state.parameters[paramName] = Number.isFinite(numVal) ? numVal : paramValue;
+      }
+      break;
+    }
+    case 'MESSAGE': {
+      const msgMatch = /^(system|user|assistant)\s+(.+)$/s.exec(value);
+      if (msgMatch) {
+        let msgContent = msgMatch[2];
+        if (msgContent.startsWith('"') && msgContent.endsWith('"')) {
+          msgContent = msgContent.substring(1, msgContent.length - 1);
+        }
+        state.messages.push({ role: msgMatch[1] as 'system' | 'user' | 'assistant', content: msgContent });
+      }
+      break;
+    }
+  }
+}
+
 export function parseModelfile(content: string): ParsedModelfile {
-  const result: ParsedModelfile = {};
-  const parameters: Record<string, unknown> = {};
-  const messages: Message[] = [];
-  const licenses: string[] = [];
+  const state: ModelfileParseState = { result: {}, parameters: {}, messages: [], licenses: [] };
+  const { result, parameters, messages, licenses } = state;
   const lines = content.split('\n');
 
   let i = 0;
@@ -119,78 +204,10 @@ export function parseModelfile(content: string): ParsedModelfile {
     }
 
     const keyword = trimmed.substring(0, spaceIdx).toUpperCase();
-    let value = trimmed.substring(spaceIdx + 1).trim();
-
-    // Handle multi-line triple-quoted values
-    if (value.startsWith('"""')) {
-      const afterOpen = value.substring(3);
-      if (afterOpen.endsWith('"""') && afterOpen.length > 3) {
-        // Single-line triple-quoted: """content"""
-        value = afterOpen.substring(0, afterOpen.length - 3);
-      } else {
-        // Multi-line: collect until closing """
-        const parts = [afterOpen];
-        i++;
-        while (i < lines.length) {
-          const nextLine = lines[i];
-          if (nextLine.trim() === '"""' || nextLine.trimEnd().endsWith('"""')) {
-            const closing = nextLine.trimEnd();
-            if (closing !== '"""') {
-              parts.push(closing.substring(0, closing.length - 3));
-            }
-            break;
-          }
-          parts.push(nextLine);
-          i++;
-        }
-        value = parts.join('\n');
-      }
-    } else if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-      value = value.substring(1, value.length - 1);
-    }
-
-    switch (keyword) {
-      case 'FROM':
-        result.from = value;
-        break;
-      case 'SYSTEM':
-        result.system = value;
-        break;
-      case 'TEMPLATE':
-        result.template = value;
-        break;
-      case 'LICENSE':
-        licenses.push(value);
-        break;
-      case 'ADAPTER': {
-        if (!result.adapters) result.adapters = {};
-        result.adapters[value] = value;
-        break;
-      }
-      case 'PARAMETER': {
-        const paramSpaceIdx = value.indexOf(' ');
-        if (paramSpaceIdx !== -1) {
-          const paramName = value.substring(0, paramSpaceIdx);
-          const paramValue = value.substring(paramSpaceIdx + 1).trim();
-          // Try to parse as number or preserve as string
-          const numVal = Number(paramValue);
-          parameters[paramName] = Number.isFinite(numVal) ? numVal : paramValue;
-        }
-        break;
-      }
-      case 'MESSAGE': {
-        // MESSAGE role "content" or MESSAGE role content
-        const msgMatch = /^(system|user|assistant)\s+(.+)$/s.exec(value);
-        if (msgMatch) {
-          let msgContent = msgMatch[2];
-          if (msgContent.startsWith('"') && msgContent.endsWith('"')) {
-            msgContent = msgContent.substring(1, msgContent.length - 1);
-          }
-          messages.push({ role: msgMatch[1] as 'system' | 'user' | 'assistant', content: msgContent });
-        }
-        break;
-      }
-    }
+    const rawValue = trimmed.substring(spaceIdx + 1).trim();
+    const { value, newIdx } = resolveLineValue(rawValue, lines, i);
+    i = newIdx;
+    applyKeyword(keyword, value, state);
     i++;
   }
 

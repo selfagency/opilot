@@ -150,6 +150,27 @@ function assertNoMidStreamError(parsed: unknown): void {
   throw new Error(`OpenAI-compat stream payload error: ${parts.join(' | ') || 'unknown error'}`);
 }
 
+function extractSseDataLines(rawEvent: string): string[] {
+  return rawEvent
+    .split(/\r?\n/)
+    .map(line => line.trimEnd())
+    .filter(line => line.startsWith('data:'))
+    .map(line => line.slice(5).trimStart());
+}
+
+function* processTrailingFrame(trailing: string): Generator<string> {
+  if (!trailing) return;
+  const dataLines = extractSseDataLines(trailing);
+  const payload = dataLines.join('\n').trim();
+  if (!payload || payload === '[DONE]') {
+    if (dataLines.length === 0) {
+      console.warn('[openai-compat] trailing SSE buffer contained no data payload and was discarded');
+    }
+    return;
+  }
+  yield payload;
+}
+
 /**
  * Parses Server-Sent Events from an async sequence of text chunks and yields
  * only `data:` payloads. Stops on `[DONE]`.
@@ -170,18 +191,9 @@ export async function* parseSseDataPayloadsFromTextChunks(chunks: AsyncIterable<
       const rawEvent = buffer.slice(0, separatorIndex);
       buffer = buffer.slice(separatorIndex + 2);
 
-      const lines = rawEvent
-        .split(/\r?\n/)
-        .map(line => line.trimEnd())
-        .filter(Boolean);
-
-      const dataLines = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart());
-
-      if (!dataLines.length) {
-        continue;
-      }
-
+      const dataLines = extractSseDataLines(rawEvent);
       const payload = dataLines.join('\n').trim();
+
       if (!payload) {
         continue;
       }
@@ -195,27 +207,7 @@ export async function* parseSseDataPayloadsFromTextChunks(chunks: AsyncIterable<
   }
 
   // Handle a trailing frame without the final separator.
-  const trailing = buffer.trim();
-  if (!trailing) {
-    return;
-  }
-
-  const lines = trailing
-    .split(/\r?\n/)
-    .map(line => line.trimEnd())
-    .filter(Boolean);
-
-  const dataLines = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart());
-
-  const payload = dataLines.join('\n').trim();
-  if (!payload || payload === '[DONE]') {
-    if (trailing.length > 0 && dataLines.length === 0) {
-      console.warn('[openai-compat] trailing SSE buffer contained no data payload and was discarded');
-    }
-    return;
-  }
-
-  yield payload;
+  yield* processTrailingFrame(buffer.trim());
 }
 
 export async function* chatCompletionsStream(

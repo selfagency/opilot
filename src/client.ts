@@ -162,6 +162,49 @@ export async function testConnection(
   }
 }
 
+function findContextLengthInModelInfo(
+  modelInfoData: Record<string, unknown> | Map<string, unknown> | undefined | null,
+): number | undefined {
+  if (modelInfoData instanceof Map) {
+    for (const [key, value] of modelInfoData.entries()) {
+      if (key === 'context_length' || key.endsWith('.context_length')) {
+        return typeof value === 'number' && value > 0 ? value : undefined;
+      }
+    }
+  } else if (modelInfoData && typeof modelInfoData === 'object') {
+    for (const [key, value] of Object.entries(modelInfoData)) {
+      if (key === 'context_length' || key.endsWith('.context_length')) {
+        return typeof value === 'number' && value > 0 ? value : undefined;
+      }
+    }
+  }
+  return undefined;
+}
+
+function parseContextLength(modelInfoData: unknown, parameters: unknown): number {
+  const contextFromInfo = findContextLengthInModelInfo(
+    modelInfoData as Record<string, unknown> | Map<string, unknown> | undefined,
+  );
+  if (contextFromInfo !== undefined) return contextFromInfo;
+
+  if (typeof parameters === 'string') {
+    const match = /^num_ctx\s+(\d+)/m.exec(parameters);
+    if (match) return parseInt(match[1], 10);
+  }
+  return 4096; // Conservative default
+}
+
+function parseMaxOutputTokens(parameters: unknown, contextLength: number): number {
+  if (typeof parameters === 'string') {
+    const match = /num_predict\s+(-?\d+)/m.exec(parameters);
+    if (match) {
+      const val = parseInt(match[1], 10);
+      return val > 0 ? val : contextLength;
+    }
+  }
+  return 4096;
+}
+
 /**
  * Fetch and parse model capabilities from an Ollama model
  * by inspecting the template and families metadata
@@ -195,45 +238,10 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
     };
     const modelInfoData = typedInfo.model_info ?? typedInfo.modelinfo;
     const parameters = (modelInfo as typeof modelInfo & { parameters?: string }).parameters;
-    let contextLength = 4096; // Conservative default
 
-    let infoCtx: unknown;
-    if (modelInfoData instanceof Map) {
-      for (const [key, value] of modelInfoData.entries()) {
-        if (key === 'context_length' || key.endsWith('.context_length')) {
-          infoCtx = value;
-          break;
-        }
-      }
-    } else if (modelInfoData && typeof modelInfoData === 'object') {
-      for (const [key, value] of Object.entries(modelInfoData)) {
-        if (key === 'context_length' || key.endsWith('.context_length')) {
-          infoCtx = value;
-          break;
-        }
-      }
-    }
-
-    if (typeof infoCtx === 'number' && infoCtx > 0) {
-      contextLength = infoCtx;
-    } else if (typeof parameters === 'string') {
-      const match = /^num_ctx\s+(\d+)/m.exec(parameters);
-      if (match) contextLength = parseInt(match[1], 10);
-    }
-
+    const contextLength = parseContextLength(modelInfoData, parameters);
     const maxInputTokens = contextLength;
-
-    // Ollama's output limit is num_predict (default varies by model, typically
-    // -1 for unlimited or a model-specific cap). Parse from parameters if set;
-    // otherwise use a conservative default that doesn't conflate with context length.
-    let maxOutputTokens = 4096;
-    if (typeof parameters === 'string') {
-      const predictMatch = /num_predict\s+(-?\d+)/m.exec(parameters);
-      if (predictMatch) {
-        const val = parseInt(predictMatch[1], 10);
-        maxOutputTokens = val > 0 ? val : contextLength;
-      }
-    }
+    const maxOutputTokens = parseMaxOutputTokens(parameters, contextLength);
 
     // Detect thinking support from capabilities array or template
     const capabilitiesArr = (modelInfo as unknown as Record<string, unknown>).capabilities;
