@@ -1,11 +1,13 @@
 {
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "compilerOptions": {
     "module": "preserve",
     "moduleResolution": "Bundler",
     "target": "ES2024",
     "lib": ["ES2024"],
-    "types": ["node"],
+    "types": ["node", "@vscode/prompt-tsx"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "@vscode/prompt-tsx",
     "sourceMap": true,
     "rootDir": "src",
     "strict": true,

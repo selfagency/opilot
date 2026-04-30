@@ -24,7 +24,7 @@ import {
 } from 'vscode';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost } from './client';
 import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
-import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages } from './contextUtils.js';
+import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages, renderOllamaPrompt } from './contextUtils.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
 import {
@@ -778,7 +778,12 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       modelOptions.num_ctx,
       getSetting<number>('maxContextTokens', 0),
     );
-    const ollamaMessages = truncateMessages(effectiveMessages, maxInputTokens);
+    const ollamaMessages = await renderOllamaPrompt(
+      effectiveMessages,
+      maxInputTokens,
+      // Provide a conservative sync token counter: 4 chars per token
+      (text: string) => Math.ceil(text.length / 4),
+    );
     this.outputChannel.info(
       `[context] after truncation: ${ollamaMessages.length} messages, ${JSON.stringify(ollamaMessages, null, 2).length} chars`,
     );

@@ -108,6 +108,11 @@ export function truncateMessages(messages: Message[], maxInputTokens: number): M
   return [...effectiveSystemMsgs, ...keptHistory, ...lastMsg];
 }
 
+// TODO: Evaluate replacing `truncateMessages` with @vscode/prompt-tsx to get
+// priority-based prompt composition and accurate token-budget pruning.
+// See .beans/opilot-yqdn--040-evaluate-adopting-prompt-tsx-for-prompt-compos.md
+// (deferred evaluation recorded in repository issues/plans).
+
 /**
  * Detect whether streaming output has entered a repetition loop.
  *
@@ -186,4 +191,36 @@ export function resolveContextLimit(modelReported: number, modelOptNumCtx?: numb
   if (modelReported > 0) return modelReported;
   if (settingMax && settingMax > 0) return settingMax;
   return DEFAULT_CONTEXT_TOKENS;
+}
+
+/**
+ * Render a prompt using @vscode/prompt-tsx when available; otherwise fall back to
+ * the synchronous `truncateMessages` approach. This function is async to allow
+ * integration with renderers that may query tokenizers or perform async work.
+ */
+export async function renderOllamaPrompt(
+  messages: Message[],
+  maxInputTokens: number,
+  tokenCountFn?: (text: string) => number,
+): Promise<Message[]> {
+  // If prompt-tsx is available, prefer it for priority-based composition.
+  try {
+    // Dynamic import so we don't hard-depend on the package until opted-in.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const promptTsx = require('@vscode/prompt-tsx');
+    if (promptTsx && typeof promptTsx.renderPrompt === 'function') {
+      // The library's renderPrompt API is expected to return an ordered array
+      // of string chunks; adapt them back to Message objects. This is a best-effort
+      // bridge and kept defensive to avoid runtime crashes if the shape differs.
+      const rendered = await promptTsx.renderPrompt(messages, { budget: Math.max(0, maxInputTokens - OUTPUT_TOKEN_RESERVE) }, tokenCountFn);
+      if (Array.isArray(rendered)) {
+        return rendered.map((r: any) => ({ role: 'user', content: String(r) } as unknown as Message));
+      }
+    }
+  } catch {
+    // Ignore and fall back.
+  }
+
+  // Synchronous conservative fallback.
+  return truncateMessages(messages, maxInputTokens);
 }

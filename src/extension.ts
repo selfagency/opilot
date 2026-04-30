@@ -6,7 +6,7 @@ import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
-import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages } from './contextUtils.js';
+import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages, renderOllamaPrompt } from './contextUtils.js';
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
 import {
@@ -550,7 +550,7 @@ async function handleDirectOllamaRequest(
       getSetting<number>('maxContextTokens', 0),
     );
     if (maxInputTokens > 0) {
-      const truncated = truncateMessages(ollamaMessages as Message[], maxInputTokens);
+      const truncated = await renderOllamaPrompt(ollamaMessages as Message[], maxInputTokens, text => Math.ceil(text.length / 4));
       ollamaMessages.splice(0, ollamaMessages.length, ...truncated);
     }
 

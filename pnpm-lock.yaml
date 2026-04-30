@@ -17,6 +17,9 @@ importers:
       '@selfagency/llm-stream-parser':
         specifier: ^0.1.5
         version: 0.1.5
+      '@vscode/prompt-tsx':
+        specifier: 0.4.0-alpha.8
+        version: 0.4.0-alpha.8
       ollama:
         specifier: ^0.6.3
         version: 0.6.3
@@ -1484,6 +1487,9 @@ packages:
   '@vscode/dts@0.4.1':
     resolution: {integrity: sha512-o8cI5Vqt6S6Y5mCI7yCkSQdiLQaLG5DMUpciJV3zReZwE+dA5KERxSVX8H3cPEhyKw21XwKGmIrg6YmN6M5uZA==}
     hasBin: true
+
+  '@vscode/prompt-tsx@0.4.0-alpha.8':
+    resolution: {integrity: sha512-AJbRUgrGpJNl59uiV0lRa2FsZnO74Fjm4KVt7dQT0PN+ghQjFGJ6lY+w4kF8Gj+2HbOIXNpJvDdGBwa7yuL1+w==}
 
   '@vscode/test-cli@0.0.12':
     resolution: {integrity: sha512-iYN0fDg29+a2Xelle/Y56Xvv7Nc8Thzq4VwpzAF/SIE6918rDicqfsQxV6w1ttr2+SOm+10laGuY9FG2ptEKsQ==}
@@ -4533,6 +4539,8 @@ snapshots:
       prompts: 2.4.2
     transitivePeerDependencies:
       - supports-color
+
+  '@vscode/prompt-tsx@0.4.0-alpha.8': {}
 
   '@vscode/test-cli@0.0.12':
     dependencies:

@@ -3071,6 +3071,18 @@ export function registerSidebar(
     { dispose: () => cloudProvider.dispose() },
   );
 
+  // Register language-model tools that operate on models (list/info/health/pull/start/stop).
+  // We register here so the implementations can directly call the LocalModelsProvider
+  // APIs (startModel/stopModel/deleteModel) and reuse the existing UI commands.
+  try {
+    // Import at runtime to avoid static circular dependency issues in builds/tests.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { registerOpilotLmTools } = require('./lmTools');
+    registerOpilotLmTools(context, client, localProvider, logChannel);
+  } catch (err) {
+    logChannel?.exception?.('[sidebar] failed to register LM tools', err);
+  }
+
   return {
     getProfilingSnapshot: () => ({
       local: localProvider.getProfilingSnapshot(),
