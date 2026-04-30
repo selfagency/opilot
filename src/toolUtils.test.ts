@@ -1,5 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { buildXmlToolSystemPrompt, extractXmlToolCalls } from './toolUtils.js';
+import { buildXmlToolSystemPrompt, extractXmlToolCalls, normalizeToolParameters } from './toolUtils.js';
+
+describe('normalizeToolParameters', () => {
+  it('injects additionalProperties:false into an object schema', () => {
+    const schema = { type: 'object', properties: { q: { type: 'string' } } };
+    const result = normalizeToolParameters(schema);
+    expect(result).toEqual({ type: 'object', properties: { q: { type: 'string' } }, additionalProperties: false });
+  });
+
+  it('preserves an explicit additionalProperties value', () => {
+    const schema = { type: 'object', properties: {}, additionalProperties: true };
+    const result = normalizeToolParameters(schema);
+    expect((result as Record<string, unknown>).additionalProperties).toBe(true);
+  });
+
+  it('does not inject additionalProperties for non-object type schemas', () => {
+    const schema = { type: 'string' };
+    const result = normalizeToolParameters(schema);
+    expect(result).toEqual({ type: 'string' });
+  });
+
+  it('returns a safe default with additionalProperties:false for non-object input', () => {
+    expect(normalizeToolParameters(null)).toEqual({ type: 'object', properties: {}, additionalProperties: false });
+    expect(normalizeToolParameters('string')).toEqual({
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(normalizeToolParameters([1, 2])).toEqual({ type: 'object', properties: {}, additionalProperties: false });
+  });
+});
 
 describe('buildXmlToolSystemPrompt', () => {
   it('returns empty string for empty tools array', () => {
