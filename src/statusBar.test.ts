@@ -90,15 +90,43 @@ describe('checkOllamaHealth', () => {
     expect(result.checkedAt).toBeInstanceOf(Date);
   });
 
-  it('returns online=false when ps() throws', async () => {
+  it('returns online=false when ps() throws a network error (no list() fallback)', async () => {
     const client = {
-      ps: vi.fn().mockRejectedValue(new Error('connection refused')),
+      ps: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
+      list: vi.fn().mockRejectedValue(new TypeError('fetch failed')),
     } as unknown as Ollama;
     const result = await checkOllamaHealth(client, 'http://localhost:11434');
 
     expect(result.online).toBe(false);
     expect(result.runningCount).toBe(0);
     expect(result.runningModels).toHaveLength(0);
+    // list() must NOT have been called — network error means server is unreachable
+    expect((client.list as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+  });
+
+  it('returns online=true when ps() fails with HTTP 4xx but list() succeeds (cloud API fallback)', async () => {
+    const httpError = Object.assign(new Error('Not Found'), { name: 'ResponseError', status_code: 404 });
+    const client = {
+      ps: vi.fn().mockRejectedValue(httpError),
+      list: vi.fn().mockResolvedValue({ models: [] }),
+    } as unknown as Ollama;
+    const result = await checkOllamaHealth(client, 'https://ollama.com');
+
+    expect(result.online).toBe(true);
+    expect(result.runningCount).toBe(0);
+    expect(result.runningModels).toHaveLength(0);
+    expect(result.host).toBe('https://ollama.com');
+  });
+
+  it('returns online=false when ps() fails with HTTP 4xx and list() also fails', async () => {
+    const httpError = Object.assign(new Error('Not Found'), { name: 'ResponseError', status_code: 404 });
+    const client = {
+      ps: vi.fn().mockRejectedValue(httpError),
+      list: vi.fn().mockRejectedValue(new Error('Unauthorized')),
+    } as unknown as Ollama;
+    const result = await checkOllamaHealth(client, 'https://ollama.com');
+
+    expect(result.online).toBe(false);
   });
 
   it('returns online=true with zero running models when no models are loaded', async () => {

@@ -5,6 +5,7 @@ export const LEGACY_SETTINGS_NAMESPACE = 'ollama';
 
 export const SUPPORTED_SETTING_KEYS = [
   'host',
+  'ignoreSslErrors',
   'localModelRefreshInterval',
   'libraryRefreshInterval',
   'streamLogs',

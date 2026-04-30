@@ -48,7 +48,8 @@
   },
   "dependencies": {
     "@selfagency/llm-stream-parser": "^0.1.5",
-    "ollama": "^0.6.3"
+    "ollama": "^0.6.3",
+    "undici": "^6.25.0"
   },
   "devDependencies": {
     "@go-task/cli": "^3.50.0",
@@ -409,6 +410,11 @@
           "type": "string",
           "default": "http://localhost:11434",
           "description": "Ollama server URL (local or remote)"
+        },
+        "opilot.ignoreSslErrors": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Disable TLS certificate verification when connecting to the Ollama server. **Warning:** only enable this for trusted private servers using self-signed certificates. Do not enable on public networks."
         },
         "opilot.localModelRefreshInterval": {
           "type": "number",

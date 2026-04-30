@@ -65,7 +65,27 @@ export async function checkOllamaHealth(client: Ollama, host: string): Promise<H
       sizeVram: getNumberField(m, 'size_vram') ?? 0,
     }));
     return { online: true, runningCount: runningModels.length, runningModels, host, checkedAt };
-  } catch {
+  } catch (error) {
+    // Only fall back to list() for HTTP 4xx errors (e.g. Ollama Cloud returns 404/405
+    // for the ps() endpoint). Network-level failures (ECONNREFUSED, ETIMEDOUT) mean
+    // the server is genuinely unreachable — skip the extra round-trip.
+    const isHttpError =
+      error !== null &&
+      typeof error === 'object' &&
+      'status_code' in error &&
+      typeof (error as { status_code: unknown }).status_code === 'number' &&
+      (error as { status_code: number }).status_code >= 400 &&
+      (error as { status_code: number }).status_code < 500;
+
+    if (isHttpError) {
+      try {
+        await client.list();
+        return { online: true, runningCount: 0, runningModels: [], host, checkedAt };
+      } catch {
+        return { online: false, runningCount: 0, runningModels: [], host, checkedAt };
+      }
+    }
+
     return { online: false, runningCount: 0, runningModels: [], host, checkedAt };
   }
 }
