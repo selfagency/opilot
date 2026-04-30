@@ -1,9 +1,27 @@
 import { Ollama } from 'ollama';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { ExtensionContext } from 'vscode';
 import { getSetting } from './settings.js';
 
 export function getOllamaHost(): string {
   return getSetting<string>('host', 'http://localhost:11434') || 'http://localhost:11434';
+}
+
+function getIgnoreSslErrors(): boolean {
+  return getSetting<boolean>('ignoreSslErrors', false) ?? false;
+}
+
+/**
+ * Returns a fetch function that skips TLS certificate verification.
+ * Only used when `opilot.ignoreSslErrors` is enabled by the user.
+ */
+function createInsecureFetch(): typeof globalThis.fetch {
+  const agent = new Agent({ connect: { rejectUnauthorized: false } });
+  return (input, init) =>
+    undiciFetch(input as Parameters<typeof undiciFetch>[0], {
+      ...(init as Parameters<typeof undiciFetch>[1]),
+      dispatcher: agent,
+    }) as Promise<Response>;
 }
 
 export async function getOllamaAuthToken(context: ExtensionContext): Promise<string | undefined> {
@@ -59,7 +77,7 @@ export async function getOllamaClient(context: ExtensionContext): Promise<Ollama
   const host = getOllamaHost();
   const authToken = await getOllamaAuthToken(context);
 
-  const clientConfig: { host: string; headers?: Record<string, string> } = {
+  const clientConfig: { host: string; headers?: Record<string, string>; fetch?: typeof globalThis.fetch } = {
     host,
   };
 
@@ -67,6 +85,10 @@ export async function getOllamaClient(context: ExtensionContext): Promise<Ollama
     clientConfig.headers = {
       Authorization: `Bearer ${authToken}`,
     };
+  }
+
+  if (getIgnoreSslErrors()) {
+    clientConfig.fetch = createInsecureFetch();
   }
 
   return new Ollama(clientConfig);
