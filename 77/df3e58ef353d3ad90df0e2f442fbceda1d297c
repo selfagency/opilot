@@ -1,0 +1,14 @@
+.github/instructions/codacy.instructions.md
+  h_5cf1e2c1161853 1-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "77df3e58ef353d3ad90df0e2f442fbceda1d297c",
+  "prompts": {},
+  "humans": {
+    "h_5cf1e2c1161853": {
+      "author": "Daniel Sieradski"
+    }
+  }
+}
