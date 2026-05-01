@@ -660,6 +660,381 @@ async function executeToolCallingLoop(ctx: ToolLoopContext): Promise<boolean> {
   return true; // MAX_TOOL_ROUNDS reached
 }
 
+/** Convert VS Code messages to Ollama format with context block extraction. */
+function convertMessagesToOllamaFormat(messages: vscode.LanguageModelChatMessage[]): {
+  ollamaMessages: Array<Message | { role: 'tool'; content: string; tool_call_id?: string }>;
+  systemContextParts: string[];
+} {
+  const systemContextParts: string[] = [];
+  const ollamaMessages: Array<Message | { role: 'tool'; content: string; tool_call_id?: string }> = messages.map(
+    msg => {
+      const isUser = msg.role === vscode.LanguageModelChatMessageRole.User;
+      let content = (Array.isArray(msg.content) ? msg.content : [])
+        .filter((p): p is vscode.LanguageModelTextPart => p instanceof vscode.LanguageModelTextPart)
+        .map(p => p.value)
+        .join('');
+      if (isUser) {
+        const split = splitLeadingXmlContextBlocks(content);
+        if (split.contextBlocks.length > 0) {
+          systemContextParts.push(...split.contextBlocks);
+        }
+        content = split.content;
+      }
+      return {
+        role: (isUser ? 'user' : 'assistant') as 'user' | 'assistant',
+        content,
+      };
+    },
+  );
+  return { ollamaMessages, systemContextParts };
+}
+
+/** Handle XML tool fallback path for models that don't support native tool calling. Returns true if fallback completed successfully. */
+async function handleXmlToolFallback(options: {
+  modelId: string;
+  isCloudModel: boolean;
+  ollamaMessages: Array<Message | { role: 'tool'; content: string; tool_call_id?: string }>;
+  vscodeLmTools: readonly vscode.LanguageModelToolInformation[];
+  request: vscode.ChatRequest;
+  stream: vscode.ChatResponseStream;
+  token: vscode.CancellationToken;
+  effectiveClient: Ollama;
+  baseUrl: string | undefined;
+  authToken: string | undefined;
+  modelOptions: ModelOptionOverrides;
+  logOpenAiCompatFallback: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
+  outputChannel?: DiagnosticsLogger;
+}): Promise<boolean> {
+  const {
+    modelId,
+    isCloudModel,
+    ollamaMessages,
+    vscodeLmTools,
+    request,
+    stream,
+    token,
+    effectiveClient,
+    baseUrl,
+    authToken,
+    modelOptions,
+    logOpenAiCompatFallback,
+    outputChannel,
+  } = options;
+
+  outputChannel?.info(`[client] attempting XML tool call fallback for model ${modelId}`);
+  const toolNames = new Set(vscodeLmTools.map(t => t.name));
+  const toolCallFormat = HERMES_MODEL_PATTERN.test(modelId) ? 'hermes' : 'xml';
+  const xmlSystemPrompt = buildXmlToolSystemPrompt(vscodeLmTools, { format: toolCallFormat });
+  const existingSystem = (ollamaMessages as Message[]).filter(m => m.role === 'system');
+  const nonSystem = (ollamaMessages as Message[]).filter(m => m.role !== 'system');
+  const xmlConversation: Message[] = [...existingSystem, { role: 'system', content: xmlSystemPrompt }, ...nonSystem];
+
+  const MAX_XML_ROUNDS = 5;
+  let correctedOnce = false;
+  for (let xmlRound = 0; xmlRound < MAX_XML_ROUNDS; xmlRound++) {
+    if (token.isCancellationRequested) return true;
+
+    const xmlResponse = await (isCloudModel
+      ? openAiCompatChatOnce({
+          modelId,
+          messages: xmlConversation,
+          shouldThink: false,
+          effectiveClient,
+          baseUrl: baseUrl!,
+          authToken,
+          modelOptions,
+          onOpenAiCompatFallback: logOpenAiCompatFallback,
+        })
+      : nativeSdkChatOnce({
+          modelId,
+          messages: xmlConversation,
+          shouldThink: false,
+          effectiveClient,
+          modelOptions,
+        }));
+
+    const responseText = xmlResponse.message.content ?? '';
+    const xmlToolCalls = extractXmlToolCalls(responseText, toolNames);
+
+    if (!xmlToolCalls.length) {
+      if (!correctedOnce && !responseText.trim() && xmlRound < MAX_XML_ROUNDS - 1) {
+        correctedOnce = true;
+        xmlConversation.push({ role: 'assistant', content: responseText });
+        xmlConversation.push({
+          role: 'user',
+          content:
+            `Your previous response was empty. If you need information, emit a single XML tool call — no markdown fences, no prose. ` +
+            `If you already have enough information, answer in plain text. Available tools: ${[...toolNames].join(', ')}.`,
+        });
+        continue;
+      }
+      if (responseText.trim()) {
+        stream.markdown(sanitizeNonStreamingModelOutput(responseText));
+      }
+      return true; // XML fallback completed successfully
+    }
+
+    xmlConversation.push({ role: 'assistant', content: responseText });
+    const [xmlToolCall] = xmlToolCalls;
+    if (xmlToolCalls.length > 1) {
+      outputChannel?.warn(
+        `[client] XML fallback extracted ${xmlToolCalls.length} tool calls; executing only the first (${xmlToolCall.name}) to comply with 'ONE tool per response' contract.`,
+      );
+    }
+    let resultText: string;
+    try {
+      const result = await vscode.lm.invokeTool(
+        xmlToolCall.name,
+        { input: xmlToolCall.parameters, toolInvocationToken: request.toolInvocationToken! },
+        token,
+      );
+      resultText = result.content
+        .filter((c): c is vscode.LanguageModelTextPart => c instanceof vscode.LanguageModelTextPart)
+        .map(c => c.value)
+        .join('');
+    } catch (invokeError) {
+      resultText = invokeError instanceof Error ? invokeError.message : 'Tool execution failed';
+    }
+    xmlConversation.push({ role: 'user', content: `[Tool result: ${xmlToolCall.name}]\n${resultText}` });
+    correctedOnce = false;
+  }
+  // MAX_XML_ROUNDS exhausted — fall through to streaming
+  return false;
+}
+
+/** Stream model response with thinking and tool call handling. */
+async function streamModelResponse(options: {
+  modelId: string;
+  isCloudModel: boolean;
+  ollamaMessages: Array<Message | { role: 'tool'; content: string; tool_call_id?: string }>;
+  modelOptions: ModelOptionOverrides;
+  shouldThinkInitial: boolean;
+  effectiveClient: Ollama;
+  baseUrl: string | undefined;
+  authToken: string | undefined;
+  stream: vscode.ChatResponseStream;
+  token: vscode.CancellationToken;
+  outputChannel?: DiagnosticsLogger;
+  logOpenAiCompatFallback: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
+}): Promise<void> {
+  const {
+    modelId,
+    isCloudModel,
+    ollamaMessages,
+    modelOptions,
+    shouldThinkInitial,
+    effectiveClient,
+    baseUrl,
+    authToken,
+    stream,
+    token,
+    outputChannel,
+    logOpenAiCompatFallback,
+  } = options;
+
+  const hideThinkingContent = getSetting<boolean>('hideThinkingContent', false);
+  let shouldThink = shouldThinkInitial;
+  let response: AsyncIterable<ChatResponse>;
+
+  // Choose API path based on model location
+  const streamChatFn = isCloudModel
+    ? (think: boolean) =>
+        openAiCompatStreamChat({
+          modelId,
+          messages: ollamaMessages as Message[],
+          shouldThink: think,
+          effectiveClient,
+          baseUrl: baseUrl!,
+          authToken,
+          modelOptions,
+          onOpenAiCompatFallback: logOpenAiCompatFallback,
+        })
+    : (think: boolean) =>
+        nativeSdkStreamChat({
+          modelId,
+          messages: ollamaMessages as Message[],
+          shouldThink: think,
+          effectiveClient,
+          modelOptions,
+        });
+
+  try {
+    response = await streamChatFn(shouldThink);
+  } catch (chatError) {
+    const supportsThinkingError =
+      shouldThink &&
+      chatError instanceof Error &&
+      chatError.name === 'ResponseError' &&
+      chatError.message.toLowerCase().includes('does not support thinking');
+
+    if (supportsThinkingError) {
+      shouldThink = false;
+      response = await streamChatFn(false);
+    } else if (isToolsNotSupportedError(chatError)) {
+      outputChannel?.warn(`[client] model ${modelId} rejected tools; retrying stream without tools/thinking`);
+      shouldThink = false;
+      response = await streamChatFn(false);
+    } else {
+      throw chatError;
+    }
+  }
+
+  let thinkingStarted = false;
+  let contentStarted = false;
+  let emittedContent = false;
+  let responseBuffer = '';
+  const rawRepSensitivity = getSetting<string>('repetitionDetection', 'conservative');
+  const repSensitivity: 'off' | 'conservative' | 'moderate' =
+    rawRepSensitivity === 'off' || rawRepSensitivity === 'conservative' || rawRepSensitivity === 'moderate'
+      ? rawRepSensitivity
+      : 'conservative';
+  const xmlFilter = createXmlStreamFilter();
+  const thinkingParser = shouldThink ? new ThinkingParser() : null;
+
+  for await (const chunk of response) {
+    if (token.isCancellationRequested) {
+      break;
+    }
+
+    if (chunk.message?.thinking) {
+      if (!thinkingStarted) {
+        stream.markdown('\n\n*Thinking*\n\n');
+        thinkingStarted = true;
+        emittedContent = true;
+      }
+      if (!hideThinkingContent) {
+        stream.markdown(chunk.message.thinking);
+      }
+    }
+
+    if (chunk.message?.content) {
+      let thinkingChunk = '';
+      let contentChunk = chunk.message.content;
+
+      if (thinkingParser) {
+        [thinkingChunk, contentChunk] = thinkingParser.addContent(chunk.message.content);
+      }
+
+      if (thinkingChunk) {
+        if (!thinkingStarted) {
+          stream.markdown('\n\n*Thinking*\n\n');
+          thinkingStarted = true;
+          emittedContent = true;
+        }
+        if (!hideThinkingContent) {
+          stream.markdown(thinkingChunk);
+        }
+      }
+
+      if (contentChunk) {
+        if (thinkingStarted && !contentStarted) {
+          stream.markdown('\n\n---\n\n*Response*\n\n');
+          contentStarted = true;
+        }
+        outputChannel?.debug(`[client] @ollama chunk: ${contentChunk.substring(0, 50)}`);
+        const cleanContent = xmlFilter.write(contentChunk);
+        if (cleanContent) {
+          stream.markdown(cleanContent);
+          emittedContent = true;
+          responseBuffer = (responseBuffer + cleanContent).slice(-600);
+          if (detectsRepetition(responseBuffer, repSensitivity)) {
+            outputChannel?.warn(`[client] repetition detected in @ollama response; stopping stream`);
+            stream.markdown('\n\n*\\[Stopped: repetition detected\\]*');
+            break;
+          }
+        }
+      }
+    }
+
+    if (chunk.message?.tool_calls?.length) {
+      for (const toolCall of chunk.message.tool_calls) {
+        stream.markdown(
+          `\n\`\`\`json\n${JSON.stringify({ tool: toolCall.function.name, arguments: toolCall.function.arguments }, null, 2)}\n\`\`\`\n`,
+        );
+        emittedContent = true;
+      }
+    }
+
+    if (chunk.done) {
+      break;
+    }
+  }
+
+  // Finalize XML filter
+  const finalContent = xmlFilter.end();
+  if (finalContent) {
+    stream.markdown(finalContent);
+    emittedContent = true;
+  }
+
+  // Retry fallback if no content was emitted
+  if (!emittedContent && !token.isCancellationRequested) {
+    outputChannel?.warn(`[client] @ollama stream returned no output for ${modelId}; retrying with stream=false`);
+    const fallback = await (isCloudModel
+      ? openAiCompatChatOnce({
+          modelId,
+          messages: ollamaMessages as Message[],
+          shouldThink,
+          effectiveClient,
+          baseUrl: baseUrl!,
+          authToken,
+          modelOptions,
+          onOpenAiCompatFallback: logOpenAiCompatFallback,
+        })
+      : nativeSdkChatOnce({
+          modelId,
+          messages: ollamaMessages as Message[],
+          shouldThink,
+          effectiveClient,
+          modelOptions,
+        }));
+    if (fallback.message?.content) {
+      stream.markdown(sanitizeNonStreamingModelOutput(fallback.message.content));
+    } else {
+      stream.markdown('*No response from model. Try rephrasing or switching to a different model.*');
+    }
+  }
+}
+
+/** Select or resolve the model ID for the direct Ollama request. */
+async function resolveModelIdForDirectRequest(
+  request: vscode.ChatRequest,
+  stream: vscode.ChatResponseStream,
+): Promise<string | null> {
+  if (request.model.vendor === 'ollama' || request.model.vendor === LANGUAGE_MODEL_VENDOR) {
+    return toRuntimeModelId(request.model.id);
+  }
+  const byokModels = await vscode.lm.selectChatModels({ vendor: 'ollama' });
+  if (byokModels.length) {
+    return toRuntimeModelId(byokModels[0].id);
+  }
+  const ourModels = await vscode.lm.selectChatModels({ vendor: LANGUAGE_MODEL_VENDOR });
+  if (!ourModels.length) {
+    stream.markdown('No Ollama models available. Pull a model first using the Ollama sidebar.');
+    return null;
+  }
+  return toRuntimeModelId(ourModels[0].id);
+}
+
+/** Extract cloud authentication and client setup for a model. */
+async function setupCloudClientIfNeeded(
+  modelId: string,
+  client: Ollama,
+  extensionContext: vscode.ExtensionContext | undefined,
+): Promise<{
+  isCloudModel: boolean;
+  effectiveClient: Ollama;
+  baseUrl: string | undefined;
+  authToken: string | undefined;
+}> {
+  const cloudModelTag = modelId.split(':')[1] ?? '';
+  const isCloudModel = cloudModelTag === 'cloud' || cloudModelTag.endsWith('-cloud');
+  const effectiveClient = isCloudModel && extensionContext ? await getCloudOllamaClient(extensionContext) : client;
+  const baseUrl = isCloudModel ? getOllamaHost() : undefined;
+  const authToken = isCloudModel && extensionContext ? await getOllamaAuthToken(extensionContext) : undefined;
+  return { isCloudModel, effectiveClient, baseUrl, authToken };
+}
+
 async function handleDirectOllamaRequest(
   request: vscode.ChatRequest,
   messages: vscode.LanguageModelChatMessage[],
@@ -667,30 +1042,14 @@ async function handleDirectOllamaRequest(
 ): Promise<void> {
   const { stream, token, client, outputChannel, extensionContext, modelSettings } = context;
   // Direct Ollama path: completely IPC-free, per-token streaming for the @ollama participant.
-  let modelId: string;
-  if (request.model.vendor === 'ollama' || request.model.vendor === LANGUAGE_MODEL_VENDOR) {
-    modelId = toRuntimeModelId(request.model.id);
-  } else {
-    // Prefer BYOK models (in-process), fall back to our custom provider.
-    const byokModels = await vscode.lm.selectChatModels({ vendor: 'ollama' });
-    if (byokModels.length) {
-      modelId = toRuntimeModelId(byokModels[0].id);
-    } else {
-      const ourModels = await vscode.lm.selectChatModels({ vendor: LANGUAGE_MODEL_VENDOR });
-      if (!ourModels.length) {
-        stream.markdown('No Ollama models available. Pull a model first using the Ollama sidebar.');
-        return;
-      }
-      modelId = toRuntimeModelId(ourModels[0].id);
-    }
-  }
+  const modelId = await resolveModelIdForDirectRequest(request, stream);
+  if (!modelId) return;
 
-  // Use cloud-authenticated client when the selected model is a cloud model.
-  const cloudModelTag = modelId.split(':')[1] ?? '';
-  const isCloudModel = cloudModelTag === 'cloud' || cloudModelTag.endsWith('-cloud');
-  const effectiveClient = isCloudModel && extensionContext ? await getCloudOllamaClient(extensionContext) : client;
-  const baseUrl = isCloudModel ? getOllamaHost() : undefined;
-  const authToken = isCloudModel && extensionContext ? await getOllamaAuthToken(extensionContext) : undefined;
+  const { isCloudModel, effectiveClient, baseUrl, authToken } = await setupCloudClientIfNeeded(
+    modelId,
+    client,
+    extensionContext,
+  );
 
   const logOpenAiCompatFallback = (mode: 'stream' | 'once', failedModelId: string, error: unknown) => {
     const reason = error instanceof Error ? error.message : String(error);
@@ -708,47 +1067,11 @@ async function handleDirectOllamaRequest(
   // unpredictably for slow but healthy models.
 
   try {
-    // Convert VS Code messages to the plain Ollama format expected by the client.
-    //
-    // XML context tag extraction (mirrors the logic in OllamaChatModelProvider.toOllamaMessages):
-    // VS Code Copilot injects structured IDE context (<selection>, <file>, etc.) as leading XML
-    // tags in the first user message. These are extracted from the start of user message text
-    // only (stopping as soon as a tag does not begin at index 0), collected into systemContextParts,
-    // deduplicated by tag name (most-recent wins), then prepended as a single Ollama `system` message.
-    // This keeps IDE-injected context separate from the conversational user turn.
-    const systemContextParts: string[] = [];
-
-    type OllamaToolResultMessage = {
-      role: 'tool';
-      content: string;
-      tool_name: string;
-      tool_call_id?: string;
-    };
-
-    const ollamaMessages: Array<Message | OllamaToolResultMessage> = messages.map(msg => {
-      const isUser = msg.role === vscode.LanguageModelChatMessageRole.User;
-      let content = (Array.isArray(msg.content) ? msg.content : [])
-        .filter((p): p is vscode.LanguageModelTextPart => p instanceof vscode.LanguageModelTextPart)
-        .map(p => p.value)
-        .join('');
-      if (isUser) {
-        const split = splitLeadingXmlContextBlocks(content);
-        if (split.contextBlocks.length > 0) {
-          systemContextParts.push(...split.contextBlocks);
-        }
-        content = split.content;
-      }
-      return {
-        role: (isUser ? 'user' : 'assistant') as 'user' | 'assistant',
-        content,
-      };
-    });
-
+    // Convert VS Code messages to Ollama format and handle context extraction.
+    const { ollamaMessages, systemContextParts } = convertMessagesToOllamaFormat(messages);
     const dedupedContextParts = dedupeXmlContextBlocksByTag(systemContextParts);
 
     // Build location-aware system prompt.
-    // location2 (proposed API) indicates chat context: inline chat, quick chat, or chat view.
-    // Adjust prompt guidance based on context for better UX.
     let systemPrompt = BASE_SYSTEM_PROMPT;
     const location2 = (request as unknown as { location2?: { type?: string } }).location2;
     if (location2) {
@@ -821,273 +1144,43 @@ async function handleDirectOllamaRequest(
       }
     }
 
+    // Execute XML fallback path if needed.
     if (useXmlFallback && request.toolInvocationToken) {
-      outputChannel?.info(`[client] attempting XML tool call fallback for model ${modelId}`);
-      const toolNames = new Set(vscodeLmTools.map(t => t.name));
-      const toolCallFormat = HERMES_MODEL_PATTERN.test(modelId) ? 'hermes' : 'xml';
-      const xmlSystemPrompt = buildXmlToolSystemPrompt(vscodeLmTools, { format: toolCallFormat });
-      const existingSystem = (ollamaMessages as Message[]).filter(m => m.role === 'system');
-      const nonSystem = (ollamaMessages as Message[]).filter(m => m.role !== 'system');
-      const xmlConversation: Message[] = [
-        ...existingSystem,
-        { role: 'system', content: xmlSystemPrompt },
-        ...nonSystem,
-      ];
-
-      const MAX_XML_ROUNDS = 5;
-      let correctedOnce = false;
-      for (let xmlRound = 0; xmlRound < MAX_XML_ROUNDS; xmlRound++) {
-        if (token.isCancellationRequested) return;
-
-        const xmlResponse = await (isCloudModel
-          ? openAiCompatChatOnce({
-              modelId,
-              messages: xmlConversation,
-              shouldThink: false,
-              effectiveClient,
-              baseUrl: baseUrl!,
-              authToken,
-              modelOptions,
-              onOpenAiCompatFallback: logOpenAiCompatFallback,
-            })
-          : nativeSdkChatOnce({
-              modelId,
-              messages: xmlConversation,
-              shouldThink: false,
-              effectiveClient,
-              modelOptions,
-            }));
-
-        const responseText = xmlResponse.message.content ?? '';
-        const xmlToolCalls = extractXmlToolCalls(responseText, toolNames);
-
-        if (!xmlToolCalls.length) {
-          if (!correctedOnce && !responseText.trim() && xmlRound < MAX_XML_ROUNDS - 1) {
-            correctedOnce = true;
-            xmlConversation.push({ role: 'assistant', content: responseText });
-            xmlConversation.push({
-              role: 'user',
-              content:
-                `Your previous response was empty. If you need information, emit a single XML tool call — no markdown fences, no prose. ` +
-                `If you already have enough information, answer in plain text. Available tools: ${[...toolNames].join(', ')}.`,
-            });
-            continue;
-          }
-          if (responseText.trim()) {
-            stream.markdown(sanitizeNonStreamingModelOutput(responseText));
-          }
-          return;
-        }
-
-        xmlConversation.push({ role: 'assistant', content: responseText });
-        // The XML system prompt instructs models to call ONE tool per response.
-        // If a model emits multiple tool tags, execute only the first to honour
-        // that contract and avoid confusing follow-up context.
-        const [xmlToolCall] = xmlToolCalls;
-        if (xmlToolCalls.length > 1) {
-          outputChannel?.warn(
-            `[client] XML fallback extracted ${xmlToolCalls.length} tool calls; executing only the first (${xmlToolCall.name}) to comply with 'ONE tool per response' contract.`,
-          );
-        }
-        let resultText: string;
-        try {
-          const result = await vscode.lm.invokeTool(
-            xmlToolCall.name,
-            { input: xmlToolCall.parameters, toolInvocationToken: request.toolInvocationToken! },
-            token,
-          );
-          resultText = result.content
-            .filter((c): c is vscode.LanguageModelTextPart => c instanceof vscode.LanguageModelTextPart)
-            .map(c => c.value)
-            .join('');
-        } catch (invokeError) {
-          resultText = invokeError instanceof Error ? invokeError.message : 'Tool execution failed';
-        }
-        // Use 'user' role for tool results in the XML fallback path — models that fail
-        // JSON function calling have no training data for the 'tool' role either.
-        xmlConversation.push({ role: 'user', content: `[Tool result: ${xmlToolCall.name}]\n${resultText}` });
-
-        correctedOnce = false;
-      }
-      // MAX_XML_ROUNDS exhausted — fall through to the streaming pass below.
-    }
-
-    // Per-model think override: use stored setting if present, fall back to model-ID pattern.
-    const shouldThinkInitial =
-      typeof modelOptions.think === 'boolean' ? modelOptions.think : isThinkingModelId(modelId);
-
-    // Check if user wants to hide thinking content (only show header)
-    const hideThinkingContent = getSetting<boolean>('hideThinkingContent', false);
-
-    let shouldThink = shouldThinkInitial;
-    let response: AsyncIterable<ChatResponse>;
-
-    // Choose API path: native Ollama SDK for local models, OpenAI-compat for cloud
-    const streamChatFn = isCloudModel
-      ? (think: boolean) =>
-          openAiCompatStreamChat({
-            modelId,
-            messages: ollamaMessages as Message[],
-            shouldThink: think,
-            effectiveClient,
-            baseUrl: baseUrl!,
-            authToken,
-            modelOptions,
-            onOpenAiCompatFallback: logOpenAiCompatFallback,
-          })
-      : (think: boolean) =>
-          nativeSdkStreamChat({
-            modelId,
-            messages: ollamaMessages as Message[],
-            shouldThink: think,
-            effectiveClient,
-            modelOptions,
-          });
-
-    try {
-      response = await streamChatFn(shouldThink);
-    } catch (chatError) {
-      const supportsThinkingError =
-        shouldThink &&
-        chatError instanceof Error &&
-        chatError.name === 'ResponseError' &&
-        chatError.message.toLowerCase().includes('does not support thinking');
-
-      if (supportsThinkingError) {
-        shouldThink = false;
-        response = await streamChatFn(false);
-      } else if (isToolsNotSupportedError(chatError)) {
-        outputChannel?.warn(`[client] model ${modelId} rejected tools; retrying stream without tools/thinking`);
-        shouldThink = false;
-        response = await streamChatFn(false);
-      } else {
-        throw chatError;
+      const xmlFallbackCompleted = await handleXmlToolFallback({
+        modelId,
+        isCloudModel,
+        ollamaMessages,
+        vscodeLmTools,
+        request,
+        stream,
+        token,
+        effectiveClient,
+        baseUrl,
+        authToken,
+        modelOptions,
+        logOpenAiCompatFallback,
+        outputChannel,
+      });
+      if (xmlFallbackCompleted) {
+        return; // XML fallback successfully handled the request
       }
     }
 
-    let thinkingStarted = false;
-    let contentStarted = false;
-    let emittedContent = false;
-    let responseBuffer = '';
-    const rawRepSensitivity = getSetting<string>('repetitionDetection', 'conservative');
-    const repSensitivity: 'off' | 'conservative' | 'moderate' =
-      rawRepSensitivity === 'off' || rawRepSensitivity === 'conservative' || rawRepSensitivity === 'moderate'
-        ? rawRepSensitivity
-        : 'conservative';
-    const xmlFilter = createXmlStreamFilter();
-    // Parse <think> tags on both cloud and local paths.
-    // For local models Ollama normally pre-splits thinking into message.thinking, but
-    // some model/version combinations still emit raw <think> tags in message.content.
-    // Applying the parser unconditionally is safe: if content is already clean the
-    // parser transitions through lookingForOpening → thinkingDone and passes it unchanged.
-    const thinkingParser = shouldThink ? new ThinkingParser() : null;
-
-    for await (const chunk of response) {
-      if (token.isCancellationRequested) {
-        break;
-      }
-
-      if (chunk.message?.thinking) {
-        if (!thinkingStarted) {
-          stream.markdown('\n\n*Thinking*\n\n');
-          thinkingStarted = true;
-          emittedContent = true;
-        }
-        if (!hideThinkingContent) {
-          stream.markdown(chunk.message.thinking);
-        }
-      }
-
-      if (chunk.message?.content) {
-        let thinkingChunk = '';
-        let contentChunk = chunk.message.content;
-
-        if (thinkingParser) {
-          [thinkingChunk, contentChunk] = thinkingParser.addContent(chunk.message.content);
-        }
-
-        if (thinkingChunk) {
-          if (!thinkingStarted) {
-            stream.markdown('\n\n*Thinking*\n\n');
-            thinkingStarted = true;
-            emittedContent = true;
-          }
-          if (!hideThinkingContent) {
-            stream.markdown(thinkingChunk);
-          }
-        }
-
-        if (contentChunk) {
-          if (thinkingStarted && !contentStarted) {
-            stream.markdown('\n\n---\n\n*Response*\n\n');
-            contentStarted = true;
-          }
-          outputChannel?.debug(`[client] @ollama chunk: ${contentChunk.substring(0, 50)}`);
-          // Filter context tags using SAX parser - handles incomplete tags across chunk boundaries
-          const cleanContent = xmlFilter.write(contentChunk);
-          if (cleanContent) {
-            stream.markdown(cleanContent);
-            emittedContent = true;
-            // Append to rolling buffer (bounded to 600 chars) for repetition detection.
-            responseBuffer = (responseBuffer + cleanContent).slice(-600);
-            if (detectsRepetition(responseBuffer, repSensitivity)) {
-              outputChannel?.warn(`[client] repetition detected in @ollama response; stopping stream`);
-              stream.markdown('\n\n*\\[Stopped: repetition detected\\]*');
-              break;
-            }
-          }
-        }
-      }
-
-      if (chunk.message?.tool_calls?.length) {
-        for (const toolCall of chunk.message.tool_calls) {
-          stream.markdown(
-            `\n\`\`\`json\n${JSON.stringify({ tool: toolCall.function.name, arguments: toolCall.function.arguments }, null, 2)}\n\`\`\`\n`,
-          );
-          emittedContent = true;
-        }
-      }
-
-      if (chunk.done) {
-        break;
-      }
-    }
-
-    // Finalize XML filter to flush any remaining buffer
-    const finalContent = xmlFilter.end();
-    if (finalContent) {
-      stream.markdown(finalContent);
-      emittedContent = true;
-    }
-
-    // Some model/server combinations return a successful stream that emits
-    // no visible content or tool calls. Recover by retrying once without streaming.
-    if (!emittedContent && !token.isCancellationRequested) {
-      outputChannel?.warn(`[client] @ollama stream returned no output for ${modelId}; retrying with stream=false`);
-      const fallback = await (isCloudModel
-        ? openAiCompatChatOnce({
-            modelId,
-            messages: ollamaMessages as Message[],
-            shouldThink,
-            effectiveClient,
-            baseUrl: baseUrl!,
-            authToken,
-            modelOptions,
-            onOpenAiCompatFallback: logOpenAiCompatFallback,
-          })
-        : nativeSdkChatOnce({
-            modelId,
-            messages: ollamaMessages as Message[],
-            shouldThink,
-            effectiveClient,
-            modelOptions,
-          }));
-      if (fallback.message?.content) {
-        stream.markdown(sanitizeNonStreamingModelOutput(fallback.message.content));
-      } else {
-        stream.markdown('*No response from model. Try rephrasing or switching to a different model.*');
-      }
-    }
+    // Stream response from the model (only if XML fallback wasn't attempted or didn't complete).
+    await streamModelResponse({
+      modelId,
+      isCloudModel,
+      ollamaMessages,
+      modelOptions,
+      shouldThinkInitial: typeof modelOptions.think === 'boolean' ? modelOptions.think : isThinkingModelId(modelId),
+      effectiveClient,
+      baseUrl,
+      authToken,
+      stream,
+      token,
+      outputChannel,
+      logOpenAiCompatFallback,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     reportError(outputChannel, 'Chat participant request failed', error, { showToUser: true });
