@@ -1,0 +1,76 @@
+src/provider.ts
+  h_5cf1e2c1161853 42,90-92,95,100,106-107,109
+  ae8d6cf4f16b6f54 99,101-105,108,110-114,1198
+.oxlintrc.json
+  ae8d6cf4f16b6f54 3,27-28
+docs/users/commands.md
+  h_5cf1e2c1161853 181-421
+src/vscode-ext.d.ts
+  ae8d6cf4f16b6f54 33,48,62,65,108,112
+  h_5cf1e2c1161853 1,15-32,34-35,49-61,63-64,66-107,109-111,113-143,146-177
+src/statusBar.ts
+  ae8d6cf4f16b6f54 127-131
+.codacy/codacy.yaml
+  ae8d6cf4f16b6f54 2-6,8-15
+src/sidebar.ts
+  ae8d6cf4f16b6f54 579-581,722-724,778,1243,2078-2080,2093,2416-2421,2431-2432
+package.json
+  ae8d6cf4f16b6f54 45,953-962
+src/prompts/OllamaPrompt.tsx
+  ae8d6cf4f16b6f54 78,88,93
+docs/plans/update.plan.md
+  h_5cf1e2c1161853 1-196
+src/openaiCompat.ts
+  h_5cf1e2c1161853 238-241,289-290
+src/provider.test.ts
+  h_5cf1e2c1161853 144,148,162,164,170-194,470,474
+src/extension.ts
+  h_5cf1e2c1161853 578-590,594,597
+  ae8d6cf4f16b6f54 348,395,610-615
+src/lmTools.ts
+  h_5cf1e2c1161853 27-33,60-66,92-98,118-125,156-163,190-197
+README.md
+  ae8d6cf4f16b6f54 202-215
+src/modelfiles.test.ts
+  ae8d6cf4f16b6f54 1391
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ba9d27814203d62aea8e4c7799ccbcdcad55b16f",
+  "prompts": {
+    "5656513622c95b67": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "b8c3fe47-b138-46b8-a9a7-e2f8a08479fc",
+        "model": "copilot/claude-sonnet-4.6"
+      },
+      "human_author": "Daniel Sieradski",
+      "messages": [],
+      "total_additions": 1372,
+      "total_deletions": 0,
+      "accepted_lines": 1234,
+      "overriden_lines": 43,
+      "messages_url": "https://usegitai.com/cas/1d8e8e4ec76a33f6ab040307b0eae6fc79331228e86e43a4f10455cfcd72bc82"
+    },
+    "ae8d6cf4f16b6f54": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "04249770-65be-4f75-b308-112be4889d27",
+        "model": "copilot/claude-haiku-4.5"
+      },
+      "human_author": "Daniel Sieradski",
+      "messages": [],
+      "total_additions": 169,
+      "total_deletions": 136,
+      "accepted_lines": 169,
+      "overriden_lines": 0,
+      "messages_url": "https://usegitai.com/cas/1b9ca6cdd25c71fd8f6962d5442715538fd73f5488cd82c521045ff18e781217"
+    }
+  },
+  "humans": {
+    "h_5cf1e2c1161853": {
+      "author": "Daniel Sieradski"
+    }
+  }
+}
