@@ -388,7 +388,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     }
 
     const parametersCtx = this.extractContextLengthFromParameters(parameters);
-    return parametersCtx > 0 ? parametersCtx : 0;
+    return Math.max(parametersCtx, 0);
   }
 
   private parseModelMaxOutputTokens(parameters: string | undefined, advertisedContextLength: number): number {
@@ -1188,11 +1188,15 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           }
         }
       } else if (part instanceof LanguageModelToolCallPart) {
-        ollamaMsg.tool_calls = ollamaMsg.tool_calls || [];
-        (ollamaMsg.tool_calls as Record<string, unknown>[]).push({
+        if (!ollamaMsg.tool_calls) {
+          ollamaMsg.tool_calls = [];
+        }
+        const toolCalls = (ollamaMsg.tool_calls ?? []) as Record<string, unknown>[];
+        toolCalls.push({
           id: this.getOllamaToolCallId(part.callId),
           function: { name: part.name, arguments: part.input },
         });
+        ollamaMsg.tool_calls = toolCalls;
       } else if (part instanceof LanguageModelToolResultPart) {
         const toolContent = part.content
           .filter((c): c is LanguageModelTextPart => c instanceof LanguageModelTextPart)

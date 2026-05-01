@@ -547,27 +547,45 @@ async function invokeSingleTool(
   }
 }
 
+interface ToolLoopContext {
+  isCloudModel: boolean;
+  modelId: string;
+  ollamaMessages: Array<Message | { role: 'tool'; content: string; tool_name: string; tool_call_id?: string }>;
+  ollamaTools: Tool[];
+  shouldThinkInToolLoop: boolean;
+  effectiveClient: Ollama;
+  baseUrl: string | undefined;
+  authToken: string | undefined;
+  modelOptions: ModelOptionOverrides;
+  logOpenAiCompatFallback: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
+  request: vscode.ChatRequest;
+  stream: vscode.ChatResponseStream;
+  token: vscode.CancellationToken;
+  outputChannel?: DiagnosticsLogger;
+}
+
 /**
  * Execute the native tool calling loop — handles tool invocation rounds.
  * Returns true if the conversation completed (via task_complete or no more tool calls).
  * Returns false if tools are not supported (triggers XML fallback).
  */
-async function executeToolCallingLoop(
-  isCloudModel: boolean,
-  modelId: string,
-  ollamaMessages: Array<Message | { role: 'tool'; content: string; tool_name: string; tool_call_id?: string }>,
-  ollamaTools: Tool[],
-  shouldThinkInToolLoop: boolean,
-  effectiveClient: Ollama,
-  baseUrl: string | undefined,
-  authToken: string | undefined,
-  modelOptions: ModelOptionOverrides,
-  logOpenAiCompatFallback: (mode: 'stream' | 'once', modelId: string, error: unknown) => void,
-  request: vscode.ChatRequest,
-  stream: vscode.ChatResponseStream,
-  token: vscode.CancellationToken,
-  outputChannel?: DiagnosticsLogger,
-): Promise<boolean> {
+async function executeToolCallingLoop(ctx: ToolLoopContext): Promise<boolean> {
+  const {
+    isCloudModel,
+    modelId,
+    ollamaMessages,
+    ollamaTools,
+    shouldThinkInToolLoop,
+    effectiveClient,
+    baseUrl,
+    authToken,
+    modelOptions,
+    logOpenAiCompatFallback,
+    request,
+    stream,
+    token,
+    outputChannel,
+  } = ctx;
   const MAX_TOOL_ROUNDS = 10;
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     if (token.isCancellationRequested) return true;
@@ -744,7 +762,7 @@ async function handleDirectOllamaRequest(
     if (dedupedContextParts.length > 0) {
       ollamaMessages.unshift({
         role: 'system',
-        content: systemPrompt + '\n\n' + dedupedContextParts.join('\n\n'),
+        content: `${systemPrompt}\n\n${dedupedContextParts.join('\n\n')}`,
       });
     } else {
       ollamaMessages.unshift({ role: 'system', content: systemPrompt });
@@ -773,11 +791,13 @@ async function handleDirectOllamaRequest(
     const vscodeLmTools = vscode.lm.tools ?? [];
     let useXmlFallback = false;
     if (vscodeLmTools.length > 0 && request.toolInvocationToken) {
-      const ollamaTools: Tool[] = buildNativeToolsArray(vscodeLmTools as any);
+      const ollamaTools: Tool[] = buildNativeToolsArray(
+        vscodeLmTools as unknown as Array<{ name: string; description?: string }>,
+      );
       const shouldThinkInToolLoop =
         typeof modelOptions.think === 'boolean' ? modelOptions.think : isThinkingModelId(modelId);
 
-      const toolLoopSuccess = await executeToolCallingLoop(
+      const toolLoopSuccess = await executeToolCallingLoop({
         isCloudModel,
         modelId,
         ollamaMessages,
@@ -792,7 +812,7 @@ async function handleDirectOllamaRequest(
         stream,
         token,
         outputChannel,
-      );
+      });
 
       useXmlFallback = !toolLoopSuccess;
       if (toolLoopSuccess && !useXmlFallback) {

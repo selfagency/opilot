@@ -976,10 +976,10 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     caps: ModelCapabilities | undefined,
     modelName: string,
   ): boolean {
-    if (filter === 'thinking') return caps !== undefined ? !!caps.thinking : isThinkingModelId(modelName);
-    if (filter === 'tools') return caps === undefined || !!caps.toolCalling;
-    if (filter === 'vision') return caps === undefined || !!caps.imageInput;
-    if (filter === 'embedding') return caps === undefined || !!caps.embedding;
+    if (filter === 'thinking') return caps ? !!caps.thinking : isThinkingModelId(modelName);
+    if (filter === 'tools') return !caps || !!caps.toolCalling;
+    if (filter === 'vision') return !caps || !!caps.imageInput;
+    if (filter === 'embedding') return !caps || !!caps.embedding;
     return true;
   }
 
@@ -1611,10 +1611,10 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     isCloudModel: boolean,
     modelName: string,
   ): boolean {
-    if (filter === 'thinking') return caps !== undefined ? !!caps.thinking : isThinkingModelId(modelName);
-    if (filter === 'tools') return caps === undefined || !!caps.tools;
-    if (filter === 'vision') return caps === undefined || !!caps.vision;
-    if (filter === 'embedding') return caps === undefined || !!caps.embedding;
+    if (filter === 'thinking') return caps ? !!caps.thinking : isThinkingModelId(modelName);
+    if (filter === 'tools') return !caps || !!caps.tools;
+    if (filter === 'vision') return !caps || !!caps.vision;
+    if (filter === 'embedding') return !caps || !!caps.embedding;
     if (filter === 'downloaded') return isDownloaded;
     if (filter === 'cloud') return isCloudModel;
     return true;
@@ -2105,10 +2105,10 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   }
 
   private cloudModelMatchesSingleFilter(filter: string, caps: Set<string> | undefined, modelName: string): boolean {
-    if (filter === 'thinking') return caps !== undefined ? caps.has('thinking') : isThinkingModelId(modelName);
-    if (filter === 'tools') return caps === undefined || caps.has('tools');
-    if (filter === 'vision') return caps === undefined || caps.has('vision');
-    if (filter === 'embedding') return caps === undefined || caps.has('embedding');
+    if (filter === 'thinking') return caps ? caps.has('thinking') : isThinkingModelId(modelName);
+    if (filter === 'tools') return !caps || caps.has('tools');
+    if (filter === 'vision') return !caps || caps.has('vision');
+    if (filter === 'embedding') return !caps || caps.has('embedding');
     return true;
   }
 

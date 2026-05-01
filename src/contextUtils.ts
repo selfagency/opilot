@@ -111,10 +111,11 @@ export function truncateMessages(messages: Message[], maxInputTokens: number): M
   return [...effectiveSystemMsgs, ...keptHistory, ...lastMsg];
 }
 
-// TODO: Evaluate replacing `truncateMessages` with @vscode/prompt-tsx to get
-// priority-based prompt composition and accurate token-budget pruning.
-// See .beans/opilot-yqdn--040-evaluate-adopting-prompt-tsx-for-prompt-compos.md
-// (deferred evaluation recorded in repository issues/plans).
+// DEFERRED: Replacing `truncateMessages` with @vscode/prompt-tsx is tracked
+// in bean opilot-yqdn--040. This would provide priority-based prompt composition
+// and accurate token-budget pruning but requires significant refactoring.
+// Status: Deferred pending Phase 3+ completion.
+// See: .beans/opilot-yqdn--040-evaluate-adopting-prompt-tsx-for-prompt-compos.md
 
 /**
  * Detect whether streaming output has entered a repetition loop.

@@ -521,6 +521,10 @@ describe('findContextLengthInModelInfo', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it('should export findContextLengthInModelInfo', () => {
+    expect(typeof findContextLengthInModelInfo).toBe('function');
+  });
+
   it('returns value from plain object with exact key context_length', () => {
     expect(findContextLengthInModelInfo({ context_length: 8192 })).toBe(8192);
   });
@@ -574,6 +578,10 @@ describe('parseContextLength', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it('should export parseContextLength', () => {
+    expect(typeof parseContextLength).toBe('function');
+  });
+
   it('prefers context_length from modelInfoData', () => {
     expect(parseContextLength({ context_length: 8192 }, 'num_ctx 4096')).toBe(8192);
   });
@@ -606,6 +614,10 @@ describe('parseMaxOutputTokens', () => {
   });
 
   afterEach(() => vi.restoreAllMocks());
+
+  it('should export parseMaxOutputTokens', () => {
+    expect(typeof parseMaxOutputTokens).toBe('function');
+  });
 
   it('returns num_predict from parameters string', () => {
     expect(parseMaxOutputTokens('num_predict 2048', 4096)).toBe(2048);

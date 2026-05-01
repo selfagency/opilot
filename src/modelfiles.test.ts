@@ -1360,6 +1360,10 @@ describe('parseMultiLineTripleQuoted', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it('should export parseMultiLineTripleQuoted', () => {
+    expect(typeof parseMultiLineTripleQuoted).toBe('function');
+  });
+
   it('captures content spanning multiple lines until closing triple-quotes', () => {
     const lines = ['SYSTEM """', 'line one', 'line two', '"""'];
     const result = parseMultiLineTripleQuoted(lines, 0, '');
@@ -1398,6 +1402,10 @@ describe('resolveLineValue', () => {
   });
 
   afterEach(() => vi.restoreAllMocks());
+
+  it('should export resolveLineValue', () => {
+    expect(typeof resolveLineValue).toBe('function');
+  });
 
   it('strips surrounding double-quotes from a single-line quoted value', () => {
     const result = resolveLineValue('"hello world"', [], 0);
