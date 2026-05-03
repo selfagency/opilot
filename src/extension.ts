@@ -4,10 +4,10 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
+import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
-import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, renderOllamaPrompt } from './contextUtils.js';
-import type { ResolvedReference } from './prompts/OllamaPrompt.js';
+import { BASE_SYSTEM_PROMPT, detectsRepetition, renderOllamaPrompt, resolveContextLimit } from './contextUtils.js';
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
 import {
@@ -24,7 +24,6 @@ import {
 } from './formatting';
 import { formatBytes } from './formatUtils.js';
 import { registerModelfileManager } from './modelfiles.js';
-import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
 import {
   getModelOptionsForModel,
   loadModelSettings,
@@ -32,6 +31,7 @@ import {
   type ModelOptionOverrides,
   type ModelSettingsStore,
 } from './modelSettings.js';
+import type { ResolvedReference } from './prompts/OllamaPrompt.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { getSetting, migrateLegacySettings } from './settings.js';
 import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settingsWebview.js';
@@ -39,11 +39,22 @@ import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
 import { registerStatusBarHeartbeat } from './statusBar.js';
 import { ThinkingParser } from './thinkingParser.js';
 import {
-  buildXmlToolSystemPrompt,
   buildNativeToolsArray,
+  buildXmlToolSystemPrompt,
   extractXmlToolCalls,
   isToolsNotSupportedError,
 } from './toolUtils.js';
+import {
+  createTitleProvider,
+  createSummarizer,
+  getHelpTextPrefix,
+  getAdditionalWelcomeMessage,
+  createFollowupProvider,
+  createParticipantVariableProvider,
+  createParticipantDetectionProvider,
+} from './participantFeatures.js';
+import { createChatStatusItem, updateChatStatusItem, disposeChatStatusItem } from './chatStatusItem.js';
+import { registerChatCustomizationProvider } from './chatCustomizationProvider.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
@@ -58,7 +69,6 @@ export function toRuntimeModelId(modelId: string): string {
 }
 
 export { mapOpenAiToolCallsToOllamaLike } from './chatUtils.js';
-export { formatBytes } from './formatUtils.js';
 export {
   getOllamaServerLogPath,
   handleConfigurationChange,
@@ -66,6 +76,7 @@ export {
   isLocalHost,
   isSelectedAction,
 } from './extensionHelpers.js';
+export { formatBytes } from './formatUtils.js';
 
 export function getWindowsLogTailPowerShellArgs(
   localAppData: string | undefined = process.env['LOCALAPPDATA'],
@@ -202,15 +213,72 @@ function logPerformanceSnapshot(
 /**
  * Set up chat participant with icon and register it
  */
-export function setupChatParticipant(
+export async function setupChatParticipant(
   context: vscode.ExtensionContext,
   participantHandler: vscode.ChatRequestHandler,
   chatApi?: Pick<typeof vscode.chat, 'createChatParticipant'>,
-): vscode.Disposable {
+  client?: Ollama,
+  diagnostics?: DiagnosticsLogger,
+): Promise<vscode.Disposable> {
   const chat = chatApi || vscode.chat;
 
   const participant = chat.createChatParticipant('opilot.ollama', participantHandler);
   participant.iconPath = vscode.Uri.joinPath(context.extensionUri, 'logo.png');
+  participant.helpTextPrefix = getHelpTextPrefix();
+
+  // Phase 5: Wire up Chat Participant providers
+  if (client && diagnostics) {
+    const modelId = getSetting<string>('selectedModel', 'llama3.2');
+    const serverHost = getSetting<string>('host', 'http://localhost:11434');
+
+    // Title provider
+    const titleProvider = createTitleProvider({
+      client,
+      diagnostics,
+      modelId,
+      serverHost,
+    });
+    (participant as any).titleProvider = (message: string) => titleProvider.provideChatTitle(message);
+
+    // Summarizer
+    const summarizer = createSummarizer({
+      client,
+      diagnostics,
+      modelId,
+      serverHost,
+    });
+    (participant as any).summarizer = (messages: vscode.LanguageModelChatMessage[]) =>
+      summarizer.summarizeMessages(messages);
+
+    // Welcome message
+    (participant as any).additionalWelcomeMessage = await getAdditionalWelcomeMessage({
+      client,
+      diagnostics,
+      modelId,
+      serverHost,
+    });
+
+    // Followup provider
+    const followupProvider = createFollowupProvider();
+    (participant as any).followupProvider = (request: any, result: any) =>
+      followupProvider.provideFollowups(request, result);
+
+    // Variable completions
+    const varProvider = createParticipantVariableProvider({
+      client,
+      diagnostics,
+      modelId,
+      serverHost,
+    });
+    (participant as any).participantVariableProvider = (token: any) => varProvider.provideCompletionItems(token);
+
+    // Phase 5.7: Detection provider
+    const detectionProvider = createParticipantDetectionProvider();
+    if (typeof (vscode.chat as any).registerChatParticipantDetectionProvider === 'function') {
+      (vscode.chat as any).registerChatParticipantDetectionProvider('opilot.ollama', detectionProvider);
+    }
+  }
+
   return participant;
 }
 
@@ -535,6 +603,11 @@ interface DirectOllamaRequestContext {
  * Invokes a single tool and returns the result text.
  * Handles task_complete specially as a no-op signal.
  */
+/** Validate that tool arguments are a plain object (not null, array, string, etc.) */
+function isValidToolArguments(args: unknown): args is Record<string, unknown> {
+  return args !== null && typeof args === 'object' && !Array.isArray(args) && args.constructor === Object;
+}
+
 async function invokeSingleTool(
   toolCall: { function: { name: string; arguments: unknown }; id?: string },
   request: vscode.ChatRequest,
@@ -544,12 +617,19 @@ async function invokeSingleTool(
   const toolName = toolCall.function.name;
   const isTaskComplete = toolName === TASK_COMPLETE_TOOL_NAME;
 
+  // Validate tool arguments before invoking
+  if (!isValidToolArguments(toolCall.function.arguments)) {
+    const msg = `invalid tool arguments for ${toolName}: expected plain object, got ${typeof toolCall.function.arguments}`;
+    outputChannel?.warn(`[client] ${msg}`);
+    return { resultText: msg, isTaskComplete: false };
+  }
+
   if (isTaskComplete) {
     try {
       await vscode.lm.invokeTool(
         toolName,
         {
-          input: toolCall.function.arguments as Record<string, unknown>,
+          input: toolCall.function.arguments,
           toolInvocationToken: request.toolInvocationToken!,
         },
         token,
@@ -565,7 +645,7 @@ async function invokeSingleTool(
     const result = await vscode.lm.invokeTool(
       toolName,
       {
-        input: toolCall.function.arguments as Record<string, unknown>,
+        input: toolCall.function.arguments,
         toolInvocationToken: request.toolInvocationToken!,
       },
       token,
@@ -923,7 +1003,7 @@ async function streamModelResponse(options: {
       ? rawRepSensitivity
       : 'conservative';
   const xmlFilter = createXmlStreamFilter();
-  const thinkingParser = shouldThink ? new ThinkingParser() : null;
+  const thinkingParser = shouldThink ? ThinkingParser.forModel(modelId) : null;
 
   for await (const chunk of response) {
     if (token.isCancellationRequested) {
@@ -951,12 +1031,17 @@ async function streamModelResponse(options: {
 
       if (thinkingChunk) {
         if (!thinkingStarted) {
-          stream.markdown('\n\n*Thinking*\n\n');
           thinkingStarted = true;
           emittedContent = true;
         }
         if (!hideThinkingContent) {
-          stream.markdown(thinkingChunk);
+          try {
+            // Phase 2: Use native thinkingProgress instead of markdown
+            stream.thinkingProgress({ text: thinkingChunk });
+          } catch {
+            // Fallback to markdown if thinkingProgress not available
+            stream.markdown(thinkingChunk);
+          }
         }
       }
 
@@ -968,12 +1053,23 @@ async function streamModelResponse(options: {
         outputChannel?.debug(`[client] @ollama chunk: ${contentChunk.substring(0, 50)}`);
         const cleanContent = xmlFilter.write(contentChunk);
         if (cleanContent) {
-          stream.markdown(cleanContent);
+          try {
+            stream.markdown(cleanContent);
+          } catch (err) {
+            outputChannel?.warn(`[client] stream write failed: ${err instanceof Error ? err.message : String(err)}`);
+            break;
+          }
           emittedContent = true;
           responseBuffer = (responseBuffer + cleanContent).slice(-600);
           if (detectsRepetition(responseBuffer, repSensitivity)) {
             outputChannel?.warn(`[client] repetition detected in @ollama response; stopping stream`);
-            stream.markdown('\n\n*\\[Stopped: repetition detected\\]*');
+            try {
+              // Phase 2: Use native warning instead of markdown
+              stream.warning('Repetition detected — stopping response');
+            } catch {
+              // Fallback to markdown
+              stream.markdown('\n\n*\\[Stopped: repetition detected\\]*');
+            }
             break;
           }
         }
@@ -981,23 +1077,61 @@ async function streamModelResponse(options: {
     }
 
     if (chunk.message?.tool_calls?.length) {
-      for (const toolCall of chunk.message.tool_calls) {
-        stream.markdown(
-          `\n\`\`\`json\n${JSON.stringify({ tool: toolCall.function.name, arguments: toolCall.function.arguments }, null, 2)}\n\`\`\`\n`,
-        );
+      for (let tcIdx = 0; tcIdx < chunk.message.tool_calls.length; tcIdx++) {
+        const toolCall = chunk.message.tool_calls[tcIdx]!;
+        const callId = `${toolCall.function.name}-${tcIdx}`;
+        stream.beginToolInvocation(callId, toolCall.function.name);
+        const args = toolCall.function.arguments;
+        if (args && Object.keys(args).length > 0) {
+          stream.updateToolInvocation(callId, {
+            arguments: JSON.stringify(args),
+          });
+        }
         emittedContent = true;
       }
     }
 
     if (chunk.done) {
+      try {
+        stream.usage({ promptTokens: chunk.prompt_eval_count, completionTokens: chunk.eval_count });
+      } catch {
+        // usage reporting is best-effort; ignore
+      }
       break;
+    }
+  }
+
+  // Flush ThinkingParser to drain any partially-buffered state
+  if (thinkingParser) {
+    const [flushedThinking, flushedContent] = thinkingParser.flush();
+    if (flushedThinking && !hideThinkingContent) {
+      try {
+        stream.markdown(flushedThinking);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (flushedContent) {
+      const cleanFlushed = xmlFilter.write(flushedContent);
+      if (cleanFlushed) {
+        try {
+          stream.markdown(cleanFlushed);
+        } catch {
+          /* ignore */
+        }
+        emittedContent = true;
+      }
     }
   }
 
   // Finalize XML filter
   const finalContent = xmlFilter.end();
   if (finalContent) {
-    stream.markdown(finalContent);
+    try {
+      stream.markdown(finalContent);
+    } catch {
+      /* ignore */
+    }
     emittedContent = true;
   }
 
@@ -1105,15 +1239,38 @@ async function handleDirectOllamaRequest(
     const { ollamaMessages, systemContextParts } = convertMessagesToOllamaFormat(messages);
     const dedupedContextParts = dedupeXmlContextBlocksByTag(systemContextParts);
 
-    // Build location-aware system prompt.
+    // Phase 4: Build location-aware and mode-aware system prompt.
     let systemPrompt = BASE_SYSTEM_PROMPT;
-    const location2 = (request as unknown as { location2?: { type?: string } }).location2;
+
+    // Handle location2 for inline chat context
+    const location2 = (
+      request as unknown as { location2?: { type?: string; document?: { uri: string; languageId: string } } }
+    ).location2;
     if (location2) {
       const locationType = location2.type;
-      // For inline chat or quick chat, add brief context to avoid verbose responses
       if (locationType === 'inline' || locationType === 'quickChat') {
         systemPrompt += '\n\nProvide concise, focused responses appropriate for quick interactions.';
+        // If we have editor context, add file language info
+        if (location2.document) {
+          systemPrompt += `\n\nYou are editing a ${location2.document.languageId} file.`;
+        }
       }
+    }
+
+    // Handle modeInstructions2 from custom Copilot modes
+    const modeInstructions2 = (request as unknown as { modeInstructions2?: string }).modeInstructions2;
+    if (modeInstructions2) {
+      systemPrompt += `\n\n${modeInstructions2}`;
+    }
+
+    // Handle editedFileEvents for recent workspace context
+    const editedFileEvents = (request as unknown as { editedFileEvents?: Array<{ uri: string }> }).editedFileEvents;
+    if (editedFileEvents && editedFileEvents.length > 0) {
+      const recentFiles = editedFileEvents
+        .slice(0, 3)
+        .map(e => e.uri.split('/').pop())
+        .join(', ');
+      systemPrompt += `\n\nRecently edited files: ${recentFiles}`;
     }
 
     if (dedupedContextParts.length > 0) {
@@ -1554,8 +1711,59 @@ export async function activate(context: vscode.ExtensionContext) {
     await handleChatRequest(request, chatContext, stream, token, client, diagnostics, context, modelSettingsStore);
   };
 
-  const participant = setupChatParticipant(context, participantHandler);
+  const participant = await setupChatParticipant(context, participantHandler, undefined, client, diagnostics);
   context.subscriptions.push(participant);
+
+  // Phase 6: Create and register chat status item
+  const chatStatusItem = createChatStatusItem();
+  if (chatStatusItem) {
+    context.subscriptions.push({
+      dispose: () => disposeChatStatusItem(),
+    });
+  }
+
+  // Phase 9: Register chat session customization provider for Modelfiles
+  const modelfilesFolder =
+    (
+      await vscode.workspace.workspaceFolders?.[0]?.uri?.with({
+        scheme: 'file',
+        path: join(homedir(), '.ollama', 'modelfiles'),
+      })
+    )?.fsPath || join(homedir(), '.ollama', 'modelfiles');
+
+  const chatCustomizationDisposable = registerChatCustomizationProvider({
+    modelfilesFolder,
+    diagnostics,
+  });
+  context.subscriptions.push(chatCustomizationDisposable);
+
+  // Phase 10: Set context keys for conditional UI
+  const updateContextKeys = async () => {
+    try {
+      const isOnline = await testConnection(client, 2000);
+      await vscode.commands.executeCommand('setContext', 'ollama.serverOnline', isOnline);
+
+      const selectedModel = getSetting<string>('selectedModel', 'llama3.2');
+      await vscode.commands.executeCommand('setContext', 'ollama.activeModel', selectedModel);
+
+      const agentModeEnabled = getSetting<boolean>('agentMode', false);
+      await vscode.commands.executeCommand('setContext', 'ollama.agentModeEnabled', agentModeEnabled);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      diagnostics.debug(`[context-keys] failed to update context keys: ${msg}`);
+    }
+  };
+
+  await updateContextKeys();
+
+  // Update context keys when settings change
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (event.affectsConfiguration('opilot.selectedModel') || event.affectsConfiguration('opilot.agentMode')) {
+        updateContextKeys().catch(() => {});
+      }
+    }),
+  );
 }
 
 export function deactivate() {

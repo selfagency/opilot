@@ -16,6 +16,8 @@ export const SUPPORTED_SETTING_KEYS = [
   'hideThinkingContent',
   'repetitionDetection',
   'maxContextTokens',
+  'selectedModel',
+  'agentMode',
 ] as const;
 
 type SupportedSettingKey = (typeof SUPPORTED_SETTING_KEYS)[number];

@@ -15,8 +15,8 @@ importers:
   .:
     dependencies:
       '@selfagency/llm-stream-parser':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.3.1
+        version: 0.3.1
       '@vscode/prompt-tsx':
         specifier: 0.4.0-alpha.8
         version: 0.4.0-alpha.8
@@ -1358,8 +1358,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@selfagency/llm-stream-parser@0.2.0':
-    resolution: {integrity: sha512-AcrcneYlPgUFDYdL4ChWRAX769sO/kx+lOqqojMCBft2LxI4zaV0U4tjUuwsHmb8vy67T1Dd0pkNNyIGY8bgbQ==}
+  '@selfagency/llm-stream-parser@0.3.1':
+    resolution: {integrity: sha512-YHLrEzTcR4xQW+5W9DZBsfMNKmJ4/PLTzuKo9J8dm71oXjiUozJS53Aa4hDI+g3JWvKWZ5tZPcxXmj8nFK0Eyg==}
 
   '@shikijs/core@2.5.0':
     resolution: {integrity: sha512-uu/8RExTKtavlpH7XqnVYBrfBkUc20ngXiX9NSrBhOVZYv/7XQRKUyhtkeflY5QsxC0GbJThCerruZfsUaSldg==}
@@ -4379,7 +4379,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.60.1':
     optional: true
 
-  '@selfagency/llm-stream-parser@0.2.0': {}
+  '@selfagency/llm-stream-parser@0.3.1': {}
 
   '@shikijs/core@2.5.0':
     dependencies:

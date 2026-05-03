@@ -168,15 +168,22 @@ export function* processTrailingFrame(trailing: string): Generator<string> {
     }
     return;
   }
+  // Guard against oversized SSE events (DoS protection)
+  const MAX_SSE_EVENT_SIZE = 1_048_576; // 1 MB
+  if (payload.length > MAX_SSE_EVENT_SIZE) {
+    throw new Error(`[openai-compat] SSE event exceeds max size (${payload.length} > ${MAX_SSE_EVENT_SIZE})`);
+  }
   yield payload;
 }
 
 /**
  * Parses Server-Sent Events from an async sequence of text chunks and yields
  * only `data:` payloads. Stops on `[DONE]`.
+ * Guards against oversized events (DoS protection).
  */
 export async function* parseSseDataPayloadsFromTextChunks(chunks: AsyncIterable<string>): AsyncGenerator<string> {
   let buffer = '';
+  const MAX_SSE_EVENT_SIZE = 1_048_576; // 1 MB
 
   for await (const chunk of chunks) {
     buffer += chunk;
@@ -196,6 +203,11 @@ export async function* parseSseDataPayloadsFromTextChunks(chunks: AsyncIterable<
 
       if (!payload) {
         continue;
+      }
+
+      // Guard against oversized SSE events (DoS protection)
+      if (payload.length > MAX_SSE_EVENT_SIZE) {
+        throw new Error(`[openai-compat] SSE event exceeds max size (${payload.length} > ${MAX_SSE_EVENT_SIZE})`);
       }
 
       if (payload === '[DONE]') {

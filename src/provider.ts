@@ -14,6 +14,7 @@ import {
   LanguageModelDataPart,
   LanguageModelResponsePart,
   LanguageModelTextPart,
+  LanguageModelThinkingPart,
   LanguageModelToolCallPart,
   LanguageModelToolResultPart,
   Progress,
@@ -550,12 +551,24 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     hideThinkingContent: boolean,
   ): void {
     if (!state.thinkingStarted) {
+      // Phase 3: Emit native LanguageModelThinkingPart if available
+      try {
+        (progress.report as any)(new LanguageModelThinkingPart(hideThinkingContent ? '' : 'Thinking...'));
+      } catch {
+        // Fallback to markdown if LanguageModelThinkingPart not available
+      }
       progress.report(new LanguageModelTextPart('\n\n> 💭 **Thinking**\n>\n'));
       state.thinkingStarted = true;
       state.thinkingLineStart = true;
       state.emittedOutput = true;
     }
     if (!hideThinkingContent) {
+      // Phase 3: Emit thinking content via native API
+      try {
+        (progress.report as any)(new LanguageModelThinkingPart(text));
+      } catch {
+        // Fallback to markdown if API not available
+      }
       const formatted = appendToBlockquote(text, state.thinkingLineStart);
       state.thinkingLineStart = false;
       progress.report(new LanguageModelTextPart(formatted));
@@ -955,7 +968,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       // some model/version combinations still emit raw <think> tags in message.content.
       // Applying the parser unconditionally is safe: if content is already clean the
       // parser transitions through lookingForOpening → thinkingDone and passes it unchanged.
-      const thinkingParser = shouldThink ? new ThinkingParser() : null;
+      const thinkingParser = shouldThink ? ThinkingParser.forModel(runtimeModelId) : null;
 
       for await (const chunk of response) {
         if (token.isCancellationRequested) {

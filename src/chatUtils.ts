@@ -4,6 +4,19 @@ import { chatCompletionsOnce, initiateChatCompletionsStream } from './openaiComp
 import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openaiCompatMapping.js';
 import type { ModelOptionOverrides } from './modelSettings.js';
 
+/** Convert VS Code CancellationToken to AbortSignal (Phase 0C). */
+function tokenToAbortSignal(token?: { isCancellationRequested: boolean }): AbortSignal | undefined {
+  if (!token) return undefined;
+  const controller = new AbortController();
+  if (token.isCancellationRequested) {
+    controller.abort();
+  }
+  // Note: VS Code CancellationToken.onCancellationRequested is an event that can't easily
+  // be wired to AbortController without creating a subscription that never gets cleaned up.
+  // For now, we check the initial state and return the signal.
+  return controller.signal;
+}
+
 function parseToolCallArguments(args: unknown): Record<string, unknown> {
   if (typeof args !== 'string' || !args.trim()) {
     return {};
@@ -155,15 +168,17 @@ export async function openAiCompatStreamChat(params: {
   effectiveClient: Ollama;
   baseUrl: string;
   authToken?: string;
+  token?: { isCancellationRequested: boolean };
   signal?: AbortSignal;
   modelOptions?: ModelOptionOverrides;
   onOpenAiCompatFallback?: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
 }): Promise<AsyncIterable<ChatResponse>> {
   try {
+    const signal = params.signal || (params.token ? tokenToAbortSignal(params.token) : undefined);
     const stream = await initiateChatCompletionsStream({
       baseUrl: params.baseUrl,
       authToken: params.authToken,
-      signal: params.signal,
+      signal,
       request: buildOpenAiCompatRequestBody(
         params.modelId,
         params.messages,
@@ -195,15 +210,17 @@ export async function openAiCompatChatOnce(params: {
   effectiveClient: Ollama;
   baseUrl: string;
   authToken?: string;
+  token?: { isCancellationRequested: boolean };
   signal?: AbortSignal;
   modelOptions?: ModelOptionOverrides;
   onOpenAiCompatFallback?: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
 }): Promise<ChatResponse> {
   try {
+    const signal = params.signal || (params.token ? tokenToAbortSignal(params.token) : undefined);
     const response = await chatCompletionsOnce({
       baseUrl: params.baseUrl,
       authToken: params.authToken,
-      signal: params.signal,
+      signal,
       request: buildOpenAiCompatRequestBody(
         params.modelId,
         params.messages,
