@@ -1,19 +1,33 @@
+import { cancellationTokenToAbortSignal } from '@agentsy/vscode';
 import type { ChatResponse, Message, Ollama, Options, Tool } from 'ollama';
 import type { OpenAICompatChatRequest } from './openaiCompat.js';
 import { chatCompletionsOnce, initiateChatCompletionsStream } from './openaiCompat.js';
 import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openaiCompatMapping.js';
 import type { ModelOptionOverrides } from './modelSettings.js';
 
-/** Convert VS Code CancellationToken to AbortSignal (Phase 0C). */
-function tokenToAbortSignal(token?: { isCancellationRequested: boolean }): AbortSignal | undefined {
-  if (!token) return undefined;
+type CompatibleCancellationToken = {
+  isCancellationRequested: boolean;
+  onCancellationRequested?: (listener: () => void) => { dispose(): void };
+};
+
+/** Convert a compatible cancellation token to AbortSignal. */
+function tokenToAbortSignal(token?: CompatibleCancellationToken): AbortSignal | undefined {
+  if (!token) {
+    return undefined;
+  }
+
+  try {
+    if (typeof token.onCancellationRequested === 'function') {
+      return cancellationTokenToAbortSignal(token as Parameters<typeof cancellationTokenToAbortSignal>[0]);
+    }
+  } catch {
+    // Fall back to a basic signal below.
+  }
+
   const controller = new AbortController();
   if (token.isCancellationRequested) {
     controller.abort();
   }
-  // Note: VS Code CancellationToken.onCancellationRequested is an event that can't easily
-  // be wired to AbortController without creating a subscription that never gets cleaned up.
-  // For now, we check the initial state and return the signal.
   return controller.signal;
 }
 
@@ -168,7 +182,7 @@ export async function openAiCompatStreamChat(params: {
   effectiveClient: Ollama;
   baseUrl: string;
   authToken?: string;
-  token?: { isCancellationRequested: boolean };
+  token?: CompatibleCancellationToken;
   signal?: AbortSignal;
   modelOptions?: ModelOptionOverrides;
   onOpenAiCompatFallback?: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
@@ -210,7 +224,7 @@ export async function openAiCompatChatOnce(params: {
   effectiveClient: Ollama;
   baseUrl: string;
   authToken?: string;
-  token?: { isCancellationRequested: boolean };
+  token?: CompatibleCancellationToken;
   signal?: AbortSignal;
   modelOptions?: ModelOptionOverrides;
   onOpenAiCompatFallback?: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;

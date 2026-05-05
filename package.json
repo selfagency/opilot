@@ -40,7 +40,16 @@
     "task": "task"
   },
   "dependencies": {
-    "@selfagency/llm-stream-parser": "^0.3.1",
+    "@agentsy/context": "^0.1.1",
+    "@agentsy/formatting": "^0.1.1",
+    "@agentsy/normalizers": "^0.1.1",
+    "@agentsy/processor": "^0.1.1",
+    "@agentsy/renderers": "^0.1.1",
+    "@agentsy/structured": "^0.1.1",
+    "@agentsy/thinking": "^0.1.1",
+    "@agentsy/tool-calls": "^0.1.1",
+    "@agentsy/vscode": "^0.1.1",
+    "@agentsy/xml-filter": "^0.1.1",
     "@vscode/prompt-tsx": "0.4.0-alpha.8",
     "ollama": "^0.6.3",
     "undici": "^6.25.0"
@@ -94,7 +103,7 @@
       {
         "name": "opilot_list_models",
         "displayName": "List Ollama Models",
-        "modelDescription": "Returns all locally installed and cloud Ollama models available on the current Ollama server.",
+        "modelDescription": "List models available to this workspace's configured Ollama host, including local and cloud-tagged models when authenticated. Use before selecting a model for run/start/stop/info actions; do not use for downloading a model.",
         "inputSchema": {
           "type": "object",
           "properties": {},
@@ -110,7 +119,7 @@
       {
         "name": "opilot_get_model_info",
         "displayName": "Get Ollama Model Info",
-        "modelDescription": "Returns capabilities and metadata for a specific Ollama model by ID.",
+        "modelDescription": "Return metadata and capability details for a specific model ID (thinking, tools, vision, limits). Use when you need model-specific decisions; do not use to check server availability.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -134,7 +143,7 @@
       {
         "name": "opilot_check_server_health",
         "displayName": "Check Ollama Server Health",
-        "modelDescription": "Tests whether the configured Ollama server is reachable and returns its status.",
+        "modelDescription": "Check whether the configured Ollama host is reachable and report running model status. Use when requests fail or before model lifecycle operations; do not use for retrieving model metadata.",
         "inputSchema": {
           "type": "object",
           "properties": {},
@@ -150,12 +159,13 @@
       {
         "name": "opilot_pull_model",
         "displayName": "Pull Ollama Model",
-        "modelDescription": "Pull a model from the Ollama library to the local machine (starts download).",
+        "modelDescription": "Download a model to the configured Ollama host by model ID (for example llama3.2:3b). Use only when the model is missing; do not call repeatedly for an already installed model.",
         "inputSchema": {
           "type": "object",
           "properties": {
             "modelId": {
-              "type": "string"
+              "type": "string",
+              "description": "Exact model identifier to pull, e.g. llama3.2:3b"
             }
           },
           "required": [
@@ -173,12 +183,13 @@
       {
         "name": "opilot_start_model",
         "displayName": "Start (warm) Model",
-        "modelDescription": "Start (warm) a locally-installed or cloud model so it is ready for use.",
+        "modelDescription": "Warm/start a model so first-token latency is reduced for upcoming requests. Use after pull/list and before chat workloads; do not use to verify server health.",
         "inputSchema": {
           "type": "object",
           "properties": {
             "modelId": {
-              "type": "string"
+              "type": "string",
+              "description": "Installed model identifier to start, e.g. llama3.2:3b"
             }
           },
           "required": [
@@ -196,12 +207,13 @@
       {
         "name": "opilot_stop_model",
         "displayName": "Stop (unload) Model",
-        "modelDescription": "Stop (unload) a running model.",
+        "modelDescription": "Unload a running model to free RAM/VRAM resources. Use only for models that are currently running; do not use as a delete operation.",
         "inputSchema": {
           "type": "object",
           "properties": {
             "modelId": {
-              "type": "string"
+              "type": "string",
+              "description": "Running model identifier to stop, e.g. llama3.2:3b"
             }
           },
           "required": [

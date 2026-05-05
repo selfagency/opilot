@@ -14,9 +14,36 @@ importers:
 
   .:
     dependencies:
-      '@selfagency/llm-stream-parser':
-        specifier: ^0.3.1
-        version: 0.3.1
+      '@agentsy/context':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/formatting':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/normalizers':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/processor':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/renderers':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/structured':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/thinking':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/tool-calls':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/vscode':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@agentsy/xml-filter':
+        specifier: ^0.1.1
+        version: 0.1.1
       '@vscode/prompt-tsx':
         specifier: 0.4.0-alpha.8
         version: 0.4.0-alpha.8
@@ -95,6 +122,36 @@ importers:
         version: 8.8.5
 
 packages:
+
+  '@agentsy/context@0.1.1':
+    resolution: {integrity: sha512-3Xu4haTfxuRx+1Zx4msdUB8NLFQLpX7HFcazSalj/DSjf8PeSr7hqkhuFwmvnyDqEelZY5tnk6atI1gbmD8/oA==}
+
+  '@agentsy/formatting@0.1.1':
+    resolution: {integrity: sha512-/XUvydNMdoEUq7L5lzWBRtbi2Fm6pinS2fwNWFAjoYaA7UyXb1PaKUVPlaFOQEX9bEtNhJWyWO6lWLmGTlHwvw==}
+
+  '@agentsy/normalizers@0.1.1':
+    resolution: {integrity: sha512-tMmRPc7LDU95oazoPjNLscfBNgVGtxS6h7p/UV/qMJC3XsByeP5bjJf/yvSqyebuA/9Zzqn4dQG7yyMbp9IOsg==}
+
+  '@agentsy/processor@0.1.1':
+    resolution: {integrity: sha512-1pf16h5y2j+iK1RAFBu7uXdW8GfLwpoI9fBaln8OhOf+BUpCGQCw1HJ5AD4M/q3vN6ETpU0UV1SXVplSDnXWbw==}
+
+  '@agentsy/renderers@0.1.1':
+    resolution: {integrity: sha512-q+o+Zck8VN/Kb3iX4sljSXAAMjzdyEtdL0m8euLNsInf5lSzT0b0OZeimZJDTqBWtrQKb1eqPPQetU80DDCESg==}
+
+  '@agentsy/structured@0.1.1':
+    resolution: {integrity: sha512-xHCqDexxMRkk+lFkUsZJnoyx7AawbUIyUJI0cTVFWqLRpE1kHi9dsHU6zmNjSeHRYaZuQE+75t/atWzHpk+nIA==}
+
+  '@agentsy/thinking@0.1.1':
+    resolution: {integrity: sha512-vAhopJ9819N0w7VSZP2ROL+j9LFv8wkb+K4twyx769WF+ebPVp/V3cb45FwLUvUOov9uTMc4sscfbAQ3FUtQJA==}
+
+  '@agentsy/tool-calls@0.1.1':
+    resolution: {integrity: sha512-4xqYNVx46G9kio4hY9GbSMClW23zk3p5RGIUk70DFIcNsdIFy4QxlZzqDiEByFlXZdLEpWWt9tWAMauqD1t2Xw==}
+
+  '@agentsy/vscode@0.1.1':
+    resolution: {integrity: sha512-emyP2GDl2hUOD3ELqFdOkYt6MYN3Zr3yBrYCeA2WIY0GbDvzbvCTrOdiEY4GGTBvlZnx26vym9cJbyZgiGaTaQ==}
+
+  '@agentsy/xml-filter@0.1.1':
+    resolution: {integrity: sha512-6go9dKYBi/EQYPOfIKp1SOWQlvim1SONFK5Q2UUpgF5XW3murulCjl5Voc7sxRMPrXGEnFLhgBPhn68ZXzO3cA==}
 
   '@algolia/abtesting@1.15.2':
     resolution: {integrity: sha512-rF7vRVE61E0QORw8e2NNdnttcl3jmFMWS9B4hhdga12COe+lMa26bQLfcBn/Nbp9/AF/8gXdaRCPsVns3CnjsA==}
@@ -1357,9 +1414,6 @@ packages:
     resolution: {integrity: sha512-lWMnixq/QzxyhTV6NjQJ4SFo1J6PvOX8vUx5Wb4bBPsEb+8xZ89Bz6kOXpfXj9ak9AHTQVQzlgzBEc1SyM27xQ==}
     cpu: [x64]
     os: [win32]
-
-  '@selfagency/llm-stream-parser@0.3.1':
-    resolution: {integrity: sha512-YHLrEzTcR4xQW+5W9DZBsfMNKmJ4/PLTzuKo9J8dm71oXjiUozJS53Aa4hDI+g3JWvKWZ5tZPcxXmj8nFK0Eyg==}
 
   '@shikijs/core@2.5.0':
     resolution: {integrity: sha512-uu/8RExTKtavlpH7XqnVYBrfBkUc20ngXiX9NSrBhOVZYv/7XQRKUyhtkeflY5QsxC0GbJThCerruZfsUaSldg==}
@@ -3565,6 +3619,26 @@ packages:
 
 snapshots:
 
+  '@agentsy/context@0.1.1': {}
+
+  '@agentsy/formatting@0.1.1': {}
+
+  '@agentsy/normalizers@0.1.1': {}
+
+  '@agentsy/processor@0.1.1': {}
+
+  '@agentsy/renderers@0.1.1': {}
+
+  '@agentsy/structured@0.1.1': {}
+
+  '@agentsy/thinking@0.1.1': {}
+
+  '@agentsy/tool-calls@0.1.1': {}
+
+  '@agentsy/vscode@0.1.1': {}
+
+  '@agentsy/xml-filter@0.1.1': {}
+
   '@algolia/abtesting@1.15.2':
     dependencies:
       '@algolia/client-common': 5.49.2
@@ -4378,8 +4452,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.60.1':
     optional: true
-
-  '@selfagency/llm-stream-parser@0.3.1': {}
 
   '@shikijs/core@2.5.0':
     dependencies:

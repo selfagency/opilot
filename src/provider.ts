@@ -1,4 +1,4 @@
-import { appendToBlockquote } from '@selfagency/llm-stream-parser/markdown';
+import { appendToBlockquote } from '@agentsy/formatting';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -970,63 +970,69 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       // parser transitions through lookingForOpening → thinkingDone and passes it unchanged.
       const thinkingParser = shouldThink ? ThinkingParser.forModel(runtimeModelId) : null;
 
-      for await (const chunk of response) {
-        if (token.isCancellationRequested) {
-          break;
-        }
-
-        this.outputChannel.info(`[client] raw chunk: ${JSON.stringify(chunk)}`);
-
-        // Handle thinking tokens (reasoning phase)
-        if (chunk.message?.thinking) {
-          this.reportThinkingChunk(chunk.message.thinking, streamState, progress, hideThinkingContent);
-        }
-
-        // Stream text chunks — run through thinking tag parser on both cloud and local paths
-        if (chunk.message?.content) {
-          let thinkingChunk = '';
-          let contentChunk = chunk.message.content;
-
-          if (thinkingParser) {
-            [thinkingChunk, contentChunk] = thinkingParser.addContent(chunk.message.content);
+      try {
+        for await (const chunk of response) {
+          if (token.isCancellationRequested) {
+            break;
           }
 
-          if (thinkingChunk) {
-            this.reportThinkingChunk(thinkingChunk, streamState, progress, hideThinkingContent);
+          this.outputChannel.info(`[client] raw chunk: ${JSON.stringify(chunk)}`);
+
+          // Handle thinking tokens (reasoning phase)
+          if (chunk.message?.thinking) {
+            this.reportThinkingChunk(chunk.message.thinking, streamState, progress, hideThinkingContent);
           }
 
-          if (contentChunk) {
-            if (streamState.thinkingStarted && !streamState.contentStarted) {
-              progress.report(new LanguageModelTextPart('\n\n'));
-              streamState.contentStarted = true;
-              streamState.emittedOutput = true;
+          // Stream text chunks — run through thinking tag parser on both cloud and local paths
+          if (chunk.message?.content) {
+            let thinkingChunk = '';
+            let contentChunk = chunk.message.content;
+
+            if (thinkingParser) {
+              [thinkingChunk, contentChunk] = thinkingParser.addContent(chunk.message.content);
             }
-            this.outputChannel.debug(`[client] streaming chunk: ${contentChunk.substring(0, 50)}`);
-            const cleanContent = xmlFilter.write(contentChunk);
-            if (cleanContent) {
-              progress.report(new LanguageModelTextPart(cleanContent));
-              streamState.emittedOutput = true;
-              streamState.responseBuffer = (streamState.responseBuffer + cleanContent).slice(-600);
-              if (detectsRepetition(streamState.responseBuffer, repSensitivity)) {
-                this.outputChannel.warn(`[client] repetition detected for ${runtimeModelId}; stopping stream`);
-                progress.report(new LanguageModelTextPart('\n\n*[Stopped: repetition detected]*'));
-                break;
+
+            if (thinkingChunk) {
+              this.reportThinkingChunk(thinkingChunk, streamState, progress, hideThinkingContent);
+            }
+
+            if (contentChunk) {
+              if (streamState.thinkingStarted && !streamState.contentStarted) {
+                progress.report(new LanguageModelTextPart('\n\n'));
+                streamState.contentStarted = true;
+                streamState.emittedOutput = true;
+              }
+              this.outputChannel.debug(`[client] streaming chunk: ${contentChunk.substring(0, 50)}`);
+              const cleanContent = xmlFilter.write(contentChunk);
+              if (cleanContent) {
+                progress.report(new LanguageModelTextPart(cleanContent));
+                streamState.emittedOutput = true;
+                streamState.responseBuffer = (streamState.responseBuffer + cleanContent).slice(-600);
+                if (detectsRepetition(streamState.responseBuffer, repSensitivity)) {
+                  this.outputChannel.warn(`[client] repetition detected for ${runtimeModelId}; stopping stream`);
+                  progress.report(new LanguageModelTextPart('\n\n*[Stopped: repetition detected]*'));
+                  break;
+                }
               }
             }
           }
-        }
 
-        // Handle tool calls
-        if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
-          this.reportToolCalls(chunk.message.tool_calls, progress);
-          streamState.emittedOutput = true;
-        }
+          // Handle tool calls
+          if (chunk.message?.tool_calls && Array.isArray(chunk.message.tool_calls)) {
+            this.reportToolCalls(chunk.message.tool_calls, progress);
+            streamState.emittedOutput = true;
+          }
 
-        // Some Ollama responses set done=true before the underlying stream closes.
-        // Exit promptly so VS Code doesn't stay in a perpetual "waiting" state.
-        if (chunk.done === true) {
-          break;
+          // Some Ollama responses set done=true before the underlying stream closes.
+          // Exit promptly so VS Code doesn't stay in a perpetual "waiting" state.
+          if (chunk.done === true) {
+            break;
+          }
         }
+      } catch (streamError) {
+        const message = streamError instanceof Error ? streamError.message : String(streamError);
+        this.outputChannel.warn(`[client] stream iteration failed for ${runtimeModelId}: ${message}`);
+        throw new Error(`language model stream interrupted: ${message}`);
       }
 
       // Finalize XML filter to flush any remaining buffer

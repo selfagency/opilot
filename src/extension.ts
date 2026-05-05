@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
+import { createVSCodeChatRenderer, mapUsageToVSCode, toVSCodeToolCallPart } from '@agentsy/vscode';
 import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
@@ -33,7 +34,7 @@ import {
 } from './modelSettings.js';
 import type { ResolvedReference } from './prompts/OllamaPrompt.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
-import { getSetting, migrateLegacySettings } from './settings.js';
+import { getSetting, migrateLegacySettingsWithState } from './settings.js';
 import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settingsWebview.js';
 import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
 import { registerStatusBarHeartbeat } from './statusBar.js';
@@ -120,7 +121,9 @@ async function tryUpdateChatLanguageModelsFile(modelsPath: string, maxRetries: n
 
       await fsPromises.writeFile(modelsPath, `${JSON.stringify(filtered, null, 2)}\n`, 'utf8');
       return true;
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[opilot] failed to update chat language models file (${modelsPath}): ${message}`);
       break;
     }
   }
@@ -165,8 +168,9 @@ async function removeBuiltInOllamaFromChatLanguageModels(
           candidatePaths.add(join(profilesDir, entry.name, 'chatLanguageModels.json'));
         }
       }
-    } catch {
-      // profiles directory may not exist
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.debug(`[opilot] skipping profiles directory scan for ${userDir}: ${message}`);
     }
   }
 
@@ -370,6 +374,7 @@ async function extractToolCallsAndText(
   response: unknown,
   stream: vscode.ChatResponseStream,
   token: vscode.CancellationToken,
+  outputChannel?: DiagnosticsLogger,
 ): Promise<{
   pendingToolCalls: vscode.LanguageModelToolCallPart[];
   assistantTextParts: vscode.LanguageModelTextPart[];
@@ -377,17 +382,23 @@ async function extractToolCallsAndText(
   const pendingToolCalls: vscode.LanguageModelToolCallPart[] = [];
   const assistantTextParts: vscode.LanguageModelTextPart[] = [];
   const streamIterable = (response as { stream: AsyncIterable<unknown> }).stream;
-  for await (const chunk of streamIterable) {
-    if (token.isCancellationRequested) {
-      break;
-    }
+  try {
+    for await (const chunk of streamIterable) {
+      if (token.isCancellationRequested) {
+        break;
+      }
 
-    if (chunk instanceof vscode.LanguageModelTextPart) {
-      assistantTextParts.push(chunk);
-      stream.markdown(chunk.value);
-    } else if (chunk instanceof vscode.LanguageModelToolCallPart) {
-      pendingToolCalls.push(chunk);
+      if (chunk instanceof vscode.LanguageModelTextPart) {
+        assistantTextParts.push(chunk);
+        stream.markdown(chunk.value);
+      } else if (chunk instanceof vscode.LanguageModelToolCallPart) {
+        pendingToolCalls.push(chunk);
+      }
     }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    outputChannel?.warn(`[client] LM stream iteration failed: ${message}`);
+    throw new Error(`Language model stream interrupted: ${message}`);
   }
   return { pendingToolCalls, assistantTextParts };
 }
@@ -453,7 +464,12 @@ async function runToolRound(
     token,
   );
 
-  const { pendingToolCalls, assistantTextParts } = await extractToolCallsAndText(response, stream, token);
+  const { pendingToolCalls, assistantTextParts } = await extractToolCallsAndText(
+    response,
+    stream,
+    token,
+    outputChannel,
+  );
 
   const hasTaskComplete = pendingToolCalls.some(tc => tc.name === TASK_COMPLETE_TOOL_NAME);
   if (pendingToolCalls.length === 0 || !request.toolInvocationToken || hasTaskComplete) {
@@ -563,6 +579,7 @@ export async function handleChatRequest(
  */
 async function resolvePromptReferences(
   references: ReadonlyArray<vscode.ChatPromptReference>,
+  outputChannel?: DiagnosticsLogger,
 ): Promise<ResolvedReference[]> {
   const resolved: ResolvedReference[] = [];
   for (const ref of references) {
@@ -580,8 +597,9 @@ async function resolvePromptReferences(
       } else if (typeof value === 'string' && value.length > 0) {
         resolved.push({ label: ref.id, content: value });
       }
-    } catch {
-      // Skip unreadable references rather than failing the whole request.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outputChannel?.debug(`[context] skipping unreadable prompt reference ${ref.id}: ${message}`);
     }
   }
   return resolved;
@@ -676,6 +694,66 @@ interface ToolLoopContext {
   stream: vscode.ChatResponseStream;
   token: vscode.CancellationToken;
   outputChannel?: DiagnosticsLogger;
+}
+
+function reportThinkingProgressSafely(stream: vscode.ChatResponseStream, text: string): boolean {
+  const maybe = stream as unknown as { thinkingProgress?: (delta: { text?: string }) => void };
+  if (typeof maybe.thinkingProgress !== 'function') {
+    return false;
+  }
+  maybe.thinkingProgress({ text });
+  return true;
+}
+
+function reportWarningSafely(stream: vscode.ChatResponseStream, message: string): boolean {
+  const maybe = stream as unknown as { warning?: (warning: string) => void };
+  if (typeof maybe.warning !== 'function') {
+    return false;
+  }
+  maybe.warning(message);
+  return true;
+}
+
+function reportUsageSafely(
+  stream: vscode.ChatResponseStream,
+  usage: { promptTokens?: number; completionTokens?: number },
+): void {
+  const maybe = stream as unknown as {
+    usage?: (value: { promptTokens: number; completionTokens: number }) => void;
+  };
+  if (typeof maybe.usage !== 'function') {
+    return;
+  }
+  if (typeof usage.promptTokens !== 'number' || typeof usage.completionTokens !== 'number') {
+    return;
+  }
+  maybe.usage({ promptTokens: usage.promptTokens, completionTokens: usage.completionTokens });
+}
+
+function beginToolInvocationSafely(stream: vscode.ChatResponseStream, toolCallId: string, toolName: string): boolean {
+  const maybe = stream as unknown as {
+    beginToolInvocation?: (toolCallId: string, toolName: string) => void;
+  };
+  if (typeof maybe.beginToolInvocation !== 'function') {
+    return false;
+  }
+  maybe.beginToolInvocation(toolCallId, toolName);
+  return true;
+}
+
+function updateToolInvocationSafely(
+  stream: vscode.ChatResponseStream,
+  toolCallId: string,
+  streamData: { arguments: string },
+): boolean {
+  const maybe = stream as unknown as {
+    updateToolInvocation?: (toolCallId: string, streamData: { arguments: string }) => void;
+  };
+  if (typeof maybe.updateToolInvocation !== 'function') {
+    return false;
+  }
+  maybe.updateToolInvocation(toolCallId, streamData);
+  return true;
 }
 
 /**
@@ -947,6 +1025,28 @@ async function streamModelResponse(options: {
   } = options;
 
   const hideThinkingContent = getSetting<boolean>('hideThinkingContent', false);
+  const renderer = createVSCodeChatRenderer({
+    stream: stream as unknown as Parameters<typeof createVSCodeChatRenderer>[0]['stream'],
+    showThinking: false,
+  });
+
+  const writeMarkdown = async (text: string) => {
+    try {
+      await renderer.write(text);
+    } catch (error) {
+      outputChannel?.debug(`[client] renderer write failed; falling back to stream.markdown: ${String(error)}`);
+      stream.markdown(text);
+    }
+  };
+
+  const endRenderer = async () => {
+    try {
+      await renderer.end();
+    } catch (error) {
+      outputChannel?.debug(`[client] renderer end failed: ${String(error)}`);
+    }
+  };
+
   let shouldThink = shouldThinkInitial;
   let response: AsyncIterable<ChatResponse>;
 
@@ -1005,100 +1105,133 @@ async function streamModelResponse(options: {
   const xmlFilter = createXmlStreamFilter();
   const thinkingParser = shouldThink ? ThinkingParser.forModel(modelId) : null;
 
-  for await (const chunk of response) {
-    if (token.isCancellationRequested) {
-      break;
-    }
-
-    if (chunk.message?.thinking) {
-      if (!thinkingStarted) {
-        stream.markdown('\n\n*Thinking*\n\n');
-        thinkingStarted = true;
-        emittedContent = true;
-      }
-      if (!hideThinkingContent) {
-        stream.markdown(chunk.message.thinking);
-      }
-    }
-
-    if (chunk.message?.content) {
-      let thinkingChunk = '';
-      let contentChunk = chunk.message.content;
-
-      if (thinkingParser) {
-        [thinkingChunk, contentChunk] = thinkingParser.addContent(chunk.message.content);
+  try {
+    for await (const chunk of response) {
+      if (token.isCancellationRequested) {
+        break;
       }
 
-      if (thinkingChunk) {
+      if (chunk.message?.thinking) {
         if (!thinkingStarted) {
+          await writeMarkdown('\n\n*Thinking*\n\n');
           thinkingStarted = true;
           emittedContent = true;
         }
         if (!hideThinkingContent) {
-          try {
-            // Phase 2: Use native thinkingProgress instead of markdown
-            stream.thinkingProgress({ text: thinkingChunk });
-          } catch {
-            // Fallback to markdown if thinkingProgress not available
-            stream.markdown(thinkingChunk);
+          await writeMarkdown(chunk.message.thinking);
+        }
+      }
+
+      if (chunk.message?.content) {
+        let thinkingChunk = '';
+        let contentChunk = chunk.message.content;
+
+        if (thinkingParser) {
+          [thinkingChunk, contentChunk] = thinkingParser.addContent(chunk.message.content);
+        }
+
+        if (thinkingChunk) {
+          if (!thinkingStarted) {
+            thinkingStarted = true;
+            emittedContent = true;
+          }
+          if (!hideThinkingContent) {
+            try {
+              // Phase 2: Use native thinkingProgress instead of markdown
+              if (!reportThinkingProgressSafely(stream, thinkingChunk)) {
+                throw new Error('thinkingProgress API unavailable');
+              }
+            } catch (error) {
+              outputChannel?.debug(`[client] thinkingProgress unavailable; using markdown fallback: ${String(error)}`);
+              // Fallback to markdown if thinkingProgress not available
+              await writeMarkdown(thinkingChunk);
+            }
+          }
+        }
+
+        if (contentChunk) {
+          if (thinkingStarted && !contentStarted) {
+            await writeMarkdown('\n\n---\n\n*Response*\n\n');
+            contentStarted = true;
+          }
+          outputChannel?.debug(`[client] @ollama chunk: ${contentChunk.substring(0, 50)}`);
+          const cleanContent = xmlFilter.write(contentChunk);
+          if (cleanContent) {
+            try {
+              await writeMarkdown(cleanContent);
+            } catch (err) {
+              outputChannel?.warn(`[client] stream write failed: ${err instanceof Error ? err.message : String(err)}`);
+              break;
+            }
+            emittedContent = true;
+            responseBuffer = (responseBuffer + cleanContent).slice(-600);
+            if (detectsRepetition(responseBuffer, repSensitivity)) {
+              outputChannel?.warn(`[client] repetition detected in @ollama response; stopping stream`);
+              try {
+                // Phase 2: Use native warning instead of markdown
+                if (!reportWarningSafely(stream, 'Repetition detected — stopping response')) {
+                  throw new Error('warning API unavailable');
+                }
+              } catch (error) {
+                outputChannel?.debug(`[client] warning API unavailable; using markdown fallback: ${String(error)}`);
+                // Fallback to markdown
+                await writeMarkdown('\n\n*\\[Stopped: repetition detected\\]*');
+              }
+              break;
+            }
           }
         }
       }
 
-      if (contentChunk) {
-        if (thinkingStarted && !contentStarted) {
-          stream.markdown('\n\n---\n\n*Response*\n\n');
-          contentStarted = true;
-        }
-        outputChannel?.debug(`[client] @ollama chunk: ${contentChunk.substring(0, 50)}`);
-        const cleanContent = xmlFilter.write(contentChunk);
-        if (cleanContent) {
-          try {
-            stream.markdown(cleanContent);
-          } catch (err) {
-            outputChannel?.warn(`[client] stream write failed: ${err instanceof Error ? err.message : String(err)}`);
-            break;
+      if (chunk.message?.tool_calls?.length) {
+        for (let tcIdx = 0; tcIdx < chunk.message.tool_calls.length; tcIdx++) {
+          const toolCall = chunk.message.tool_calls[tcIdx]!;
+          const maybeToolCallId = (toolCall as { id?: unknown }).id;
+          const toolCallId = typeof maybeToolCallId === 'string' ? maybeToolCallId : undefined;
+          const toolCallPart = toVSCodeToolCallPart(
+            {
+              type: 'tool_call',
+              call: {
+                name: toolCall.function.name,
+                parameters: (toolCall.function.arguments ?? {}) as Record<string, unknown>,
+                format: 'native-json',
+                ...(toolCallId ? { id: toolCallId } : {}),
+              },
+              state: 'complete',
+            } as Parameters<typeof toVSCodeToolCallPart>[0],
+            {
+              fallbackCallId: () => `${toolCall.function.name}-${tcIdx}`,
+            },
+          );
+          beginToolInvocationSafely(stream, toolCallPart.callId, toolCallPart.name);
+          if (Object.keys(toolCallPart.input).length > 0) {
+            updateToolInvocationSafely(stream, toolCallPart.callId, {
+              arguments: JSON.stringify(toolCallPart.input),
+            });
           }
           emittedContent = true;
-          responseBuffer = (responseBuffer + cleanContent).slice(-600);
-          if (detectsRepetition(responseBuffer, repSensitivity)) {
-            outputChannel?.warn(`[client] repetition detected in @ollama response; stopping stream`);
-            try {
-              // Phase 2: Use native warning instead of markdown
-              stream.warning('Repetition detected — stopping response');
-            } catch {
-              // Fallback to markdown
-              stream.markdown('\n\n*\\[Stopped: repetition detected\\]*');
-            }
-            break;
-          }
         }
       }
-    }
 
-    if (chunk.message?.tool_calls?.length) {
-      for (let tcIdx = 0; tcIdx < chunk.message.tool_calls.length; tcIdx++) {
-        const toolCall = chunk.message.tool_calls[tcIdx]!;
-        const callId = `${toolCall.function.name}-${tcIdx}`;
-        stream.beginToolInvocation(callId, toolCall.function.name);
-        const args = toolCall.function.arguments;
-        if (args && Object.keys(args).length > 0) {
-          stream.updateToolInvocation(callId, {
-            arguments: JSON.stringify(args),
-          });
+      if (chunk.done) {
+        const usage = mapUsageToVSCode({
+          inputTokens: chunk.prompt_eval_count,
+          outputTokens: chunk.eval_count,
+          totalTokens:
+            typeof chunk.prompt_eval_count === 'number' && typeof chunk.eval_count === 'number'
+              ? chunk.prompt_eval_count + chunk.eval_count
+              : undefined,
+        });
+        if (usage) {
+          reportUsageSafely(stream, usage);
         }
-        emittedContent = true;
+        break;
       }
     }
-
-    if (chunk.done) {
-      try {
-        stream.usage({ promptTokens: chunk.prompt_eval_count, completionTokens: chunk.eval_count });
-      } catch {
-        // usage reporting is best-effort; ignore
-      }
-      break;
-    }
+  } catch (streamError) {
+    const message = streamError instanceof Error ? streamError.message : String(streamError);
+    outputChannel?.warn(`[client] @ollama stream iteration failed for ${modelId}: ${message}`);
+    await writeMarkdown('\n\n*Response interrupted by a streaming error. Please retry.*');
   }
 
   // Flush ThinkingParser to drain any partially-buffered state
@@ -1106,18 +1239,18 @@ async function streamModelResponse(options: {
     const [flushedThinking, flushedContent] = thinkingParser.flush();
     if (flushedThinking && !hideThinkingContent) {
       try {
-        stream.markdown(flushedThinking);
-      } catch {
-        /* ignore */
+        await writeMarkdown(flushedThinking);
+      } catch (error) {
+        outputChannel?.debug(`[client] failed to flush thinking chunk: ${String(error)}`);
       }
     }
     if (flushedContent) {
       const cleanFlushed = xmlFilter.write(flushedContent);
       if (cleanFlushed) {
         try {
-          stream.markdown(cleanFlushed);
-        } catch {
-          /* ignore */
+          await writeMarkdown(cleanFlushed);
+        } catch (error) {
+          outputChannel?.debug(`[client] failed to flush content chunk: ${String(error)}`);
         }
         emittedContent = true;
       }
@@ -1128,9 +1261,9 @@ async function streamModelResponse(options: {
   const finalContent = xmlFilter.end();
   if (finalContent) {
     try {
-      stream.markdown(finalContent);
-    } catch {
-      /* ignore */
+      await writeMarkdown(finalContent);
+    } catch (error) {
+      outputChannel?.debug(`[client] failed to flush final stream content: ${String(error)}`);
     }
     emittedContent = true;
   }
@@ -1157,11 +1290,13 @@ async function streamModelResponse(options: {
           modelOptions,
         }));
     if (fallback.message?.content) {
-      stream.markdown(sanitizeNonStreamingModelOutput(fallback.message.content));
+      await writeMarkdown(sanitizeNonStreamingModelOutput(fallback.message.content));
     } else {
-      stream.markdown('*No response from model. Try rephrasing or switching to a different model.*');
+      await writeMarkdown('*No response from model. Try rephrasing or switching to a different model.*');
     }
   }
+
+  await endRenderer();
 }
 
 /** Select or resolve the model ID for the direct Ollama request. */
@@ -1197,7 +1332,11 @@ async function setupCloudClientIfNeeded(
 }> {
   const cloudModelTag = modelId.split(':')[1] ?? '';
   const isCloudModel = cloudModelTag === 'cloud' || cloudModelTag.endsWith('-cloud');
-  const effectiveClient = isCloudModel && extensionContext ? await getCloudOllamaClient(extensionContext) : client;
+  const effectiveClient = extensionContext
+    ? isCloudModel
+      ? await getCloudOllamaClient(extensionContext)
+      : await getOllamaClient(extensionContext)
+    : client;
   const baseUrl = isCloudModel ? getOllamaHost() : undefined;
   const authToken = isCloudModel && extensionContext ? await getOllamaAuthToken(extensionContext) : undefined;
   return { isCloudModel, effectiveClient, baseUrl, authToken };
@@ -1291,7 +1430,7 @@ async function handleDirectOllamaRequest(
       getSetting<number>('maxContextTokens', 0),
     );
     if (maxInputTokens > 0) {
-      const refs = await resolvePromptReferences(request.references ?? []);
+      const refs = await resolvePromptReferences(request.references ?? [], outputChannel);
       const truncated = await renderOllamaPrompt(
         ollamaMessages as Message[],
         maxInputTokens,
@@ -1378,7 +1517,9 @@ async function handleDirectOllamaRequest(
     const isCrashError = error instanceof Error && error.message.includes('model runner has unexpectedly stopped');
     if (isCrashError) {
       // Best-effort unload to keep behaviour consistent with the provider path.
-      effectiveClient.generate({ model: modelId, prompt: '', keep_alive: 0, stream: false }).catch(() => {});
+      effectiveClient.generate({ model: modelId, prompt: '', keep_alive: 0, stream: false }).catch(error => {
+        outputChannel?.debug(`[client] failed to unload crashed model ${modelId}: ${String(error)}`);
+      });
       const selection = await vscode.window.showErrorMessage(
         'The Ollama model runner crashed. Please check the Ollama server logs and restart if needed.',
         'Open Logs',
@@ -1388,7 +1529,8 @@ async function handleDirectOllamaRequest(
         try {
           const document = await vscode.workspace.openTextDocument(vscode.Uri.file(logsPath));
           await vscode.window.showTextDocument(document, { preview: false });
-        } catch {
+        } catch (error) {
+          outputChannel?.debug(`[client] failed to open Ollama log file: ${String(error)}`);
           vscode.window
             .showWarningMessage(
               `Could not open Ollama logs at ${logsPath}. Please check that the Ollama server is installed and logging is enabled.`,
@@ -1485,7 +1627,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   diagnostics.info('[client] activating extension...');
 
-  await migrateLegacySettings(diagnostics);
+  await migrateLegacySettingsWithState(context.globalState, diagnostics);
 
   const client = await getOllamaClient(context);
   const host = getSetting<string>('host', 'http://localhost:11434');

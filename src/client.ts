@@ -285,7 +285,9 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
       maxInputTokens,
       maxOutputTokens,
     };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[client] failed to fetch model capabilities for ${modelId}: ${message}`);
     // If we can't fetch model info, return conservative defaults
     return {
       toolCalling: false,

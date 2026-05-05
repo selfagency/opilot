@@ -98,7 +98,9 @@ async function readErrorBody(response: Response): Promise<string> {
   try {
     const text = await response.text();
     return text.slice(0, 4000);
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[openai-compat] failed to read error response body: ${message}`);
     return '';
   }
 }

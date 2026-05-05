@@ -937,8 +937,11 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
                   },
                 );
               })
-              .catch(() => {
-                // Silently skip badges on error
+              .catch(error => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.logChannel?.debug(
+                  `[client] failed to fetch capabilities for ${model.name}; skipping capability badges: ${message}`,
+                );
               })
               .finally(() => {
                 this.localModelCapabilitiesInFlight.delete(model.name);
@@ -1105,8 +1108,9 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         try {
           const { models } = await this.client.ps();
           running = models.some(m => m.name === modelName);
-        } catch {
-          // If ps() fails, fall back to optimistic status messaging below.
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logChannel?.debug(`[client] unable to verify running status for ${modelName}: ${message}`);
         }
 
         if (running) {
@@ -1233,7 +1237,9 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         window.showInformationMessage(`Model ${modelName} force-killed`);
         return;
       }
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logChannel?.debug(`[client] unable to verify force-kill result for ${modelName}: ${message}`);
       this.logChannel?.info(`[client] model force-killed (ps check failed): ${modelName}`);
       this.refresh();
       window.showInformationMessage(`Model ${modelName} force-killed`);
@@ -1268,7 +1274,9 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
             try {
               const { models } = await this.client.ps();
               if (!models.some(m => m.name === modelName)) return;
-            } catch {
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              this.logChannel?.debug(`[client] ps() failed while stopping ${modelName}: ${message}`);
               return;
             }
           }
@@ -1438,7 +1446,10 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
             this.treeChangeEmitter.fire(null);
           }
         },
-        () => {},
+        error => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logChannel?.debug(`[client] failed to fetch variants for ${model.label}: ${message}`);
+        },
       );
     }
   }
@@ -1817,8 +1828,9 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         if (cloudResponse.ok) {
           cloudHtml = await cloudResponse.text();
         }
-      } catch {
-        // Cloud catalog fetch is best-effort; continue with base library list.
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logChannel?.debug(`[client] cloud catalog fetch failed; continuing with base catalog: ${message}`);
       }
 
       const matches = [...html.matchAll(/href="\/library\/([^"?#]+)"/g)];
@@ -2169,7 +2181,9 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     try {
       await this.getCloudModels();
       return new Set(this.cachedNames);
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logChannel?.debug(`[client] failed to resolve cloud model names for filter: ${message}`);
       return new Set();
     }
   }
@@ -2236,8 +2250,9 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           return tagNames[0];
         }
       }
-    } catch {
-      // Ignore and use final fallback below.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logChannel?.debug(`[client] cloud model page fallback lookup failed for ${modelName}: ${message}`);
     } finally {
       clearTimeout(timeout);
     }

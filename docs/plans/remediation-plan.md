@@ -206,6 +206,17 @@ The following cross-reference gaps were identified by comparing the Opilot imple
 
 The remediation plan is organized into three phases, ordered by urgency and dependency. Phase 1 addresses immediate stability and maintainability concerns. Phase 2 focuses on architectural consolidation and API compliance. Phase 3 targets long-term quality improvements and platform alignment. Each action item includes an estimated effort, dependencies, and expected outcome.
 
+## **Phase 0: Agentsy Package Migration (Immediate)**
+
+`@agentsy/core` has been deprecated in favor of focused packages. Before continuing deeper roadmap items, complete a package migration slice to avoid building additional work on deprecated APIs.
+
+| **Action**                                                                                                                                                             | **Severity** | **Effort** | **Files Affected**                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------- | ----------------------------------------------------------- |
+| Replace `@agentsy/core/*` imports with focused packages (`@agentsy/context`, `@agentsy/formatting`, `@agentsy/thinking`, `@agentsy/tool-calls`, `@agentsy/xml-filter`) | High         | 0.5 day    | formatting.ts, thinkingParser.ts, toolUtils.ts, provider.ts |
+| Update dependency graph to remove deprecated `@agentsy/core` and add focused packages                                                                                  | High         | 0.2 day    | package.json, pnpm-lock.yaml                                |
+| Preserve compatibility wrappers for API shape differences (e.g. context split `remaining` -> `content`, tool payload helper aliasing)                                  | Medium       | 0.2 day    | formatting.ts, toolUtils.ts, tests                          |
+| Update developer documentation to reflect focused package model and migration guidance                                                                                 | Medium       | 0.3 day    | docs/developers/\*.md, docs/plans/remediation-plan.md       |
+
 ## **Phase 1: Immediate Stabilization (Sprint 1-2)**
 
 Phase 1 targets the highest-impact issues that can be resolved quickly with minimal risk. These items address the code duplication problem, the most dangerous error handling gaps, and the security hardening opportunities. The estimated total effort for Phase 1 is 3-5 developer days.
@@ -251,14 +262,15 @@ Phase 3 encompasses the longer-term improvements that align the extension with t
 
 The implementation roadmap provides a visual timeline for executing the remediation plan across three phases. The timeline assumes a single developer working part-time on remediation alongside normal feature development. If a dedicated sprint is allocated, the timeline can be compressed accordingly.
 
-| **Sprint** | **Phase**     | **Key Deliverables**                                                  | **Exit Criteria**                                                                |
-| ---------- | ------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| 1          | Stabilization | chatUtils.ts extraction, silent catch logging, testConnection timeout | All Phase 1 items merged; existing tests pass; no regression in E2E tests        |
-| 2          | Stabilization | execFileSync migration, formatBytes consolidation, dead code removal  | Code duplication reduced by 80%+; zero silent catch blocks remain                |
-| 3-4        | Consolidation | File locking, stream error handling, disambiguation config            | No data loss from race conditions; stream errors gracefully reported             |
-| 5          | Consolidation | Legacy settings cleanup, deprecated API updates, tool descriptions    | Zero deprecation warnings; settings migration fully complete                     |
-| 6-7        | Maturity      | prompt-tsx evaluation, MCP investigation, chat location awareness     | Architecture decision record published for prompt-tsx and MCP                    |
-| 8-10       | Maturity      | extension.ts split, per-request client isolation, mid-stream errors   | No file exceeds 400 lines; all recommended patterns from VS Code AI docs adopted |
+| **Sprint** | **Phase**         | **Key Deliverables**                                                  | **Exit Criteria**                                                                |
+| ---------- | ----------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 0          | Agentsy Migration | Focused-package import migration, dependency swap, docs refresh       | No `@agentsy/core` imports remain; compile/tests green                           |
+| 1          | Stabilization     | chatUtils.ts extraction, silent catch logging, testConnection timeout | All Phase 1 items merged; existing tests pass; no regression in E2E tests        |
+| 2          | Stabilization     | execFileSync migration, formatBytes consolidation, dead code removal  | Code duplication reduced by 80%+; zero silent catch blocks remain                |
+| 3-4        | Consolidation     | File locking, stream error handling, disambiguation config            | No data loss from race conditions; stream errors gracefully reported             |
+| 5          | Consolidation     | Legacy settings cleanup, deprecated API updates, tool descriptions    | Zero deprecation warnings; settings migration fully complete                     |
+| 6-7        | Maturity          | prompt-tsx evaluation, MCP investigation, chat location awareness     | Architecture decision record published for prompt-tsx and MCP                    |
+| 8-10       | Maturity          | extension.ts split, per-request client isolation, mid-stream errors   | No file exceeds 400 lines; all recommended patterns from VS Code AI docs adopted |
 
 Each sprint should conclude with a full test run (unit tests, integration tests, and CodeQL analysis) to verify that no regressions have been introduced. The exit criteria for each sprint are defined above and should be treated as hard gates before proceeding to the next sprint.
 
@@ -279,17 +291,20 @@ The following risk assessment identifies potential obstacles to successful remed
 
 ## **A. Reviewed Documentation Sources**
 
-| **Source**          | **URL**                                                                    | **Key Topics**                                   |
-| ------------------- | -------------------------------------------------------------------------- | ------------------------------------------------ |
-| VS Code AI Tools    | code.visualstudio.com/api/extension-guides/ai/tools                        | Tool naming, descriptions, confirmation, schema  |
-| VS Code Chat API    | code.visualstudio.com/api/extension-guides/ai/chat                         | Participants, commands, follow-ups, streaming    |
-| VS Code LM Provider | code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider | Provider interface, model info, silent mode      |
-| VS Code LM Consumer | code.visualstudio.com/api/extension-guides/ai/language-model               | Model selection, sendRequest, error handling     |
-| VS Code Prompt TSX  | code.visualstudio.com/api/extension-guides/ai/prompt-tsx                   | Priority pruning, token budgets, component model |
-| VS Code MCP Guide   | code.visualstudio.com/api/extension-guides/ai/mcp                          | MCP servers, tools, resources, OAuth, apps       |
-| Ollama JS SDK       | github.com/ollama/ollama-js                                                | Client init, chat, streaming, model mgmt         |
-| Ollama REST API     | docs.ollama.com/api/introduction                                           | Endpoints, streaming, errors, OpenAI compat      |
-| Opilot Repository   | github.com/selfagency/opilot                                               | 18 source files, v1.5.0                          |
+| **Source**              | **URL**                                                                    | **Key Topics**                                    |
+| ----------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
+| VS Code AI Tools        | code.visualstudio.com/api/extension-guides/ai/tools                        | Tool naming, descriptions, confirmation, schema   |
+| VS Code Chat API        | code.visualstudio.com/api/extension-guides/ai/chat                         | Participants, commands, follow-ups, streaming     |
+| VS Code LM Provider     | code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider | Provider interface, model info, silent mode       |
+| VS Code LM Consumer     | code.visualstudio.com/api/extension-guides/ai/language-model               | Model selection, sendRequest, error handling      |
+| VS Code Prompt TSX      | code.visualstudio.com/api/extension-guides/ai/prompt-tsx                   | Priority pruning, token budgets, component model  |
+| VS Code MCP Guide       | code.visualstudio.com/api/extension-guides/ai/mcp                          | MCP servers, tools, resources, OAuth, apps        |
+| Agentsy Migration Guide | agentsy.self.agency/migrating-from-llm-stream-parser.html                  | Focused package mapping, install/import migration |
+| Agentsy Package Catalog | agentsy.self.agency/packages.html                                          | Published package boundaries and status           |
+| Agentsy API Index       | agentsy.self.agency/api.html                                               | Current public exports across package family      |
+| Ollama JS SDK           | github.com/ollama/ollama-js                                                | Client init, chat, streaming, model mgmt          |
+| Ollama REST API         | docs.ollama.com/api/introduction                                           | Endpoints, streaming, errors, OpenAI compat       |
+| Opilot Repository       | github.com/selfagency/opilot                                               | 18 source files, v1.5.0                           |
 
 ## **B. Complete Issue Inventory**
 

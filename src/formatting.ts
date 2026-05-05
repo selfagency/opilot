@@ -1,17 +1,14 @@
 /**
  * Shared formatting utilities for extension and provider paths.
- * Implementation delegated to @selfagency/llm-stream-parser.
+ * Implementation delegated to focused @agentsy/* packages.
  */
 
-import { splitLeadingXmlContextBlocks as _split } from '@selfagency/llm-stream-parser/context';
+import { splitLeadingXmlContextBlocks as _split } from '@agentsy/context';
 
-export { dedupeXmlContextBlocksByTag, stripXmlContextTags } from '@selfagency/llm-stream-parser/context';
-export {
-  formatXmlLikeResponseForDisplay,
-  sanitizeNonStreamingModelOutput,
-} from '@selfagency/llm-stream-parser/formatting';
-export { createXmlStreamFilter } from '@selfagency/llm-stream-parser/xml-filter';
-export type { XmlStreamFilter } from '@selfagency/llm-stream-parser/xml-filter';
+export { dedupeXmlContextBlocksByTag, stripXmlContextTags } from '@agentsy/context';
+export { formatXmlLikeResponseForDisplay, sanitizeNonStreamingModelOutput } from '@agentsy/formatting';
+export { createXmlStreamFilter } from '@agentsy/xml-filter';
+export type { XmlStreamFilter } from '@agentsy/xml-filter';
 
 /**
  * Return shape matching existing call sites that access `.content`.

@@ -175,7 +175,7 @@ export function registerStatusBarHeartbeat(
   host: string,
   diagnostics: DiagnosticsLogger,
 ): StatusBarHeartbeatRegistration {
-  const item = vscode.window.createStatusBarItem('opilot.status', vscode.StatusBarAlignment.Right, 100);
+  const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   item.command = 'opilot.checkServerHealth';
   item.text = `$(loading~spin) Ollama…`;
   item.tooltip = 'Checking Ollama server…';
