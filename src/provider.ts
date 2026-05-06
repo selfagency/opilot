@@ -3,7 +3,7 @@ import { appendToBlockquote } from '@agentsy/formatting';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { ChatResponse, Message, Ollama, ShowResponse, Tool } from 'ollama';
+import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import {
   CancellationToken,
   EventEmitter,
@@ -37,6 +37,15 @@ import {
 } from './formatting';
 import { getModelOptionsForModel, type ModelOptionOverrides, type ModelSettingsStore } from './modelSettings.js';
 import {
+  buildReducedCloudRescueMessages as buildReducedCloudRescueMessagesUtil,
+  getAdvertisedContextLength as getAdvertisedContextLengthUtil,
+  getAdvertisedToolCalling as getAdvertisedToolCallingUtil,
+  isThinkingModel as isThinkingModelUtil,
+  isToolModel as isToolModelUtil,
+  isVisionModel as isVisionModelUtil,
+  withModelPickerMetadata as withModelPickerMetadataUtil,
+} from './providerModelUtils.js';
+import {
   deepFindInObject as deepFindInObjectUtil,
   deepFindPromptString as deepFindPromptStringUtil,
   extractMeaningfulUserText as extractMeaningfulUserTextUtil,
@@ -49,19 +58,6 @@ import {
   summarizeIncomingRequest as summarizeIncomingRequestUtil,
   summarizePart as summarizePartUtil,
 } from './providerPromptUtils.js';
-import {
-  buildReducedCloudRescueMessages as buildReducedCloudRescueMessagesUtil,
-  extractContextLengthFromInfo as extractContextLengthFromInfoUtil,
-  extractContextLengthFromParameters as extractContextLengthFromParametersUtil,
-  getAdvertisedContextLength as getAdvertisedContextLengthUtil,
-  getAdvertisedToolCalling as getAdvertisedToolCallingUtil,
-  isThinkingModel as isThinkingModelUtil,
-  isToolModel as isToolModelUtil,
-  isVisionModel as isVisionModelUtil,
-  parseModelContextLength as parseModelContextLengthUtil,
-  parseModelMaxOutputTokens as parseModelMaxOutputTokensUtil,
-  withModelPickerMetadata as withModelPickerMetadataUtil,
-} from './providerModelUtils.js';
 import { getSetting } from './settings.js';
 import { ThinkingParser } from './thinkingParser.js';
 import { buildNativeToolsArray, isToolsNotSupportedError } from './toolUtils.js';
@@ -83,6 +79,22 @@ type ChatStreamFn = (
  * Ollama Chat Model Provider
  */
 export class OllamaChatModelProvider implements LanguageModelChatProvider<LanguageModelChatInformation> {
+  private isThinkingNotSupportedError(error: unknown): boolean {
+    return (
+      error instanceof Error &&
+      error.name === 'ResponseError' &&
+      error.message.toLowerCase().includes('does not support thinking')
+    );
+  }
+
+  private isThinkingInternalServerError(error: unknown): boolean {
+    return (
+      error instanceof Error &&
+      error.name === 'ResponseError' &&
+      error.message.toLowerCase().includes('internal server error') &&
+      error.message.toLowerCase().includes('thinking')
+    );
+  }
   private models: Map<string, LanguageModelChatInformation> = new Map();
   private modelInfoCache: Map<string, { info: LanguageModelChatInformation; updatedAtMs: number }> = new Map();
   private cachedModelList: LanguageModelChatInformation[] = [];
@@ -168,7 +180,58 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             return cached.info;
           }
 
-          const info = await this.getChatModelInfoWithFallback(model.name);
+          // Attempt to fetch detailed model info via /show with a short timeout
+          let detailedInfo: LanguageModelChatInformation | undefined;
+          try {
+            const showPromise = this.client.show({ model: model.name }) as unknown as Promise<Record<string, unknown>>;
+            const timed = new Promise<Record<string, unknown>>((resolve, reject) => {
+              const to = setTimeout(() => reject(new Error('show timeout')), MODEL_SHOW_TIMEOUT_MS);
+              showPromise
+                .then(v => {
+                  clearTimeout(to);
+                  resolve(v);
+                })
+                .catch(err => {
+                  clearTimeout(to);
+                  reject(err);
+                });
+            });
+
+            const show = await timed;
+            const nativeToolCalling = isToolModelUtil(show);
+            const supportsVision = isVisionModelUtil(show);
+            const providerModelId = this.toProviderModelId(model.name);
+
+            // Update capability maps for runtime checks
+            this.nativeToolCallingByModelId.set(model.name, nativeToolCalling);
+            this.nativeToolCallingByModelId.set(providerModelId, nativeToolCalling);
+            this.visionByModelId.set(model.name, supportsVision);
+            this.visionByModelId.set(providerModelId, supportsVision);
+
+            detailedInfo = withModelPickerMetadataUtil(
+              {
+                id: providerModelId,
+                name: formatModelName(model.name),
+                family: '🦙 Ollama',
+                version: '1.0.0',
+                detail: '🦙 Ollama',
+                tooltip: `🦙 Ollama • ${model.name}`,
+                // Context length unknown at this stage; advertise conservatively
+                maxInputTokens: this.getAdvertisedContextLength(0, nativeToolCalling),
+                maxOutputTokens: 4096,
+                capabilities: {
+                  imageInput: supportsVision,
+                  toolCalling: getAdvertisedToolCallingUtil(nativeToolCalling),
+                },
+              },
+              nativeToolCalling,
+              ASK_PICKER_CATEGORY,
+            );
+          } catch {
+            // fall back to base info when /show fails or times out
+          }
+
+          const info = detailedInfo ?? this.getBaseChatModelInfo(model.name);
           const updatedAtMs = Date.now();
           this.modelInfoCache.set(model.name, { info, updatedAtMs });
           this.models.set(model.name, info);
@@ -262,25 +325,23 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     this.nativeToolCallingByModelId.set(providerModelId, nativeToolCalling);
     this.visionByModelId.set(modelId, false);
     this.visionByModelId.set(providerModelId, false);
-    return this.withModelPickerMetadata(
-      {
-        id: providerModelId,
-        name: formatModelName(modelId),
-        family: '🦙 Ollama',
-        version: '1.0.0',
-        detail: '🦙 Ollama',
-        tooltip: `🦙 Ollama • ${modelId}`,
-        maxInputTokens: this.getAdvertisedContextLength(contextLength, false),
-        // Output tokens should not mirror picker-context fallback values.
-        // Use a conservative default when model metadata is unavailable.
-        maxOutputTokens: 4096,
-        capabilities: {
-          imageInput: false,
-          toolCalling: this.getAdvertisedToolCalling(nativeToolCalling),
-        },
+    const info: LanguageModelChatInformation = {
+      id: providerModelId,
+      name: formatModelName(modelId),
+      family: '🦙 Ollama',
+      version: '1.0.0',
+      detail: '🦙 Ollama',
+      tooltip: `🦙 Ollama • ${modelId}`,
+      maxInputTokens: this.getAdvertisedContextLength(contextLength, false),
+      // Output tokens should not mirror picker-context fallback values.
+      // Use a conservative default when model metadata is unavailable.
+      maxOutputTokens: 4096,
+      capabilities: {
+        imageInput: false,
+        toolCalling: getAdvertisedToolCallingUtil(nativeToolCalling),
       },
-      nativeToolCalling,
-    );
+    };
+    return withModelPickerMetadataUtil(info, nativeToolCalling, ASK_PICKER_CATEGORY);
   }
 
   private toProviderModelId(modelId: string): string {
@@ -308,157 +369,148 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    *
    * Workaround: advertise `toolCalling: true` for picker visibility.
    * Runtime tool behavior is still gated by native capability checks via
-   * `nativeToolCallingByModelId` before sending tools in requests.
-   */
-  private getAdvertisedToolCalling(_nativeToolCalling: boolean): boolean {
-    return getAdvertisedToolCallingUtil(_nativeToolCalling);
+  private _prepareRequestContext(
+    model: LanguageModelChatInformation,
+    messages: readonly LanguageModelChatRequestMessage[],
+    options: ProvideLanguageModelChatResponseOptions,
+  ): {
+    runtimeModelId: string;
+    effectiveMessages: ReturnType<OllamaChatModelProvider['ensurePromptMessage']>;
+    modelOptions: ModelOptionOverrides;
+    maxInputTokens: number;
+  } {
+    this.clearToolCallIdMappings();
+    const runtimeModelId = this.toRuntimeModelId(model.id);
+
+    this.outputChannel.info(
+      '[context] incoming request shape: ' + JSON.stringify(this.summarizeIncomingRequest(messages, options), null, 2),
+    );
+
+    // Convert VS Code messages to Ollama format, stripping images for non-vision models
+    const supportsVision = this.visionByModelId.get(model.id) ?? this.visionByModelId.get(runtimeModelId) ?? false;
+    const rawMessages = this.toOllamaMessages(messages, supportsVision);
+    const effectiveMessages = this.ensurePromptMessage(rawMessages, options);
+    this.outputChannel.info(
+      '[context] before truncation: ' +
+        effectiveMessages.length +
+        ' messages, ' +
+        JSON.stringify(effectiveMessages, null, 2).length +
+        ' chars, model.maxInputTokens=' +
+        model.maxInputTokens,
+    );
+
+    const modelSettings = this.getModelSettings?.();
+    const modelOptions: ModelOptionOverrides = modelSettings
+      ? getModelOptionsForModel(modelSettings, runtimeModelId)
+      : {};
+
+    const maxInputTokens = resolveContextLimit(
+      model.maxInputTokens ?? 0,
+      modelOptions.num_ctx,
+      getSetting<number>('maxContextTokens', 0),
+    );
+
+    return { runtimeModelId, effectiveMessages, modelOptions, maxInputTokens };
   }
 
-  /**
-   * Hint VS Code's model picker to group non-tool models under Ask.
-   */
-  private withModelPickerMetadata(
-    info: LanguageModelChatInformation,
-    nativeToolCalling: boolean,
-  ): LanguageModelChatInformation {
-    return withModelPickerMetadataUtil(info, nativeToolCalling, ASK_PICKER_CATEGORY);
-  }
-
-  /**
-   * Resolve chat model information with a timeout fallback so model discovery
-   * cannot block chat startup on slow /api/show responses.
-   */
-  private async getChatModelInfoWithFallback(modelId: string): Promise<LanguageModelChatInformation> {
-    const fallback = this.getBaseChatModelInfo(modelId);
-
-    try {
-      const timed = await Promise.race<LanguageModelChatInformation | undefined>([
-        this.getChatModelInfo(modelId),
-        new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), MODEL_SHOW_TIMEOUT_MS)),
-      ]);
-
-      return timed ?? fallback;
+  async provideLanguageModelChatResponse(
+    model: LanguageModelChatInformation,
+    messages: readonly LanguageModelChatRequestMessage[],
+    options: ProvideLanguageModelChatResponseOptions,
+    progress: Progress<LanguageModelResponsePart>,
+    token: CancellationToken,
+  ): Promise<void> {
+    const { runtimeModelId, effectiveMessages, modelOptions, maxInputTokens } = this._prepareRequestContext(
+      model,
+      messages,
+      options,
+    );
     } catch {
       return fallback;
+    if (maxInputTokens > 0) {
+      // Truncate messages using provided utility
+      // Resolve prompt references for truncation context
+      (async () => {
+        const refs = await resolvePromptReferences(options.references ?? [], this.outputChannel);
+        const truncated = await renderOllamaPrompt(
+          effectiveMessages as Message[],
+          maxInputTokens,
+          text => Math.ceil(text.length / 4),
+          refs,
+        );
+        effectiveMessages.splice(0, effectiveMessages.length, ...truncated);
+      })();
     }
-  }
 
-  /**
-   * Extract context_length from a Map or object by searching for the key or key.context_length suffix
-   */
-  private extractContextLengthFromInfo(modelinfo: Map<string, unknown> | Record<string, unknown>): unknown {
-    return extractContextLengthFromInfoUtil(modelinfo);
-  }
+    // Tool invocation loop if tools provided and token
+    // TODO: Extract to separate function for clarity
+    const vscodeLmTools = getSelectedLmTools(options.request);
+    let useXmlFallback = false;
+    if (vscodeLmTools.length > 0 && options.request.toolInvocationToken) {
+      const ollamaTools: Tool[] = buildNativeToolsArray(vscodeLmTools as unknown as Array<{ name: string }>)
+;
+      const shouldThinkInToolLoop =
+        typeof modelOptions.think === 'boolean'
+          ? modelOptions.think
+          : isThinkingModelId(runtimeModelId);
 
-  /**
-   * Extract context_length from parameters string (num_ctx field)
-   */
-  private extractContextLengthFromParameters(parameters: string | undefined): number {
-    return extractContextLengthFromParametersUtil(parameters);
-  }
+      const toolLoopSuccess = await executeToolCallingLoop({
+        isCloudModel: options.isCloudModel,
+        modelId: runtimeModelId,
+        ollamaMessages: [],
+        ollamaTools,
+        shouldThinkInToolLoop,
+        effectiveClient: options.effectiveClient,
+        baseUrl: options.baseUrl,
+        authToken: options.authToken,
+        modelOptions,
+        logOpenAiCompatFallback: options.logOpenAiCompatFallback,
+        request: options.request,
+        stream: options.stream,
+        token,
+        outputChannel: this.outputChannel,
+      });
 
-  /**
-   * Get information about a specific model
-   */
-  private parseModelContextLength(
-    modelinfo: Map<string, unknown> | Record<string, unknown> | undefined,
-    parameters: string | undefined,
-  ): number {
-    return parseModelContextLengthUtil(modelinfo, parameters);
-  }
+      useXmlFallback = !toolLoopSuccess;
 
-  private parseModelMaxOutputTokens(parameters: string | undefined, advertisedContextLength: number): number {
-    return parseModelMaxOutputTokensUtil(parameters, advertisedContextLength);
-  }
-
-  private async getChatModelInfo(modelId: string): Promise<LanguageModelChatInformation | undefined> {
-    try {
-      const response = await this.client.show({ model: modelId });
-      const providerModelId = this.toProviderModelId(modelId);
-
-      // Prefer the model's actual context window; fall back to the parsed num_ctx parameter, then 0.
-      const typedResponse = response as ShowResponse & { modelinfo?: Map<string, unknown> | Record<string, unknown> };
-      const modelinfo =
-        (typedResponse.model_info as Map<string, unknown> | Record<string, unknown> | undefined) ??
-        typedResponse.modelinfo;
-      const parameters = typedResponse.parameters;
-      // Ollama exposes context_length in model_info using family-specific keys
-      // (e.g. llama.context_length, qwen2.context_length, gemma.context_length).
-      const contextLength = this.parseModelContextLength(modelinfo, parameters);
-
-      if (this.isThinkingModel(response)) {
-        this.thinkingModels.add(modelId);
-      }
-
-      const nativeToolCalling = this.isToolModel(response);
-      const isVision = this.isVisionModel(response);
-      this.nativeToolCallingByModelId.set(modelId, nativeToolCalling);
-      this.nativeToolCallingByModelId.set(providerModelId, nativeToolCalling);
-      this.visionByModelId.set(modelId, isVision);
-      this.visionByModelId.set(providerModelId, isVision);
-      const advertisedContextLength = this.getAdvertisedContextLength(contextLength, nativeToolCalling);
-      const maxOutputTokens = this.parseModelMaxOutputTokens(parameters, advertisedContextLength);
-
-      return this.withModelPickerMetadata(
-        {
-          id: providerModelId,
-          name: formatModelName(modelId),
-          family: '🦙 Ollama',
-          version: '1.0.0',
-          detail: '🦙 Ollama',
-          tooltip: `🦙 Ollama • ${modelId}`,
-          maxInputTokens: advertisedContextLength,
-          maxOutputTokens,
-          capabilities: {
-            imageInput: isVision,
-            toolCalling: this.getAdvertisedToolCalling(nativeToolCalling),
-          },
-        },
-        nativeToolCalling,
-      );
-    } catch (error) {
-      this.outputChannel.exception(`[client] failed to get model info for ${modelId}`, error);
-      return undefined;
+      if (toolLoopSuccess && !useXmlFallback) return;
     }
-  }
 
-  /**
-   * Returns true when the Ollama SDK reports that the model does not support
-   * the `think` option (HTTP 400 "does not support thinking").
-   */
-  private isThinkingNotSupportedError(error: unknown): boolean {
-    return (
-      error instanceof Error &&
-      error.name === 'ResponseError' &&
-      error.message.toLowerCase().includes('does not support thinking')
-    );
-  }
+    if (useXmlFallback && options.request.toolInvocationToken) {
+      const xmlFallbackCompleted = await handleXmlToolFallback({
+        modelId: runtimeModelId,
+        isCloudModel: options.isCloudModel,
+        ollamaMessages: [],
+        vscodeLmTools,
+        request: options.request,
+        stream: options.stream,
+        token,
+        effectiveClient: options.effectiveClient,
+        baseUrl: options.baseUrl,
+        authToken: options.authToken,
+        modelOptions,
+        logOpenAiCompatFallback: options.logOpenAiCompatFallback,
+        outputChannel: this.outputChannel,
+      });
 
-  /**
-   * Some backends (notably certain cloud-routed models) can fail with a generic
-   * HTTP 500 when `think: true` is sent, instead of returning an explicit
-   * "does not support thinking" message. Treat this as retryable once without
-   * thinking.
-   */
-  private isThinkingInternalServerError(error: unknown): boolean {
-    if (!(error instanceof Error) || error.name !== 'ResponseError') {
-      return false;
+      if (xmlFallbackCompleted) return;
     }
-    // Match 500 error AND check for thinking context in the error message
-    const is500Error =
-      /(500\s+internal\s+server\s+error|"StatusCode"\s*:\s*500|"status_code"\s*:\s*500|"error"\s*:\s*"Internal Server Error")/i.test(
-        error.message,
-      );
-    const hasThinkingContext = /think(?:ing)?/i.test(error.message);
-    return is500Error && hasThinkingContext;
+
+    await streamModelResponse({
+      modelId: runtimeModelId,
+      isCloudModel: options.isCloudModel,
+      ollamaMessages: [],
+      modelOptions,
+      shouldThinkInitial: typeof modelOptions.think === 'boolean' ? modelOptions.think : isThinkingModelId(runtimeModelId),
+      effectiveClient: options.effectiveClient,
+      baseUrl: options.baseUrl,
+      authToken: options.authToken,
+      stream: options.stream,
+      token,
+      outputChannel: this.outputChannel,
+      logOpenAiCompatFallback: options.logOpenAiCompatFallback,
+    });
   }
-
-  // normalizeToolParameters/isToolsNotSupportedError provided by src/toolUtils.ts
-
-  private buildReducedCloudRescueMessages(messages: Message[]): Message[] {
-    return buildReducedCloudRescueMessagesUtil(messages);
-  }
-
   /**
    * Check if model supports tool use
    */
@@ -581,19 +633,19 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     }> = [
       {
         label: 'reduced-context+think+tools',
-        messages: this.buildReducedCloudRescueMessages(rescueBaseMessages),
+        messages: buildReducedCloudRescueMessagesUtil(rescueBaseMessages),
         think: initialShouldThink,
         tools,
       },
       {
         label: 'reduced-context+think',
-        messages: this.buildReducedCloudRescueMessages(rescueBaseMessages),
+        messages: buildReducedCloudRescueMessagesUtil(rescueBaseMessages),
         think: initialShouldThink,
         tools: undefined,
       },
       {
         label: 'reduced-context',
-        messages: this.buildReducedCloudRescueMessages(rescueBaseMessages),
+        messages: buildReducedCloudRescueMessagesUtil(rescueBaseMessages),
         think: false,
         tools: undefined,
       },
@@ -717,6 +769,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       this.outputChannel.exception(`[client] chat request failed for model ${runtimeModelId}`, innerError);
 
       // Attempt recovery from thinking errors
+
       if (
         shouldThink &&
         (this.isThinkingNotSupportedError(innerError) || this.isThinkingInternalServerError(innerError))
