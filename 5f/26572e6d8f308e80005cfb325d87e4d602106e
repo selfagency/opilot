@@ -1,0 +1,29 @@
+src/extension/lm-api.ts
+  s_1b879d0ddd3a7c::t_46aa6c22787a47 1-100,107-159
+  ai_agent 101-106
+src/extension.ts
+  s_1b879d0ddd3a7c::t_190b158f1dd647 557
+  h_627b419bd8fa0f 17-25
+  s_1b879d0ddd3a7c::t_f06434b20065de 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "5f26572e6d8f308e80005cfb325d87e4d602106e",
+  "prompts": {},
+  "humans": {
+    "h_627b419bd8fa0f": {
+      "author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_1b879d0ddd3a7c": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "87d330ab-acaf-488e-9f68-cf28aa68c350",
+        "model": "unknown"
+      },
+      "human_author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  }
+}
