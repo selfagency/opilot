@@ -50,7 +50,7 @@ The Opilot extension is a mature, well-engineered project with strong fundamenta
 
 The most impactful finding is the duplication of six chat utility functions across extension.ts and provider.ts, which creates a maintenance burden and increases the risk of behavioral divergence during future updates. Secondary concerns include silent error swallowing in OpenAI-compatibility fallback paths, the absence of timeouts on connection testing, unsafe file-write operations without locking, and several opportunities to better leverage the VS Code AI extension APIs as documented in the official guides. The remediation plan prioritizes these findings into three phases: an immediate stabilization sprint addressing the high-impact items, a consolidation phase for architectural improvements, and a maturity phase for long-term quality enhancements.
 
-# **2\. Background & Objectives**
+## **2\. Background & Objectives**
 
 ## **2.1 Project Overview**
 
@@ -60,7 +60,7 @@ The extension architecture comprises 18 TypeScript source files organized into f
 
 The review was initiated to ensure that the Opilot extension fully conforms to the latest VS Code AI extension APIs and best practices documented across six official Microsoft guides covering Language Model Tools, Chat Participants, Language Model Chat Providers, the Language Model consumer API, Prompt TSX, and MCP (Model Context Protocol). Additionally, the review validates correct usage of the Ollama JavaScript SDK (ollama-js) and REST API. The objective is to produce a gap analysis and a prioritized remediation roadmap that the maintainers can execute to bring the extension to full compliance with documented best practices.
 
-# **3\. Scope & Methodology**
+## **3\. Scope & Methodology**
 
 ## **3.1 Review Methodology**
 
@@ -70,7 +70,7 @@ Cross-referencing was performed by mapping each finding against the relevant doc
 
 The review scope covers the complete source tree at version 1.5.0, including 18 TypeScript source files, package.json configuration, tsconfig.json, and tsup.config.mjs. The review does not cover the compiled output, marketplace listing content, CI/CD pipeline configuration, or third-party dependencies beyond their declared versions. Test files were examined for coverage gaps but were not themselves reviewed for correctness.
 
-# **4\. Review Findings Summary**
+## **4\. Review Findings Summary**
 
 The comprehensive review identified a total of 42 distinct issues distributed across 13 categories. The distribution reveals a healthy project with no critical vulnerabilities but several areas requiring focused attention. The single high-severity finding relates to architectural code duplication that poses the greatest maintenance risk. Seven medium-severity issues span error handling, robustness, security, type safety, and configuration management, representing meaningful gaps that should be addressed in the near term. The remaining 34 low-severity items cover code quality, performance optimization, documentation completeness, dependency management, and minor VS Code API modernization opportunities.
 
@@ -93,7 +93,7 @@ The comprehensive review identified a total of 42 distinct issues distributed ac
 
 The cross-reference gaps category (10 low-severity items) represents areas where the Opilot implementation does not fully leverage features or patterns recommended in the VS Code AI extension documentation. These are not bugs or defects, but rather missed opportunities to improve the extension's integration quality, user experience, and alignment with the evolving VS Code AI platform. Examples include the absence of @vscode/prompt-tsx for prompt management, missing disambiguation configuration for chat participant auto-routing, and the potential to expose Ollama capabilities as MCP tools for broader ecosystem integration.
 
-# **5\. Detailed Issue Analysis**
+## **5\. Detailed Issue Analysis**
 
 ## **5.1 Architecture & Code Duplication**
 
@@ -176,7 +176,7 @@ The following cross-reference gaps were identified by comparing the Opilot imple
 | 9     | Ollama SDK           | Abort semantics: ollama.abort() kills ALL streams on a client instance. The extension should use per-request client instances for isolation, or implement a per-stream abort mechanism.                                                                  | Low          |
 | 10    | Ollama API           | Error response parsing: Mid-stream errors are returned as NDJSON objects with an error property. The OpenAI-compat layer should detect and surface these mid-stream errors to the user.                                                                  | Low          |
 
-# **6\. Remediation Plan**
+## **6\. Remediation Plan**
 
 The remediation plan is organized into three phases, ordered by urgency and dependency. Phase 1 addresses immediate stability and maintainability concerns. Phase 2 focuses on architectural consolidation and API compliance. Phase 3 targets long-term quality improvements and platform alignment. Each action item includes an estimated effort, dependencies, and expected outcome.
 
@@ -232,7 +232,7 @@ Phase 3 encompasses the longer-term improvements that align the extension with t
 | Improve mid-stream error detection in OpenAI-compat layer       | Low          | 1 day      | openaiCompat.ts                               |
 | Split extension.ts into focused modules                         | Low          | 3-5 days   | extension.ts -> multiple modules              |
 
-# **7\. Implementation Roadmap**
+## **7\. Implementation Roadmap**
 
 The implementation roadmap provides a visual timeline for executing the remediation plan across three phases. The timeline assumes a single developer working part-time on remediation alongside normal feature development. If a dedicated sprint is allocated, the timeline can be compressed accordingly.
 
@@ -248,7 +248,7 @@ The implementation roadmap provides a visual timeline for executing the remediat
 
 Each sprint should conclude with a full test run (unit tests, integration tests, and CodeQL analysis) to verify that no regressions have been introduced. The exit criteria for each sprint are defined above and should be treated as hard gates before proceeding to the next sprint.
 
-# **8\. Risk Assessment**
+## **8\. Risk Assessment**
 
 The following risk assessment identifies potential obstacles to successful remediation and proposes mitigation strategies for each.
 
@@ -261,7 +261,7 @@ The following risk assessment identifies potential obstacles to successful remed
 | Splitting extension.ts breaks activation timing           | Medium         | High       | Preserve the activate() function as the single entry point. Only extract internal logic, not activation orchestration.    |
 | Legacy settings cleanup affects existing users            | Medium         | Medium     | Add a settings version counter. Only clean up after confirming the user has successfully migrated (not on first install). |
 
-# **9\. Appendices**
+## **9\. Appendices**
 
 ## **A. Reviewed Documentation Sources**
 

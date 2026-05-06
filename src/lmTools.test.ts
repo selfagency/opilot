@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Ollama } from 'ollama';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
-import type { LocalModelsProvider } from './sidebar.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
+import type { LocalModelsProvider } from './sidebar.js';
 
 type ToolHandler = (input: Record<string, unknown>, token: unknown) => unknown | Promise<unknown>;
 

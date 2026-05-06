@@ -1,10 +1,12 @@
+import { createVSCodeChatRenderer, mapUsageToVSCode, toVSCodeToolCallPart } from '@agentsy/vscode';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promises as fsPromises } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
-import { createVSCodeChatRenderer, mapUsageToVSCode, toVSCodeToolCallPart } from '@agentsy/vscode';
+import { registerChatCustomizationProvider } from './chatCustomizationProvider.js';
+import { createChatStatusItem, disposeChatStatusItem } from './chatStatusItem.js';
 import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
@@ -32,6 +34,15 @@ import {
   type ModelOptionOverrides,
   type ModelSettingsStore,
 } from './modelSettings.js';
+import {
+  createFollowupProvider,
+  createParticipantDetectionProvider,
+  createParticipantVariableProvider,
+  createSummarizer,
+  createTitleProvider,
+  getAdditionalWelcomeMessage,
+  getHelpTextPrefix,
+} from './participantFeatures.js';
 import type { ResolvedReference } from './prompts/OllamaPrompt.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { getSetting, migrateLegacySettingsWithState } from './settings.js';
@@ -45,17 +56,6 @@ import {
   extractXmlToolCalls,
   isToolsNotSupportedError,
 } from './toolUtils.js';
-import {
-  createTitleProvider,
-  createSummarizer,
-  getHelpTextPrefix,
-  getAdditionalWelcomeMessage,
-  createFollowupProvider,
-  createParticipantVariableProvider,
-  createParticipantDetectionProvider,
-} from './participantFeatures.js';
-import { createChatStatusItem, disposeChatStatusItem } from './chatStatusItem.js';
-import { registerChatCustomizationProvider } from './chatCustomizationProvider.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';

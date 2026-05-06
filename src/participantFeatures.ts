@@ -10,8 +10,8 @@
  * - participantVariableProvider: Model selector completions (@ollama:llama3.2)
  */
 
-import * as vscode from 'vscode';
 import type { Ollama } from 'ollama';
+import * as vscode from 'vscode';
 import type { DiagnosticsLogger } from './diagnostics.js';
 
 export interface ParticipantFeaturesContext {
@@ -122,7 +122,7 @@ export function getHelpTextPrefix(): string {
   return `
 ## Ollama Local Models
 
-Chat with models running on your local Ollama instance or remote server. 
+Chat with models running on your local Ollama instance or remote server.
 
 **Capabilities:**
 - 🧠 Thinking models (qwen3, deepseek-r1, etc.)

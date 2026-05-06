@@ -10,8 +10,8 @@
 
 import { OutputMode, Raw, renderPrompt, type ITokenizer } from '@vscode/prompt-tsx';
 import type { Message } from 'ollama';
-import { OllamaPrompt } from './prompts/OllamaPrompt.js';
 import type { ResolvedReference } from './prompts/OllamaPrompt.js';
+import { OllamaPrompt } from './prompts/OllamaPrompt.js';
 
 /**
  * Base system prompt injected into every @ollama and LM API request.

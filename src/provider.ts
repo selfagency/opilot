@@ -2,7 +2,7 @@ import { appendToBlockquote } from '@agentsy/formatting';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Ollama, ChatResponse, Message, ShowResponse, Tool } from 'ollama';
+import type { ChatResponse, Message, Ollama, ShowResponse, Tool } from 'ollama';
 import {
   CancellationToken,
   EventEmitter,
@@ -23,9 +23,9 @@ import {
   window,
   workspace,
 } from 'vscode';
-import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost } from './client';
 import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
-import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, renderOllamaPrompt } from './contextUtils.js';
+import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost } from './client';
+import { BASE_SYSTEM_PROMPT, detectsRepetition, renderOllamaPrompt, resolveContextLimit } from './contextUtils.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
 import {
