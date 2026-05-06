@@ -17,7 +17,7 @@ for (const [filePath, info] of Object.entries(data)) {
   const uncoveredLines = Object.entries(info.s)
     .filter(([, count]) => count === 0)
     .map(([key]) => {
-      if (!Object.prototype.hasOwnProperty.call(safeStatementMap, key)) return null;
+      if (!Object.hasOwn(safeStatementMap, key)) return null;
       const statement = safeStatementMap[key];
       return statement?.start?.line ?? null;
     })
@@ -27,7 +27,7 @@ for (const [filePath, info] of Object.entries(data)) {
   const uncoveredFns = Object.entries(info.f)
     .filter(([, count]) => count === 0)
     .map(([key]) => {
-      if (!Object.prototype.hasOwnProperty.call(safeFnMap, key)) return null;
+      if (!Object.hasOwn(safeFnMap, key)) return null;
       const fn = safeFnMap[key];
       return fn ? `${fn.name}:L${fn.loc.start.line}` : null;
     })
@@ -36,7 +36,7 @@ for (const [filePath, info] of Object.entries(data)) {
   const uncoveredBranches = Object.entries(info.b)
     .filter(([, counts]) => counts.some(c => c === 0))
     .map(([key]) => {
-      if (!Object.prototype.hasOwnProperty.call(safeBranchMap, key)) return null;
+      if (!Object.hasOwn(safeBranchMap, key)) return null;
       const branch = safeBranchMap[key];
       return branch ? `L${branch.loc.start.line}(${branch.type})` : null;
     })

@@ -1,8 +1,6 @@
 import type { Ollama } from 'ollama';
 import * as vscode from 'vscode';
 import type { DiagnosticsLogger } from './diagnostics.js';
-import { updateChatStatusItem } from './chatStatusItem.js';
-import { getLocalModelsProvider } from './sidebar.js';
 import { formatBytes } from './formatUtils.js';
 import { affectsSetting, getSetting } from './settings.js';
 
@@ -200,16 +198,6 @@ export function registerStatusBarHeartbeat(
     );
 
     applyHealthResult(result, debounce, item);
-    // Also update the in-chat status item (if created) so chat UI reflects
-    // the same server/model information as the status bar.
-    try {
-      const provider = getLocalModelsProvider();
-      if (provider) {
-        updateChatStatusItem({ modelProvider: provider, diagnostics });
-      }
-    } catch {
-      // non-fatal; status bar remains the source of truth
-    }
   };
 
   const scheduleInterval = () => {

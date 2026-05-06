@@ -301,7 +301,7 @@ interface StreamSnapshot {
 
 **Before (Current)**:
 
-```
+```text
 provider.ts:streamModelResponse()
 ├── Manual chunk loop
 ├── Manual thinking extraction
