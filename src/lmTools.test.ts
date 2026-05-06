@@ -4,7 +4,7 @@ import type * as vscode from 'vscode';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import type { LocalModelsProvider } from './sidebar.js';
 
-type ToolHandler = (input: Record<string, unknown>, token: unknown) => unknown | Promise<unknown>;
+type ToolHandler = (input: Record<string, unknown>, token: unknown) => Promise<unknown>;
 
 // Mock vscode with our local test helper
 vi.doMock('vscode', () => ({ ...(require('./test/vscode.mock') as Record<string, unknown>) }));

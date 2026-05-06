@@ -120,12 +120,8 @@ export async function migrateLegacySettingsWithState(
   logger?: LoggerLike,
 ): Promise<SupportedSettingKey[]> {
   const shouldRunCleanup = globalState !== undefined;
-  if (shouldRunCleanup) {
-    const previousVersion = globalState.get<number>(SETTINGS_MIGRATION_VERSION_KEY) ?? 0;
-    if (previousVersion >= SETTINGS_MIGRATION_VERSION) {
-      logger?.debug?.('[settings] migration already applied; skipping legacy cleanup');
-      return [];
-    }
+  if (shouldSkipMigration(shouldRunCleanup, globalState, logger)) {
+    return [];
   }
 
   const migrated: SupportedSettingKey[] = [];
@@ -143,13 +139,7 @@ export async function migrateLegacySettingsWithState(
     }
   }
 
-  if (migrated.length > 0) {
-    logger?.info?.(
-      `[settings] migrated legacy settings (${LEGACY_SETTINGS_NAMESPACE}.* → ${SETTINGS_NAMESPACE}.*): ${migrated.join(', ')}`,
-    );
-  } else {
-    logger?.debug?.('[settings] no legacy settings required migration');
-  }
+  logMigrationResult(migrated, logger);
 
   if (shouldRunCleanup) {
     const cleaned = await cleanupLegacyShadowedSettings(opilotConfig, legacyConfig, logger);
@@ -161,6 +151,35 @@ export async function migrateLegacySettingsWithState(
   }
 
   return migrated;
+}
+
+function shouldSkipMigration(
+  shouldRunCleanup: boolean,
+  globalState: GlobalStateLike | undefined,
+  logger?: LoggerLike,
+): boolean {
+  if (!shouldRunCleanup || !globalState) {
+    return false;
+  }
+
+  const previousVersion = globalState.get<number>(SETTINGS_MIGRATION_VERSION_KEY) ?? 0;
+  if (previousVersion < SETTINGS_MIGRATION_VERSION) {
+    return false;
+  }
+
+  logger?.debug?.('[settings] migration already applied; skipping legacy cleanup');
+  return true;
+}
+
+function logMigrationResult(migrated: SupportedSettingKey[], logger?: LoggerLike): void {
+  if (migrated.length > 0) {
+    logger?.info?.(
+      `[settings] migrated legacy settings (${LEGACY_SETTINGS_NAMESPACE}.* → ${SETTINGS_NAMESPACE}.*): ${migrated.join(', ')}`,
+    );
+    return;
+  }
+
+  logger?.debug?.('[settings] no legacy settings required migration');
 }
 
 async function cleanupLegacyShadowedSettings(

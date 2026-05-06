@@ -139,6 +139,7 @@ export function resolveLineValue(value: string, lines: string[], lineIdx: number
   return { value, newIdx: lineIdx };
 }
 
+// eslint-disable-next-line complexity
 function applyParameterEntry(value: string, state: ModelfileParseState): void {
   const paramSpaceIdx = value.indexOf(' ');
   if (paramSpaceIdx !== -1) {

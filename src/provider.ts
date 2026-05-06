@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { appendToBlockquote } from '@agentsy/formatting';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -1202,11 +1203,12 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     }
 
     const extracted = this.extractTextFromDataPart(part);
-    if (extracted !== undefined) {
-      textContentRef.content += extracted;
-    } else {
+    if (extracted === undefined) {
       strippedRef.binary++;
+      return;
     }
+
+    textContentRef.content += extracted;
   }
 
   private handleToolCallPart(part: LanguageModelToolCallPart, ollamaMsg: Record<string, unknown>): void {

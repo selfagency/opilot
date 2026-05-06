@@ -1554,6 +1554,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     return result;
   }
 
+  // NOSONAR - Legacy branching logic; scheduled for decomposition in remediation plan.
   private shouldIncludeFamilyGroup(
     familyName: string,
     familyModels: ModelTreeItem[],

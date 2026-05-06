@@ -238,7 +238,13 @@ describe('activate', () => {
       Disposable: class {
         constructor(public dispose: () => void) {}
         static from(...disposables: Array<{ dispose?: () => void }>) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -372,7 +378,13 @@ describe('activate', () => {
       Disposable: class {
         constructor(public dispose: () => void) {}
         static from(...disposables: Array<{ dispose?: () => void }>) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -660,8 +672,14 @@ describe('activate', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -801,8 +819,14 @@ describe('activate', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -929,8 +953,14 @@ describe('activate', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -1063,8 +1093,14 @@ describe('activate', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -1209,8 +1245,14 @@ describe('activate', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
       CancellationToken: class {},
@@ -3060,8 +3102,14 @@ describe('activate noopLogger', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -3220,8 +3268,14 @@ describe('startLogStreaming inner callbacks', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -3369,8 +3423,14 @@ describe('handleConnectionTestFailure Open Logs path', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
       CancellationToken: class {},
@@ -3449,8 +3509,14 @@ describe('handleConnectionTestFailure Open Logs path', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
       CancellationToken: class {},

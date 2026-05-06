@@ -63,63 +63,84 @@ export interface CodeBlock {
   code: string;
 }
 
+const CODE_BLOCK_HEADER_RE = /^(\w+)(?:\s+(.+))?$/;
+const WORD_ONLY_RE = /^\w+$/;
+const MAX_CODE_BLOCK_SIZE = 1_048_576; // 1 MB
+
+function parseCodeBlockHeader(header: string): { language: string; filename?: string } {
+  if (!header) {
+    return { language: 'text' };
+  }
+
+  const parsed = CODE_BLOCK_HEADER_RE.exec(header);
+  if (!parsed) {
+    return WORD_ONLY_RE.exec(header) ? { language: header } : { language: 'text', filename: header };
+  }
+
+  const language = parsed[1] || 'text';
+  const rest = parsed[2]?.trim();
+  if (!rest) {
+    return { language };
+  }
+
+  if (rest.startsWith('file=')) {
+    return { language, filename: rest.slice(5).trim() };
+  }
+
+  // allow header forms like "typescript src/foo.ts" or just a filename
+  return { language, filename: rest };
+}
+
+function readCodeBlockFrame(
+  content: string,
+  cursor: number,
+):
+  | {
+      nextCursor: number;
+      block?: CodeBlock;
+    }
+  | undefined {
+  const start = content.indexOf('```', cursor);
+  if (start === -1) {
+    return undefined;
+  }
+
+  const headerStart = start + 3;
+  const newlineIndex = content.indexOf('\n', headerStart);
+  if (newlineIndex === -1) {
+    return { nextCursor: content.length };
+  }
+
+  const codeStart = newlineIndex + 1;
+  const end = content.indexOf('```', codeStart);
+  if (end === -1) {
+    return { nextCursor: content.length };
+  }
+
+  const header = content.substring(headerStart, newlineIndex).trim();
+  const code = content.substring(codeStart, end);
+  const { language, filename } = parseCodeBlockHeader(header);
+
+  if (code.length > MAX_CODE_BLOCK_SIZE) {
+    console.warn(`[agent-mode] skipped oversized code block at offset ${start} (${code.length} bytes)`);
+    return { nextCursor: end + 3 };
+  }
+
+  return { nextCursor: end + 3, block: { language, filename: filename?.trim(), code } };
+}
+
 export function parseCodeBlocks(content: string): CodeBlock[] {
   const blocks: CodeBlock[] = [];
-
-  // Avoid complex regexes that can exhibit catastrophic backtracking on
-  // maliciously-crafted inputs. Instead, parse fences by scanning for the
-  // literal triple-backtick markers which is linear in the size of input.
-  const MAX_BLOCK_SIZE = 1_048_576; // 1 MB - guard against extremely large blocks
-
-  let pos = 0;
+  let cursor = 0;
   while (true) {
-    const start = content.indexOf('```', pos);
-    if (start === -1) break;
-
-    const headerStart = start + 3;
-    // Require a newline after the opening fence header; if none, treat as malformed
-    const newlineIndex = content.indexOf('\n', headerStart);
-    if (newlineIndex === -1) break;
-
-    const header = content.substring(headerStart, newlineIndex).trim();
-
-    // Parse header: language [file=path]
-    let language = 'text';
-    let filename: string | undefined;
-    if (header) {
-      const m = header.match(/^(\w+)(?:\s+(.+))?$/);
-      if (m) {
-        if (m[1]) language = m[1];
-        if (m[2]) {
-          const rest = m[2].trim();
-          if (rest.startsWith('file=')) {
-            filename = rest.slice(5).trim();
-          } else {
-            // allow header forms like "typescript src/foo.ts" or just a filename
-            filename = rest;
-          }
-        }
-      } else {
-        // fallback: treat entire header as language if it looks like a single token
-        if (/^\w+$/.test(header)) language = header;
-        else filename = header;
-      }
+    const frame = readCodeBlockFrame(content, cursor);
+    if (!frame) {
+      break;
     }
-
-    const codeStart = newlineIndex + 1;
-    const end = content.indexOf('```', codeStart);
-    if (end === -1) break;
-
-    const code = content.substring(codeStart, end);
-
-    if (code.length <= MAX_BLOCK_SIZE) {
-      blocks.push({ language, filename: filename?.trim(), code });
-    } else {
-      // Skip or truncate extremely large blocks to avoid resource exhaustion.
-      console.warn(`[agent-mode] skipped oversized code block at offset ${start} (${code.length} bytes)`);
+    if (frame.block) {
+      blocks.push(frame.block);
     }
-
-    pos = end + 3;
+    cursor = frame.nextCursor;
   }
 
   return blocks;
