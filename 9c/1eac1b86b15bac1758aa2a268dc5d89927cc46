@@ -1,0 +1,26 @@
+src/extension/tooling-core.ts
+  s_1b879d0ddd3a7c::t_65cd5ef7a925af 1-65
+src/extension.ts
+  s_1b879d0ddd3a7c::t_0e0ae026da5157 60,653
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "9c1eac1b86b15bac1758aa2a268dc5d89927cc46",
+  "prompts": {},
+  "humans": {
+    "h_627b419bd8fa0f": {
+      "author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_1b879d0ddd3a7c": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "87d330ab-acaf-488e-9f68-cf28aa68c350",
+        "model": "unknown"
+      },
+      "human_author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  }
+}
