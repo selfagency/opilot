@@ -1,116 +1,76 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// use shared vscode mock factory to reduce duplication
+import { createVscodeMock } from './mocks/vscodeMockFactory';
 
 describe('activate', () => {
   beforeEach(() => {
     vi.resetModules();
+    // Provide a cheap mock for @agentsy packages used by src files so imports succeed during tests
+    vi.doMock('@agentsy/vscode', () => ({
+      createVSCodeChatRenderer: ({ stream }: { stream: { markdown: (text: string) => void } }) => ({
+        write: async (text: string) => {
+          stream.markdown(text);
+        },
+        end: async () => {},
+      }),
+      mapUsageToVSCode: (usage: { inputTokens?: number; outputTokens?: number }) => ({
+        promptTokens: usage.inputTokens ?? 0,
+        completionTokens: usage.outputTokens ?? 0,
+      }),
+      toVSCodeToolCallPart: (part: { call: { id?: string; name?: string; parameters?: Record<string, unknown> } }) => ({
+        callId: part.call.id ?? `${part.call.name ?? 'tool'}-0`,
+        name: part.call.name ?? 'tool',
+        input: part.call.parameters ?? {},
+      }),
+    }));
+    vi.doMock('@agentsy/formatting', () => ({
+      formatXmlLikeResponseForDisplay: (s: any) => s,
+      sanitizeNonStreamingModelOutput: (s: any) => s,
+      appendToBlockquote: (s: any) => s,
+    }));
+    vi.doMock('@agentsy/context', () => ({
+      splitLeadingXmlContextBlocks: (s: any) => ({ contextBlocks: [], remaining: String(s ?? '') }),
+      dedupeXmlContextBlocksByTag: (s: any) => s,
+      stripXmlContextTags: (s: any) => s,
+    }));
+    vi.doMock('@agentsy/tool-calls', () => ({
+      buildXmlToolSystemPrompt: () => '',
+      buildNativeToolsArray: (tools: Array<{ name: string; description?: string; inputSchema?: unknown }>) =>
+        tools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters:
+              tool.inputSchema && typeof tool.inputSchema === 'object'
+                ? tool.inputSchema
+                : { type: 'object', properties: {}, additionalProperties: false },
+          },
+        })),
+      extractXmlToolCalls: () => [],
+    }));
+    vi.doMock('@agentsy/xml-filter', () => ({
+      createXmlStreamFilter: () => ({
+        write: (c: any) => c,
+        end: () => '',
+      }),
+    }));
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.doUnmock('@agentsy/vscode');
+    vi.doUnmock('@agentsy/formatting');
+    vi.doUnmock('@agentsy/context');
+    vi.doUnmock('@agentsy/tool-calls');
+    vi.doUnmock('@agentsy/xml-filter');
+    vi.doUnmock('@agentsy/thinking');
   });
 
   it('registers language model provider during activation', async () => {
     const registerLanguageModelChatProvider = vi.fn(() => ({ dispose: vi.fn() }));
 
-    vi.doMock('vscode', () => ({
-      TreeItem: class {
-        constructor(public label: string) {}
-      },
-      TreeItemCollapsibleState: {
-        None: 0,
-        Collapsed: 1,
-        Expanded: 2,
-      },
-      EventEmitter: class {
-        event = {};
-        fire = vi.fn();
-      },
-      StatusBarAlignment: { Right: 2 },
-      MarkdownString: class {
-        constructor(public value: string) {}
-      },
-      ThemeColor: class {
-        constructor(public id: string) {}
-      },
-      window: {
-        createStatusBarItem: vi.fn(() => ({
-          text: '',
-          tooltip: undefined,
-          command: undefined,
-          show: vi.fn(),
-          dispose: vi.fn(),
-        })),
-        registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
-        registerWebviewViewProvider: vi.fn(() => ({ dispose: vi.fn() })),
-        createOutputChannel: vi.fn(() => ({
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-          debug: vi.fn(),
-          log: vi.fn(),
-          show: vi.fn(),
-        })),
-        showInputBox: vi.fn(),
-        showErrorMessage: vi.fn(),
-        showInformationMessage: vi.fn(),
-        withProgress: vi.fn(async (_options: any, callback: any) => callback({})),
-      },
-      commands: {
-        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
-      },
-      workspace: {
-        getConfiguration: vi.fn(() => ({
-          get: vi.fn((key: string) => {
-            if (key === 'autoStartLogStreaming') return false;
-            if (key === 'localModelRefreshInterval') return 0;
-            if (key === 'libraryRefreshInterval') return 0;
-            return undefined;
-          }),
-        })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
-      lm: {
-        registerLanguageModelChatProvider,
-      },
-      languages: {
-        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
-      },
-      chat: {
-        createChatParticipant: vi.fn(() => ({
-          iconPath: undefined,
-          dispose: vi.fn(),
-        })),
-      },
-      Uri: {
-        file: vi.fn((path: string) => ({ fsPath: path })),
-        joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
-      },
-      ChatResponseMarkdownPart: class {
-        value: any = {};
-      },
-      LanguageModelChatMessage: {
-        User: vi.fn(),
-        Assistant: vi.fn(),
-      },
-      LanguageModelTextPart: class {},
-      CancellationToken: class {},
-      InlineCompletionItem: class {
-        constructor(public readonly insertText: string) {}
-      },
-      Disposable: class {
-        constructor(public dispose: () => void) {}
-        static from(...disposables: Array<{ dispose?: () => void }>) {
-          return {
-            dispose: () => {
-              for (const disposable of disposables) {
-                disposable.dispose?.();
-              }
-            },
-          };
-        }
-      },
-    }));
+    vi.doMock('vscode', () => createVscodeMock({ lm: { registerLanguageModelChatProvider } }));
 
     vi.doMock('./client.js', () => ({
       getOllamaClient: vi.fn().mockResolvedValue({
@@ -149,105 +109,22 @@ describe('activate', () => {
       throw duplicateError;
     });
 
-    vi.doMock('vscode', () => ({
-      TreeItem: class {
-        constructor(public label: string) {}
-      },
-      TreeItemCollapsibleState: {
-        None: 0,
-        Collapsed: 1,
-        Expanded: 2,
-      },
-      EventEmitter: class {
-        event = {};
-        fire = vi.fn();
-      },
-      StatusBarAlignment: { Right: 2 },
-      MarkdownString: class {
-        constructor(public value: string) {}
-      },
-      ThemeColor: class {
-        constructor(public id: string) {}
-      },
-      window: {
-        createStatusBarItem: vi.fn(() => ({
-          text: '',
-          tooltip: undefined,
-          command: undefined,
-          show: vi.fn(),
-          dispose: vi.fn(),
-        })),
-        registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
-        registerWebviewViewProvider: vi.fn(() => ({ dispose: vi.fn() })),
-        createOutputChannel: vi.fn(() => ({
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-          debug: vi.fn(),
-          log: vi.fn(),
-          show: vi.fn(),
-        })),
-        showInputBox: vi.fn(),
-        showErrorMessage: vi.fn(),
-        showInformationMessage: vi.fn(),
-        withProgress: vi.fn(async (_options: any, callback: any) => callback({})),
-      },
-      commands: {
-        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
-      },
-      workspace: {
-        getConfiguration: vi.fn(() => ({
-          get: vi.fn((key: string) => {
-            if (key === 'autoStartLogStreaming') return false;
-            if (key === 'localModelRefreshInterval') return 0;
-            if (key === 'libraryRefreshInterval') return 0;
-            return undefined;
-          }),
-        })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
-      lm: {
-        registerLanguageModelChatProvider,
-      },
-      languages: {
-        registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
-      },
-      chat: {
-        createChatParticipant: vi.fn(() => ({
-          iconPath: undefined,
-          dispose: vi.fn(),
-        })),
-      },
-      Uri: {
-        file: vi.fn((path: string) => ({ fsPath: path })),
-        joinPath: vi.fn((_base: any, _path: string) => ({ fsPath: _path })),
-      },
-      ChatResponseMarkdownPart: class {
-        value: any = {};
-      },
-      LanguageModelChatMessage: {
-        User: vi.fn(),
-        Assistant: vi.fn(),
-      },
-      LanguageModelTextPart: class {},
-      CancellationToken: class {},
-      InlineCompletionItem: class {
-        constructor(public readonly insertText: string) {}
-      },
-      Disposable: class {
-        constructor(public dispose: () => void) {}
-        static from(...disposables: Array<{ dispose?: () => void }>) {
-          return {
-            dispose: () => {
-              for (const disposable of disposables) {
-                disposable.dispose?.();
-              }
+    vi.doMock('vscode', () =>
+      createVscodeMock({
+        lm: { registerLanguageModelChatProvider },
+        workspace: {
+          getConfiguration: () => ({
+            get: (key: string) => {
+              if (key === 'autoStartLogStreaming') return false;
+              if (key === 'localModelRefreshInterval') return 0;
+              if (key === 'libraryRefreshInterval') return 0;
+              return undefined;
             },
-          };
-        }
-      },
-    }));
+          }),
+          onDidChangeConfiguration: () => ({ dispose: () => {} }),
+        },
+      }),
+    );
 
     vi.doMock('./client.js', () => ({
       getOllamaClient: vi.fn().mockResolvedValue({

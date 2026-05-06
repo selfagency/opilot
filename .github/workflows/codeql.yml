@@ -30,7 +30,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # nosemgrep: semgrep.github-actions.security.unpinned-action
       - name: Filter changed paths
         uses: dorny/paths-filter@v3
         id: filter

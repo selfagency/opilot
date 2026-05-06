@@ -162,6 +162,10 @@ declare module 'vscode' {
   // Proposed API: Extended ChatResult for better completion handling
   interface ChatResult {
     metadata?: Record<string, unknown>;
+    /** Suggested follow-up prompt to display after the response. */
+    nextQuestion?: string;
+    /** Brief summary of how the response was generated (model, duration, etc.). */
+    details?: string;
   }
 
   // Proposed API: Chat follow-up suggestions

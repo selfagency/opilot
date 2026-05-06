@@ -180,16 +180,54 @@ The following cross-reference gaps were identified by comparing the Opilot imple
 
 The remediation plan is organized into three phases, ordered by urgency and dependency. Phase 1 addresses immediate stability and maintainability concerns. Phase 2 focuses on architectural consolidation and API compliance. Phase 3 targets long-term quality improvements and platform alignment. Each action item includes an estimated effort, dependencies, and expected outcome.
 
-## **Phase 0: Agentsy Package Migration (Immediate)**
+## **Phase 0: Agentsy Surface Adoption**
 
-`@agentsy/core` has been deprecated in favor of focused packages. Before continuing deeper roadmap items, complete a package migration slice to avoid building additional work on deprecated APIs.
+`@agentsy/core` is deprecated and superseded by the focused `@agentsy/*` packages. The current Opilot codebase already uses package-backed wrappers for the core parsing/formatting helpers and the VS Code renderer bridge, so Phase 0 is now about completing the broader surface-area adoption rather than just replacing the old parser shim.
 
-| **Action**                                                                                                                                                             | **Severity** | **Effort** | **Files Affected**                                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------- | ----------------------------------------------------------- |
-| Replace `@agentsy/core/*` imports with focused packages (`@agentsy/context`, `@agentsy/formatting`, `@agentsy/thinking`, `@agentsy/tool-calls`, `@agentsy/xml-filter`) | High         | 0.5 day    | formatting.ts, thinkingParser.ts, toolUtils.ts, provider.ts |
-| Update dependency graph to remove deprecated `@agentsy/core` and add focused packages                                                                                  | High         | 0.2 day    | package.json, pnpm-lock.yaml                                |
-| Preserve compatibility wrappers for API shape differences (e.g. context split `remaining` -> `content`, tool payload helper aliasing)                                  | Medium       | 0.2 day    | formatting.ts, toolUtils.ts, tests                          |
-| Update developer documentation to reflect focused package model and migration guidance                                                                                 | Medium       | 0.3 day    | docs/developers/\*.md, docs/plans/remediation-plan.md       |
+### Complete now
+
+| Package                            | Status   | Current use in Opilot                                                                                                     | Notes                                                                                   |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `@agentsy/thinking`                | Complete | `src/thinkingParser.ts` re-exports `ThinkingParser`                                                                       | Matches current stream tests and preserves the existing `forModel()` API.               |
+| `@agentsy/context`                 | Complete | `src/formatting.ts` wraps `splitLeadingXmlContextBlocks`, `dedupeXmlContextBlocksByTag`, `stripXmlContextTags`            | Wrapper keeps legacy `content` shape while using the package implementation internally. |
+| `@agentsy/formatting`              | Complete | `src/formatting.ts` re-exports `appendToBlockquote`, `formatXmlLikeResponseForDisplay`, `sanitizeNonStreamingModelOutput` | Used for display sanitization and blockquote formatting.                                |
+| `@agentsy/xml-filter`              | Complete | `src/formatting.ts` re-exports `createXmlStreamFilter`                                                                    | Used by both chat paths for privacy-safe XML scrubbing.                                 |
+| `@agentsy/tool-calls`              | Complete | `src/toolUtils.ts` re-exports tool-call helpers                                                                           | Used to build tool prompts, parse XML tool calls, and format tool payloads.             |
+| `@agentsy/vscode` renderer helpers | Complete | `createVSCodeChatRenderer`, `mapUsageToVSCode`, `toVSCodeToolCallPart`, `cancellationTokenToAbortSignal`                  | `showThinking` now follows `hideThinkingContent` instead of being hard-disabled.        |
+
+### In progress / next layer to adopt
+
+| Package                                         | Status      | Intended use                                                                                                                                              | Next step                                                                                                       |
+| ----------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `@agentsy/processor`                            | Not started | Replace hand-rolled stream tokenization with `LLMStreamProcessor`, `createPipeline`, `createThinkingFilter`, `createToolCallFilter`, `createSmoothStream` | Refactor `extension.ts`/`provider.ts` stream loops around the processor pipeline.                               |
+| `@agentsy/normalizers`                          | Not started | Normalize Ollama/OpenAI-compatible chunks before processing                                                                                               | Feed raw provider chunks into the processor with `normalizeOllamaChatChunk` / `normalizeOpenAICompatibleChunk`. |
+| `@agentsy/adapters`                             | Not started | Provider and raw-stream adapter helpers                                                                                                                   | Use for provider integration and any raw-stream bridging instead of bespoke glue.                               |
+| `@agentsy/structured`                           | Not started | JSON parsing/repair for tool arguments and structured responses                                                                                           | Use for resilient tool-input parsing and model-output validation.                                               |
+| `@agentsy/recovery`                             | Not started | Stream snapshot/retry continuation helpers                                                                                                                | Use for interrupted stream recovery and continuation prompts.                                                   |
+| `@agentsy/agent`                                | Not started | Multi-step agent loop orchestration                                                                                                                       | Adopt when agent mode / file edits are enabled.                                                                 |
+| `@agentsy/vscode` agent/provider helpers        | Not started | `createVSCodeAgentLoop`, `BaseLanguageModelChatProvider`, `ApiKeyManager`, settings/MCP helpers                                                           | Move the provider and agent-mode paths onto the package once the stream pipeline is characterized.              |
+| `@agentsy/renderers`                            | Not started | Standalone renderer primitives                                                                                                                            | Use for non-VS Code renderer primitives and shared renderer typing.                                             |
+| `@agentsy/ui`, `@agentsy/ag-ui`, `@agentsy/sse` | Not started | Conversation store / AG-UI bridge / SSE parsing                                                                                                           | Defer unless Opilot needs conversation-state persistence, protocol bridging, or direct SSE parsing.             |
+
+### Adoption strategy
+
+- Keep the current package-backed compatibility wrappers for `thinking`, `context`, `formatting`, `xml-filter`, and `tool-calls` so existing imports remain stable while the underlying implementation is now the published package.
+- Move the next implementation slice to `@agentsy/processor` + `@agentsy/normalizers`; that is the real missing layer for full tool-surface adoption because it removes custom stream parsing, XML chunk management, and thinking/tool-call orchestration from `extension.ts` and `provider.ts`.
+- After the processor layer lands, adopt `@agentsy/adapters` and `@agentsy/recovery` for fallback, continuation, and raw provider-stream bridging.
+- Only then move to `@agentsy/vscode` agent/provider abstractions (`createVSCodeAgentLoop`, `BaseLanguageModelChatProvider`, `ApiKeyManager`) so the agent-mode/file-edit path can be added without more bespoke orchestration.
+- Treat `@agentsy/ui` and `@agentsy/ag-ui` as optional expansion layers, not prerequisites for the current extension.
+
+### Remaining work
+
+| Item                                                                              | Status      | Why it remains                                                                                              |
+| --------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------- |
+| Remove the last `@agentsy/core` references from documentation and any stale notes | In progress | Code now uses package-backed wrappers, but the docs still mention the deprecated package in several places. |
+| Add `@agentsy/processor`/`@agentsy/normalizers` adoption in the chat pipeline     | Not started | Needed to replace manual thinking parsing and stream assembly with the package pipeline.                    |
+| Add `@agentsy/adapters`/`@agentsy/recovery` integration                           | Not started | Needed for a robust fallback/retry/continuation story.                                                      |
+| Add `@agentsy/vscode` agent/provider base classes and MCP/settings helpers        | Not started | Needed to finish the agent-mode and settings-management surface.                                            |
+| Decide whether `@agentsy/ui` / `@agentsy/ag-ui` are required for Opilot           | Not started | Only needed if we want shared conversation state or AG-UI protocol bridging.                                |
+
+Recommendation: keep the current release focused on the complete package-backed wrapper set and the next `processor`/`normalizers` adoption slice. Once that lands, the remainder should be implemented in the order above rather than adding any more custom parser or renderer logic.
 
 ## **Phase 1: Immediate Stabilization (Sprint 1-2)**
 

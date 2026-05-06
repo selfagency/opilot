@@ -34,7 +34,7 @@ type GlobalStateLike = {
 };
 
 // nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
-const SETTINGS_MIGRATION_VERSION_KEY = 'opilot.settingsMigrationVersion';
+const SETTINGS_MIGRATION_VERSION_KEY = 'opilot.settingsMigrationVersion'; // nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
 const SETTINGS_MIGRATION_VERSION = 1;
 
 type InspectResult<T> = {

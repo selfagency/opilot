@@ -4,10 +4,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    # nosemgrep: semgrep.github-actions.security.workflow-dispatch-inputs
     inputs:
       version:
-        description: 'Version to release — plain major.minor.patch (e.g. 1.2.3). Use odd minor for pre-release (0.1.x), even minor for stable (0.2.x).'
+        description:
+          'Version to release — plain major.minor.patch (e.g. 1.2.3). Use odd minor for pre-release (0.1.x), even
+          minor for stable (0.2.x).'
         required: true
         type: string
       pre_release:
@@ -197,7 +198,6 @@ jobs:
       - name: Skip repo mutation in release workflow
         run: echo "Version/changelog updates are performed locally before tagging."
 
-      # nosemgrep: semgrep.github-actions.security.unpinned-action
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -221,7 +221,6 @@ jobs:
             pnpm dlx @vscode/vsce package --no-dependencies --out opilot.vsix
           fi
 
-      # nosemgrep: semgrep.github-actions.security.unpinned-action
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

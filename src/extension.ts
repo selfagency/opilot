@@ -587,6 +587,18 @@ async function handleVsCodeLmRequest(
  * true per-token streaming. When `client` is omitted the function falls back to
  * the VS Code LM API path (used in tests and as a backwards-compatibility shim).
  */
+/** Suggest a follow-up question based on the content of the user's prompt. */
+function deriveNextQuestion(prompt: string): string | undefined {
+  const lower = prompt.toLowerCase();
+  if (/\bapply|implement|creat|generat|write|fix|refactor|add|build\b/.test(lower)) {
+    return 'Would you like to apply these changes?';
+  }
+  if (/\bmodel|pull|install|download|list models?\b/.test(lower)) {
+    return 'Would you like to pull one of these models?';
+  }
+  return undefined;
+}
+
 export async function handleChatRequest(
   request: vscode.ChatRequest,
   chatContext: vscode.ChatContext,
@@ -596,7 +608,8 @@ export async function handleChatRequest(
   outputChannel?: DiagnosticsLogger,
   extensionContext?: vscode.ExtensionContext,
   modelSettings?: ModelSettingsStore,
-): Promise<void> {
+): Promise<vscode.ChatResult | undefined> {
+  const startTime = Date.now();
   const messages: vscode.LanguageModelChatMessage[] = [];
 
   for (const turn of chatContext.history) {
@@ -624,11 +637,19 @@ export async function handleChatRequest(
       extensionContext,
       modelSettings,
     });
-    return;
+  } else {
+    // VS Code LM API path — used when no client is injected (tests / backwards compat).
+    await handleVsCodeLmRequest(request, messages, stream, token, outputChannel);
   }
 
-  // VS Code LM API path — used when no client is injected (tests / backwards compat).
-  await handleVsCodeLmRequest(request, messages, stream, token, outputChannel);
+  const durationMs = Date.now() - startTime;
+  const durationSec = (durationMs / 1000).toFixed(1);
+  const modelId = request.model.id ?? 'unknown';
+
+  return {
+    nextQuestion: deriveNextQuestion(request.prompt),
+    details: `Model: ${modelId} · ${durationSec}s`,
+  };
 }
 
 /**
@@ -1088,7 +1109,7 @@ async function streamModelResponse(options: {
   const hideThinkingContent = getSetting<boolean>('hideThinkingContent', false);
   const renderer = createVSCodeChatRenderer({
     stream: stream as unknown as Parameters<typeof createVSCodeChatRenderer>[0]['stream'],
-    showThinking: false,
+    showThinking: !hideThinkingContent,
   });
 
   const writeMarkdown = async (text: string) => {
@@ -1920,9 +1941,9 @@ export async function activate(context: vscode.ExtensionContext) {
     chatContext: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
-  ): Promise<void> => {
+  ): Promise<vscode.ChatResult | undefined> => {
     // Pass the Ollama client so the handler streams directly — no VS Code IPC overhead.
-    await handleChatRequest(request, chatContext, stream, token, client, diagnostics, context, modelSettingsStore);
+    return handleChatRequest(request, chatContext, stream, token, client, diagnostics, context, modelSettingsStore);
   };
 
   const participant = await setupChatParticipant(context, participantHandler, undefined, client, diagnostics);
