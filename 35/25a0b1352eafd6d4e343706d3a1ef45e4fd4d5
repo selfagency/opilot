@@ -1,0 +1,53 @@
+.github/workflows/ci.yml
+  h_5cf1e2c1161853 34,145,151
+src/agentsy-compat.ts
+  h_5cf1e2c1161853 1-40
+src/agentsy-compat.test.ts
+  h_5cf1e2c1161853 1-27
+src/settings.ts
+  h_5cf1e2c1161853 37
+src/formatting.ts
+  s_3594960a0164b7::t_cbdf4a51641dbc 1-11,18-19,21-22,24-25,27-32
+  h_627b419bd8fa0f 20,23
+src/extension.ts
+  s_3594960a0164b7::t_98164bdedc7207 590-601,611-612,640-642,645-652,1944,1946
+  s_3594960a0164b7::t_86a96aa2a9aa26 1112
+src/mocks/vscodeMockFactory.ts
+  h_5cf1e2c1161853 1-37,45-46,55-110
+  s_3594960a0164b7::t_69655fbab6b06b 38-44,47-54
+.github/workflows/release.yml
+  s_3594960a0164b7::t_69655fbab6b06b 9-11
+src/extension.test.ts
+  h_5cf1e2c1161853 2-3,8-9,25-31,33-37,50-52,57,73,113-114,123-126
+  s_3594960a0164b7::t_ef640b0faf681d 10-13,21,38-49,62-67
+  s_3594960a0164b7::t_b19cd57d2fc996 14-20,22-24,32,53-56
+docs/plans/remediation-plan.md
+  s_3594960a0164b7::t_dca068f94aadb7 183-189,191-200,202-222,224-230
+  h_627b419bd8fa0f 190,201,223
+src/vscode-ext.d.ts
+  s_3594960a0164b7::t_b84ee8cd4955a1 165-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "3525a0b1352eafd6d4e343706d3a1ef45e4fd4d5",
+  "prompts": {},
+  "humans": {
+    "h_5cf1e2c1161853": {
+      "author": "Daniel Sieradski"
+    },
+    "h_627b419bd8fa0f": {
+      "author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_3594960a0164b7": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "27947bb1-76fc-4067-8c8c-3d2be50c323b",
+        "model": "unknown"
+      },
+      "human_author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  }
+}
