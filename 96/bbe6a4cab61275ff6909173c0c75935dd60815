@@ -1,0 +1,59 @@
+src/modelfiles.ts
+  s_3594960a0164b7::t_5ea58bfe1bf1bd 66-68,104,191,206,210,239,513
+  s_3594960a0164b7::t_80460d5095c40d 109-110,150-156,158-161,203-204,207-209
+  s_3594960a0164b7::t_66296d2f384d40 103,162,205,238
+src/extension.test.ts
+  s_3594960a0164b7::t_6ae677d59112b7 27-29,32-34,54
+src/settings.ts
+  s_3594960a0164b7::t_4578eca738e59a 36,149,164
+src/providerModelUtils.ts
+  s_3594960a0164b7::t_8c7539fe9c9189 1-48,50-146
+  s_3594960a0164b7::t_2e5305a01ea427 147
+  s_3594960a0164b7::t_1060813b372164 49
+scripts/coverage-analysis.js
+  s_3594960a0164b7::t_c01df18b72cc6d 23,27-28,37-38,46-47
+  s_3594960a0164b7::t_28fbc2eb18e7eb 17-22
+src/extension.ts
+  s_3594960a0164b7::t_310d075759d04c 5,32-35,40
+  s_3594960a0164b7::t_ee63f2c3d4b87c 16
+  s_3594960a0164b7::t_6f782a49f68d95 83
+  s_3594960a0164b7::t_7272f1d9aecaa6 941
+src/mocks/vscodeMockFactory.ts
+  s_3594960a0164b7::t_90785340214b26 7
+  s_3594960a0164b7::t_64554fb91d119e 1-5,10-16,18,20-21,23,26,89,92,115,117
+  s_3594960a0164b7::t_ae9a82e661e942 8-9
+  s_3594960a0164b7::t_28fbc2eb18e7eb 68
+src/providerPromptUtils.ts
+  s_3594960a0164b7::t_2e5305a01ea427 205
+  s_3594960a0164b7::t_685d40351b740d 1-204
+src/lmTools.test.ts
+  s_3594960a0164b7::t_e287947f6376ca 45,52,85-86,88-90
+src/participantOrchestration.ts
+  s_3594960a0164b7::t_ee63f2c3d4b87c 369
+  s_3594960a0164b7::t_a5e301b94abd47 1-368
+src/agentMode.ts
+  s_3594960a0164b7::t_5fa988811b65ef 68-82,88-91,94-95
+src/provider.ts
+  s_3594960a0164b7::t_54fe3c9f3f65ca 39-46,49-51
+  s_3594960a0164b7::t_bd29feb0f4dcc2 52-64,302,314,324,350,357,367,371,459,466,473,480
+  s_3594960a0164b7::t_69ffb2f40ffac7 1289,1301,1305,1312,1316,1336,1340,1344,1348
+  s_3594960a0164b7::t_58f55e1dc128f0 47-48,1293,1297
+src/agentsy-compat.test.ts
+  s_3594960a0164b7::t_f0309c8a7e73b6 7,19,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "96bbe6a4cab61275ff6909173c0c75935dd60815",
+  "prompts": {},
+  "sessions": {
+    "s_3594960a0164b7": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "27947bb1-76fc-4067-8c8c-3d2be50c323b",
+        "model": "unknown"
+      },
+      "human_author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  }
+}
