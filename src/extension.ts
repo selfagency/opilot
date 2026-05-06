@@ -14,6 +14,16 @@ import { OllamaInlineCompletionProvider } from './completions.js';
 import { BASE_SYSTEM_PROMPT, detectsRepetition, renderOllamaPrompt, resolveContextLimit } from './contextUtils.js';
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
+import { resolvePromptReferences } from './extension/chat-helpers.js';
+import {
+  beginToolInvocationSafely,
+  reportThinkingProgressSafely,
+  reportUsageSafely,
+  reportWarningSafely,
+  updateToolInvocationSafely,
+} from './extension/stream-ui.js';
+import { executeToolCallingLoop } from './extension/tooling-loop.js';
+import { handleVsCodeLmRequest } from './extension/lm-api.js';
 import {
   handleConfigurationChange,
   handleConnectionTestFailure,
@@ -27,13 +37,6 @@ import {
   splitLeadingXmlContextBlocks,
 } from './formatting';
 import { formatBytes } from './formatUtils.js';
-import {
-  reportThinkingProgressSafely,
-  reportWarningSafely,
-  reportUsageSafely,
-  beginToolInvocationSafely,
-  updateToolInvocationSafely,
-} from './extension/stream-ui.js';
 import { registerModelfileManager } from './modelfiles.js';
 import {
   getModelOptionsForModel,
@@ -51,7 +54,6 @@ import {
   getAdditionalWelcomeMessage,
   getHelpTextPrefix,
 } from './participantFeatures.js';
-import { resolvePromptReferences } from './extension/chat-helpers.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { getSetting, migrateLegacySettingsWithState } from './settings.js';
 import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settingsWebview.js';
@@ -64,8 +66,6 @@ import {
   extractXmlToolCalls,
   isToolsNotSupportedError,
 } from './toolUtils.js';
-import { isValidToolArguments, invokeSingleTool } from './extension/tooling-core.js';
-import { executeToolCallingLoop } from './extension/tooling-loop.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
@@ -554,39 +554,7 @@ async function runToolRound(
   return false;
 }
 
-async function handleVsCodeLmRequest(
-  request: vscode.ChatRequest,
-  messages: vscode.LanguageModelChatMessage[],
-  stream: vscode.ChatResponseStream,
-  token: vscode.CancellationToken,
-  outputChannel?: DiagnosticsLogger,
-): Promise<void> {
-  let model: vscode.LanguageModelChat;
-  if (request.model.vendor === LANGUAGE_MODEL_VENDOR) {
-    model = request.model;
-  } else {
-    const models = await vscode.lm.selectChatModels({ vendor: LANGUAGE_MODEL_VENDOR });
-    if (!models.length) {
-      stream.markdown('No Ollama models available. Pull a model first using the Ollama sidebar.');
-      return;
-    }
-    model = models[0];
-  }
-
-  try {
-    const tools = vscode.lm.tools ?? [];
-    const conversationMessages = [...messages];
-    const MAX_TOOL_ROUNDS = 10;
-
-    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-      const shouldBreak = await runToolRound(model, conversationMessages, tools, request, stream, token, outputChannel);
-      if (shouldBreak) break;
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    stream.markdown(`Error: ${message}`);
-  }
-}
+// handleVsCodeLmRequest moved to ./extension/lm-api
 
 /**
  * Build and send a message to the language model.
