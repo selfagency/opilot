@@ -65,6 +65,7 @@ import {
   isToolsNotSupportedError,
 } from './toolUtils.js';
 import { isValidToolArguments, invokeSingleTool } from './extension/tooling-core.js';
+import { executeToolCallingLoop } from './extension/tooling-loop.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
@@ -659,22 +660,7 @@ interface DirectOllamaRequestContext {
  */
 // isValidToolArguments & invokeSingleTool moved to ./extension/tooling-core
 
-interface ToolLoopContext {
-  isCloudModel: boolean;
-  modelId: string;
-  ollamaMessages: Array<Message | { role: 'tool'; content: string; tool_name: string; tool_call_id?: string }>;
-  ollamaTools: Tool[];
-  shouldThinkInToolLoop: boolean;
-  effectiveClient: Ollama;
-  baseUrl: string | undefined;
-  authToken: string | undefined;
-  modelOptions: ModelOptionOverrides;
-  logOpenAiCompatFallback: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
-  request: vscode.ChatRequest;
-  stream: vscode.ChatResponseStream;
-  token: vscode.CancellationToken;
-  outputChannel?: DiagnosticsLogger;
-}
+// ToolLoopContext moved to ./extension/tooling-loop
 
 // stream-ui helpers moved to ./extension/stream-ui
 
@@ -684,96 +670,7 @@ interface ToolLoopContext {
  * Returns false if tools are not supported (triggers XML fallback).
  */
 // NOSONAR - Legacy orchestration hotspot; tracked for decomposition in remediation plan.
-async function executeToolCallingLoop(ctx: ToolLoopContext): Promise<boolean> {
-  const {
-    isCloudModel,
-    modelId,
-    ollamaMessages,
-    ollamaTools,
-    shouldThinkInToolLoop,
-    effectiveClient,
-    baseUrl,
-    authToken,
-    modelOptions,
-    logOpenAiCompatFallback,
-    request,
-    stream,
-    token,
-    outputChannel,
-  } = ctx;
-  const MAX_TOOL_ROUNDS = 10;
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    if (token.isCancellationRequested) return true;
-
-    let roundResponse: ChatResponse;
-    try {
-      roundResponse = await (isCloudModel
-        ? openAiCompatChatOnce({
-            modelId,
-            messages: ollamaMessages as Message[],
-            tools: ollamaTools,
-            shouldThink: shouldThinkInToolLoop,
-            effectiveClient,
-            baseUrl: baseUrl!,
-            authToken,
-            modelOptions,
-            onOpenAiCompatFallback: logOpenAiCompatFallback,
-          })
-        : nativeSdkChatOnce({
-            modelId,
-            messages: ollamaMessages as Message[],
-            tools: ollamaTools,
-            shouldThink: shouldThinkInToolLoop,
-            effectiveClient,
-            modelOptions,
-          }));
-    } catch (toolError) {
-      if (isToolsNotSupportedError(toolError)) {
-        outputChannel?.warn(`[client] disabling tools for @ollama request on model ${modelId}: ${String(toolError)}`);
-        return false; // Signal to use XML fallback
-      }
-      throw toolError;
-    }
-
-    const toolCalls = roundResponse.message.tool_calls;
-    if (!toolCalls?.length) {
-      if (roundResponse.message.content) {
-        stream.markdown(sanitizeNonStreamingModelOutput(roundResponse.message.content));
-      }
-      return true; // Conversation complete
-    }
-
-    ollamaMessages.push({
-      role: 'assistant',
-      content: roundResponse.message.content ?? '',
-      tool_calls: toolCalls,
-    });
-
-    let taskCompleted = false;
-    for (const toolCall of toolCalls) {
-      const { resultText, isTaskComplete } = await invokeSingleTool(toolCall, request, token, outputChannel);
-      if (isTaskComplete) {
-        taskCompleted = true;
-        break;
-      }
-      ollamaMessages.push({
-        role: 'tool',
-        content: resultText,
-        tool_name: toolCall.function.name,
-        tool_call_id: (toolCall as { id?: string }).id,
-      });
-    }
-
-    if (taskCompleted) {
-      if (roundResponse.message.content) {
-        stream.markdown(sanitizeNonStreamingModelOutput(roundResponse.message.content));
-      }
-      return true; // Agent signaled completion
-    }
-  }
-
-  return true; // MAX_TOOL_ROUNDS reached
-}
+// executeToolCallingLoop moved to ./extension/tooling-loop
 
 /** Convert VS Code messages to Ollama format with context block extraction. */
 function convertMessagesToOllamaFormat(messages: vscode.LanguageModelChatMessage[]): {
