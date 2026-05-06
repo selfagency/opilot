@@ -1,0 +1,34 @@
+src/extension.ts
+  h_627b419bd8fa0f 4,6,18-22,29,39-46,51,67-74,118-375,377-427,599,627,630-631,1218-1222,1893,1895
+  s_1b879d0ddd3a7c::t_29fd0da378cd5e 47,634
+  s_b1883c276b2c97::t_7a3e35500d02ab 1385
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "1bc62510b5667037da47481b40a825a7dbcdc007",
+  "prompts": {},
+  "humans": {
+    "h_627b419bd8fa0f": {
+      "author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_1b879d0ddd3a7c": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "87d330ab-acaf-488e-9f68-cf28aa68c350",
+        "model": "unknown"
+      },
+      "human_author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    },
+    "s_b1883c276b2c97": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "7979e8a8-4c61-4aa8-8f7a-7fbdf392aab4",
+        "model": "unknown"
+      },
+      "human_author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  }
+}
