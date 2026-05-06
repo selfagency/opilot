@@ -17,28 +17,39 @@ export interface ChatStatusItemContext {
 
 let chatStatusItem: vscode.ChatStatusItem | undefined;
 
+type ChatStatusItemFactoryApi = {
+  createChatStatusItem?: (id: string) => vscode.ChatStatusItem | undefined;
+};
+
+type ModelProviderStatusLike = {
+  isServerOnline?: boolean;
+  selectedModelId?: string;
+  runningModelIds?: string[];
+};
+
 /**
  * Create and register the chat status item.
  * Must be called during extension activation.
  */
 export function createChatStatusItem(): vscode.ChatStatusItem | undefined {
   try {
+    const windowApi = vscode.window as unknown as ChatStatusItemFactoryApi;
     // Guard: only available on VS Code with proposed API
-    if (typeof (vscode.window as any).createChatStatusItem !== 'function') {
+    if (typeof windowApi.createChatStatusItem !== 'function') {
       return undefined;
     }
 
-    chatStatusItem = (vscode.window as any).createChatStatusItem?.('opilot.serverStatus');
+    chatStatusItem = windowApi.createChatStatusItem?.('opilot.serverStatus');
     if (!chatStatusItem) {
       return undefined;
     }
 
-    chatStatusItem!.title = 'Ollama';
-    chatStatusItem!.description = 'Checking...';
-    chatStatusItem!.isLoading = true;
+    chatStatusItem.title = 'Ollama';
+    chatStatusItem.description = 'Checking...';
+    chatStatusItem.isLoading = true;
 
     return chatStatusItem;
-  } catch (err) {
+  } catch {
     // Graceful degradation if API not available
     return undefined;
   }
@@ -52,9 +63,10 @@ export function updateChatStatusItem(ctx: ChatStatusItemContext) {
   if (!chatStatusItem) return;
 
   try {
-    const isOnline = (ctx.modelProvider as any).isServerOnline ?? false;
-    const activeModel = (ctx.modelProvider as any).selectedModelId || 'None';
-    const runningCount = (ctx.modelProvider as any).runningModelIds?.length || 0;
+    const providerStatus = ctx.modelProvider as unknown as ModelProviderStatusLike;
+    const isOnline = providerStatus.isServerOnline ?? false;
+    const activeModel = providerStatus.selectedModelId || 'None';
+    const runningCount = providerStatus.runningModelIds?.length || 0;
 
     if (isOnline) {
       chatStatusItem.description = `${activeModel} · ${runningCount} running`;
@@ -67,8 +79,8 @@ export function updateChatStatusItem(ctx: ChatStatusItemContext) {
       chatStatusItem.description = 'Offline';
       chatStatusItem.isLoading = false;
     }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
     ctx.diagnostics?.debug?.(`[chat-status] update failed: ${msg}`);
   }
 }

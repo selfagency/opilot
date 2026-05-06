@@ -550,10 +550,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     progress: Progress<LanguageModelResponsePart>,
     hideThinkingContent: boolean,
   ): void {
+    const reportUnknownPart = progress.report as unknown as (part: unknown) => void;
     if (!state.thinkingStarted) {
       // Phase 3: Emit native LanguageModelThinkingPart if available
       try {
-        (progress.report as any)(new LanguageModelThinkingPart(hideThinkingContent ? '' : 'Thinking...'));
+        reportUnknownPart(new LanguageModelThinkingPart(hideThinkingContent ? '' : 'Thinking...'));
       } catch {
         // Fallback to markdown if LanguageModelThinkingPart not available
       }
@@ -565,7 +566,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     if (!hideThinkingContent) {
       // Phase 3: Emit thinking content via native API
       try {
-        (progress.report as any)(new LanguageModelThinkingPart(text));
+        reportUnknownPart(new LanguageModelThinkingPart(text));
       } catch {
         // Fallback to markdown if API not available
       }
@@ -838,7 +839,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
     // Convert VS Code messages to Ollama format, stripping images for non-vision models
     const supportsVision = this.visionByModelId.get(model.id) ?? this.visionByModelId.get(runtimeModelId) ?? false;
-    const rawMessages = this.toOllamaMessages(messages, supportsVision) as Message[];
+    const rawMessages = this.toOllamaMessages(messages, supportsVision);
     const effectiveMessages = this.ensurePromptMessage(rawMessages, options);
     this.outputChannel.info(
       `[context] before truncation: ${effectiveMessages.length} messages, ${JSON.stringify(effectiveMessages, null, 2).length} chars, model.maxInputTokens=${model.maxInputTokens}`,
@@ -1114,7 +1115,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
         const rescued = await this.attemptCloudRescue({
           runtimeModelId,
-          ollamaMessages: (ollamaMessages ?? []) as Message[],
+          ollamaMessages,
           tools,
           initialShouldThink,
           perRequestClient,
@@ -1175,13 +1176,53 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    * and JSON data parts are decoded back into inline text content. Unsupported
    * binary parts are stripped and logged.
    */
+  private handleDataPart(
+    part: LanguageModelDataPart,
+    supportsVision: boolean,
+    textContentRef: { content: string },
+    imagesRef: { images: string[] },
+    strippedRef: { images: number; binary: number },
+  ): void {
+    if (this.isImageMimeType(part.mimeType)) {
+      if (supportsVision) {
+        imagesRef.images.push(Buffer.from(part.data).toString('base64'));
+      } else {
+        strippedRef.images++;
+      }
+      return;
+    }
+
+    const extracted = this.extractTextFromDataPart(part);
+    if (extracted !== undefined) {
+      textContentRef.content += extracted;
+    } else {
+      strippedRef.binary++;
+    }
+  }
+
+  private handleToolCallPart(part: LanguageModelToolCallPart, ollamaMsg: Record<string, unknown>): void {
+    const toolCalls = ollamaMsg.tool_calls ? (ollamaMsg.tool_calls as Record<string, unknown>[]) : [];
+    toolCalls.push({
+      id: this.getOllamaToolCallId(part.callId),
+      function: { name: part.name, arguments: part.input },
+    });
+    ollamaMsg.tool_calls = toolCalls;
+  }
+
+  private handleToolResultPart(part: LanguageModelToolResultPart, ollamaMessages: Message[]): void {
+    const toolContent = part.content
+      .filter((contentPart): contentPart is LanguageModelTextPart => contentPart instanceof LanguageModelTextPart)
+      .map(contentPart => contentPart.value)
+      .join('');
+    ollamaMessages.push({
+      role: 'tool',
+      content: toolContent,
+      tool_call_id: this.getOllamaToolCallId(part.callId),
+    } as never);
+  }
+
   private processMsgContentPart(
-    part:
-      | LanguageModelTextPart
-      | LanguageModelDataPart
-      | LanguageModelToolCallPart
-      | LanguageModelToolResultPart
-      | unknown,
+    part: unknown,
     supportsVision: boolean,
     ollamaMsg: Record<string, unknown>,
     ollamaMessages: Message[],
@@ -1192,40 +1233,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     if (part instanceof LanguageModelTextPart) {
       textContentRef.content += part.value;
     } else if (part instanceof LanguageModelDataPart) {
-      if (this.isImageMimeType(part.mimeType)) {
-        if (supportsVision) {
-          imagesRef.images.push(Buffer.from(part.data).toString('base64'));
-        } else {
-          strippedRef.images++;
-        }
-      } else {
-        const extracted = this.extractTextFromDataPart(part);
-        if (extracted !== undefined) {
-          textContentRef.content += extracted;
-        } else {
-          strippedRef.binary++;
-        }
-      }
+      this.handleDataPart(part, supportsVision, textContentRef, imagesRef, strippedRef);
     } else if (part instanceof LanguageModelToolCallPart) {
-      if (!ollamaMsg.tool_calls) {
-        ollamaMsg.tool_calls = [];
-      }
-      const toolCalls = (ollamaMsg.tool_calls ?? []) as Record<string, unknown>[];
-      toolCalls.push({
-        id: this.getOllamaToolCallId(part.callId),
-        function: { name: part.name, arguments: part.input },
-      });
-      ollamaMsg.tool_calls = toolCalls;
+      this.handleToolCallPart(part, ollamaMsg);
     } else if (part instanceof LanguageModelToolResultPart) {
-      const toolContent = part.content
-        .filter((c): c is LanguageModelTextPart => c instanceof LanguageModelTextPart)
-        .map(c => c.value)
-        .join('');
-      ollamaMessages.push({
-        role: 'tool',
-        content: toolContent,
-        tool_call_id: this.getOllamaToolCallId(part.callId),
-      } as never);
+      this.handleToolResultPart(part, ollamaMessages);
     } else {
       const extracted = this.extractTextFromUnknownInputPart(part);
       if (extracted) {
@@ -1371,7 +1383,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
     for (const key of directStringKeys) {
       if (typeof maybePart[key] === 'string') {
-        return maybePart[key] as string;
+        return maybePart[key];
       }
     }
 

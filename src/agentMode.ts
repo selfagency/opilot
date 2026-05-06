@@ -56,10 +56,13 @@ export interface CodeBlock {
 
 export function parseCodeBlocks(content: string): CodeBlock[] {
   const blocks: CodeBlock[] = [];
-  const regex = /```(\w+)?\s*(?:file=)?([^\n]*)?\n([\s\S]*?)```/g;
+  const regex = /```(\w+)?(?:\s+(?:file=)?([^\n]+))?\n([\s\S]*?)```/g;
 
-  let match;
-  while ((match = regex.exec(content)) !== null) {
+  while (true) {
+    const match = regex.exec(content);
+    if (!match) {
+      break;
+    }
     const language = match[1] || 'text';
     const filename = match[2]?.trim();
     const code = match[3];
@@ -77,10 +80,8 @@ export function parseCodeBlocks(content: string): CodeBlock[] {
 export function generateTextEdits(originalContent: string, newContent: string): vscode.TextEdit[] {
   // Replace entire document
   const lines = originalContent.split('\n');
-  const range = new vscode.Range(
-    new vscode.Position(0, 0),
-    new vscode.Position(lines.length, lines[lines.length - 1]?.length || 0),
-  );
+  const lastLine = lines.at(-1) ?? '';
+  const range = new vscode.Range(new vscode.Position(0, 0), new vscode.Position(lines.length, lastLine.length));
 
   return [vscode.TextEdit.replace(range, newContent)];
 }
@@ -100,7 +101,7 @@ export async function requestEditConfirmation(
 
     if (stream && result === 'Apply') {
       try {
-        stream.confirmation('File Updated', `Changes applied to ${uri.fsPath}`, {
+        await stream.confirmation('File Updated', `Changes applied to ${uri.fsPath}`, {
           filePath: uri.fsPath,
         });
       } catch {
@@ -109,10 +110,15 @@ export async function requestEditConfirmation(
     }
 
     return result === 'Apply';
-  } catch (err) {
+  } catch {
     return false;
   }
 }
+
+type ChatResponseEditStream = vscode.ChatResponseStream & {
+  textEdit?: (uri: vscode.Uri, editsOrDone: vscode.TextEdit[] | boolean) => void;
+  workspaceEdit?: (edits: Array<{ newResource?: vscode.Uri; oldResource?: vscode.Uri }>) => void;
+};
 
 /**
  * Apply text edits to a file via stream.textEdit().
@@ -123,14 +129,15 @@ export async function applyTextEdits(
   edits: vscode.TextEdit[],
 ): Promise<boolean> {
   try {
+    const editStream = stream as ChatResponseEditStream;
     // Phase 2 method: stream.textEdit(uri, edits)
-    (stream as any).textEdit?.(uri, edits);
+    editStream.textEdit?.(uri, edits);
 
     // Signal completion
-    (stream as any).textEdit?.(uri, true);
+    editStream.textEdit?.(uri, true);
 
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 }
@@ -143,10 +150,11 @@ export async function applyWorkspaceEdit(
   edits: Array<{ newResource?: vscode.Uri; oldResource?: vscode.Uri }>,
 ): Promise<boolean> {
   try {
+    const editStream = stream as ChatResponseEditStream;
     // Phase 2 method: stream.workspaceEdit(edits)
-    (stream as any).workspaceEdit?.(edits);
+    editStream.workspaceEdit?.(edits);
     return true;
-  } catch (err) {
+  } catch {
     return false;
   }
 }

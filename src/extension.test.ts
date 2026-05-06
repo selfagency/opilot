@@ -100,8 +100,12 @@ describe('activate', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return new this(() => {
+            for (const disposable of disposables) {
+              disposable.dispose?.();
+            }
+          });
         }
       },
     }));
@@ -1396,7 +1400,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
     // Thinking should be emitted via thinkingProgress (Phase 2) instead of markdown header
     expect(mockThinkingProgress.mock.calls.length).toBeGreaterThan(0);
     // Thinking content should be visible (either in thinkingProgress or markdown)
-    const allThinkingCalls = mockThinkingProgress.mock.calls.map((c: any[]) => JSON.stringify(c[0])).join('');
+    const allThinkingCalls = mockThinkingProgress.mock.calls.map((call: unknown[]) => JSON.stringify(call[0])).join('');
     expect(allCalls.join('').includes('let me reason step') || allThinkingCalls.includes('let me reason')).toBe(true);
     // Separator before response
     expect(allCalls.some((v: string) => v.includes('---'))).toBe(true);
@@ -1788,7 +1792,7 @@ describe('setupChatParticipant', () => {
     const createChatParticipant = vi.fn(() => mockParticipant);
 
     const ext = await import('./extension.js');
-    const mockHandler = vi.fn() as any;
+    const mockHandler = vi.fn() as unknown as import('vscode').ChatRequestHandler;
     const mockContext = { extensionUri: { fsPath: '/test' } };
 
     const result = await ext.setupChatParticipant(mockContext as any, mockHandler, { createChatParticipant } as any);

@@ -13,7 +13,6 @@
 import * as vscode from 'vscode';
 import type { Ollama } from 'ollama';
 import type { DiagnosticsLogger } from './diagnostics.js';
-import { renderOllamaPrompt } from './contextUtils.js';
 
 export interface ParticipantFeaturesContext {
   client: Ollama;
@@ -21,6 +20,12 @@ export interface ParticipantFeaturesContext {
   modelId: string;
   serverHost?: string;
 }
+
+type ParticipantVariableCompletionItem = {
+  label: string;
+  description?: string;
+  values: string[];
+};
 
 /**
  * Phase 5.1: titleProvider — Auto-generate conversation titles
@@ -41,8 +46,9 @@ export function createTitleProvider(ctx: ParticipantFeaturesContext) {
       }
 
       const cacheKey = firstMessage.substring(0, 100);
-      if (titleCache.has(cacheKey)) {
-        return titleCache.get(cacheKey)!;
+      const cachedTitle = titleCache.get(cacheKey);
+      if (cachedTitle) {
+        return cachedTitle;
       }
 
       try {
@@ -56,7 +62,7 @@ export function createTitleProvider(ctx: ParticipantFeaturesContext) {
 
         let title = response.response.trim();
         if (title.length === 0) title = 'New Conversation';
-        if (title.length > 60) title = title.substring(0, 57) + '...';
+        if (title.length > 60) title = `${title.substring(0, 57)}...`;
 
         titleCache.set(cacheKey, title);
         return title;
@@ -80,7 +86,16 @@ export function createSummarizer(ctx: ParticipantFeaturesContext) {
         // Filter to last 20 messages to keep prompt manageable
         const recentMessages = messages.slice(-20);
         const conversationText = recentMessages
-          .map((m: any) => `${m.role === 1 ? 'User' : 'Assistant'}: ${m.content || ''}`)
+          .map((message: vscode.LanguageModelChatMessage) => {
+            const roleLabel = message.role === vscode.LanguageModelChatMessageRole.User ? 'User' : 'Assistant';
+            const contentText = Array.isArray(message.content)
+              ? message.content
+                  .filter((part): part is vscode.LanguageModelTextPart => part instanceof vscode.LanguageModelTextPart)
+                  .map(part => part.value)
+                  .join('')
+              : '';
+            return `${roleLabel}: ${contentText}`;
+          })
           .join('\n');
 
         const systemPrompt = 'Summarize this conversation in 1-2 sentences for later reference.';
@@ -144,7 +159,9 @@ export async function getAdditionalWelcomeMessage(ctx: ParticipantFeaturesContex
 Connected to **${host}**
 ${modelCount} models available · ${runningCount} running
     `.trim();
-  } catch (err) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.diagnostics?.debug?.(`[participantFeatures] welcome message unavailable: ${message}`);
     return 'Ollama server offline or unreachable';
   }
 }
@@ -156,7 +173,7 @@ export function createFollowupProvider() {
   return {
     async provideFollowups(
       request: vscode.ChatRequest,
-      response: vscode.ChatResult,
+      _response: vscode.ChatResult,
     ): Promise<vscode.ChatFollowup[] | undefined> {
       const prompt = request.prompt?.toLowerCase() || '';
 
@@ -209,20 +226,22 @@ export function createFollowupProvider() {
 export function createParticipantVariableProvider(ctx: ParticipantFeaturesContext) {
   return {
     triggerCharacters: ['@', ':'],
-    async provideCompletionItems(_token: any): Promise<any[]> {
+    async provideCompletionItems(_token: vscode.CancellationToken): Promise<ParticipantVariableCompletionItem[]> {
       try {
-        if ((_token as any)?.isCancellationRequested) return [];
+        if (_token?.isCancellationRequested) return [];
 
         const list = await ctx.client.list();
-        const items: any[] = list.models.map((m: any) => ({
-          label: m.name,
-          description: `${(m.size / 1e9).toFixed(1)}GB`,
-          value: m.name,
-        }));
+        const items: ParticipantVariableCompletionItem[] = list.models
+          .filter(model => typeof model?.name === 'string')
+          .map(model => ({
+            label: model.name,
+            description: `${(model.size / 1e9).toFixed(1)}GB`,
+            values: [model.name],
+          }));
 
         return items;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         ctx.diagnostics?.debug?.(`[participantFeatures] model completions failed: ${msg}`);
         return [];
       }

@@ -54,7 +54,7 @@ import {
   createParticipantVariableProvider,
   createParticipantDetectionProvider,
 } from './participantFeatures.js';
-import { createChatStatusItem, updateChatStatusItem, disposeChatStatusItem } from './chatStatusItem.js';
+import { createChatStatusItem, disposeChatStatusItem } from './chatStatusItem.js';
 import { registerChatCustomizationProvider } from './chatCustomizationProvider.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
@@ -64,6 +64,13 @@ const HERMES_MODEL_PATTERN = /qwen2\.5|qwen3|qwq/i;
 /** VS Code Autopilot signals task completion by having the model call this tool. */
 const TASK_COMPLETE_TOOL_NAME = 'task_complete';
 let builtInOllamaConflictPromptInProgress = false;
+
+type ChatParticipantDetectionRegistrationApi = {
+  registerChatParticipantDetectionProvider?: (
+    id: string,
+    provider: { detectChatParticipant?(input: string): boolean },
+  ) => vscode.Disposable;
+};
 
 export function toRuntimeModelId(modelId: string): string {
   return modelId.startsWith(PROVIDER_MODEL_ID_PREFIX) ? modelId.slice(PROVIDER_MODEL_ID_PREFIX.length) : modelId;
@@ -225,10 +232,12 @@ export async function setupChatParticipant(
   diagnostics?: DiagnosticsLogger,
 ): Promise<vscode.Disposable> {
   const chat = chatApi || vscode.chat;
+  const chatDetectionApi = vscode.chat as unknown as ChatParticipantDetectionRegistrationApi;
+  const participantRecord = (value: vscode.ChatParticipant) => value as unknown as Record<string, unknown>;
 
   const setOptionalParticipantFeature = (featureName: string, value: unknown) => {
     try {
-      (participant as any)[featureName] = value;
+      participantRecord(participant)[featureName] = value;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       diagnostics?.debug?.(`[participantFeatures] skipping ${featureName}: ${message}`);
@@ -288,8 +297,8 @@ export async function setupChatParticipant(
 
     // Phase 5.7: Detection provider
     const detectionProvider = createParticipantDetectionProvider();
-    if (typeof (vscode.chat as any).registerChatParticipantDetectionProvider === 'function') {
-      (vscode.chat as any).registerChatParticipantDetectionProvider('opilot.ollama', detectionProvider);
+    if (typeof chatDetectionApi.registerChatParticipantDetectionProvider === 'function') {
+      chatDetectionApi.registerChatParticipantDetectionProvider('opilot.ollama', detectionProvider);
     }
   }
 
@@ -329,6 +338,28 @@ async function disableBuiltInOllamaProvider(
   }
 }
 
+async function promptDisableBuiltInProvider(win: Pick<typeof vscode.window, 'showWarningMessage'>): Promise<boolean> {
+  const selection = await win.showWarningMessage(
+    "Copilot's built-in Ollama provider is active and will show duplicate models alongside this extension. Disable it?",
+    'Disable Built-in Ollama Provider',
+  );
+  return isSelectedAction(selection, 'Disable Built-in Ollama Provider');
+}
+
+async function promptReloadAfterDisable(
+  win: Pick<typeof vscode.window, 'showInformationMessage'>,
+  commands: Pick<typeof vscode.commands, 'executeCommand'>,
+): Promise<void> {
+  const reloadSelection = await win.showInformationMessage(
+    "Copilot's built-in Ollama provider has been disabled. Reload VS Code to apply.",
+    'Reload Window',
+  );
+
+  if (isSelectedAction(reloadSelection, 'Reload Window')) {
+    await commands.executeCommand('workbench.action.reloadWindow');
+  }
+}
+
 export async function handleBuiltInOllamaConflict(
   windowApi?: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage' | 'showErrorMessage'>,
   workspaceApi?: Pick<typeof vscode.workspace, 'getConfiguration'>,
@@ -350,12 +381,7 @@ export async function handleBuiltInOllamaConflict(
 
   builtInOllamaConflictPromptInProgress = true;
   try {
-    const selection = await win.showWarningMessage(
-      "Copilot's built-in Ollama provider is active and will show duplicate models alongside this extension. Disable it?",
-      'Disable Built-in Ollama Provider',
-    );
-
-    if (!isSelectedAction(selection, 'Disable Built-in Ollama Provider')) return;
+    if (!(await promptDisableBuiltInProvider(win))) return;
 
     const disabled = await disableBuiltInOllamaProvider(ws, win, context);
 
@@ -366,14 +392,7 @@ export async function handleBuiltInOllamaConflict(
       return;
     }
 
-    const reloadSelection = await win.showInformationMessage(
-      "Copilot's built-in Ollama provider has been disabled. Reload VS Code to apply.",
-      'Reload Window',
-    );
-
-    if (isSelectedAction(reloadSelection, 'Reload Window')) {
-      await commands.executeCommand('workbench.action.reloadWindow');
-    }
+    await promptReloadAfterDisable(win, commands);
   } finally {
     builtInOllamaConflictPromptInProgress = false;
   }
@@ -484,8 +503,10 @@ async function runToolRound(
   const hasTaskComplete = pendingToolCalls.some(tc => tc.name === TASK_COMPLETE_TOOL_NAME);
   if (pendingToolCalls.length === 0 || !request.toolInvocationToken || hasTaskComplete) {
     if (hasTaskComplete && request.toolInvocationToken) {
-      const tc = pendingToolCalls.find(c => c.name === TASK_COMPLETE_TOOL_NAME)!;
-      await handleTaskCompleteToolInvocation(tc, request, token, outputChannel);
+      const taskCompleteCall = pendingToolCalls.find(call => call.name === TASK_COMPLETE_TOOL_NAME);
+      if (taskCompleteCall) {
+        await handleTaskCompleteToolInvocation(taskCompleteCall, request, token, outputChannel);
+      }
     }
     return true;
   }
@@ -958,7 +979,7 @@ async function handleXmlToolFallback(options: {
     const responseText = xmlResponse.message.content ?? '';
     const xmlToolCalls = extractXmlToolCalls(responseText, toolNames);
 
-    if (!xmlToolCalls.length) {
+    if (xmlToolCalls.length === 0) {
       if (!correctedOnce && !responseText.trim() && xmlRound < MAX_XML_ROUNDS - 1) {
         correctedOnce = true;
         xmlConversation.push({ role: 'assistant', content: responseText });
@@ -1195,7 +1216,10 @@ async function streamModelResponse(options: {
 
       if (chunk.message?.tool_calls?.length) {
         for (let tcIdx = 0; tcIdx < chunk.message.tool_calls.length; tcIdx++) {
-          const toolCall = chunk.message.tool_calls[tcIdx]!;
+          const toolCall = chunk.message.tool_calls[tcIdx];
+          if (!toolCall) {
+            continue;
+          }
           const maybeToolCallId = (toolCall as { id?: unknown }).id;
           const toolCallId = typeof maybeToolCallId === 'string' ? maybeToolCallId : undefined;
           const toolCallPart = toVSCodeToolCallPart(
@@ -1342,11 +1366,12 @@ async function setupCloudClientIfNeeded(
 }> {
   const cloudModelTag = modelId.split(':')[1] ?? '';
   const isCloudModel = cloudModelTag === 'cloud' || cloudModelTag.endsWith('-cloud');
-  const effectiveClient = extensionContext
-    ? isCloudModel
+  let effectiveClient = client;
+  if (extensionContext) {
+    effectiveClient = isCloudModel
       ? await getCloudOllamaClient(extensionContext)
-      : await getOllamaClient(extensionContext)
-    : client;
+      : await getOllamaClient(extensionContext);
+  }
   const baseUrl = isCloudModel ? getOllamaHost() : undefined;
   const authToken = isCloudModel && extensionContext ? await getOllamaAuthToken(extensionContext) : undefined;
   return { isCloudModel, effectiveClient, baseUrl, authToken };
@@ -1900,8 +1925,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
       const agentModeEnabled = getSetting<boolean>('agentMode', false);
       await vscode.commands.executeCommand('setContext', 'ollama.agentModeEnabled', agentModeEnabled);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       diagnostics.debug(`[context-keys] failed to update context keys: ${msg}`);
     }
   };

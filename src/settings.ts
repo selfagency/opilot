@@ -43,6 +43,15 @@ type InspectResult<T> = {
   workspaceFolderValue?: T;
 };
 
+function hasExplicitValue<T>(inspect: InspectResult<T> | undefined): boolean {
+  return Boolean(
+    inspect &&
+    (inspect.globalValue !== undefined ||
+      inspect.workspaceValue !== undefined ||
+      inspect.workspaceFolderValue !== undefined),
+  );
+}
+
 function inspectSetting<T>(config: unknown, key: string): InspectResult<T> | undefined {
   if (!config || typeof config !== 'object') {
     return undefined;
@@ -79,19 +88,11 @@ export function getSetting<T>(key: SupportedSettingKey, defaultValue?: T): T | u
     return defaultValue;
   }
 
-  const hasOpilotExplicitValue =
-    opilotInspect?.globalValue !== undefined ||
-    opilotInspect?.workspaceValue !== undefined ||
-    opilotInspect?.workspaceFolderValue !== undefined;
-  if (hasOpilotExplicitValue) {
+  if (hasExplicitValue(opilotInspect)) {
     return opilotConfig.get<T>(key) as T;
   }
 
-  const hasLegacyExplicitValue =
-    legacyInspect?.globalValue !== undefined ||
-    legacyInspect?.workspaceValue !== undefined ||
-    legacyInspect?.workspaceFolderValue !== undefined;
-  if (hasLegacyExplicitValue) {
+  if (hasExplicitValue(legacyInspect)) {
     return legacyConfig.get<T>(key) as T;
   }
 
@@ -168,6 +169,32 @@ async function cleanupLegacyShadowedSettings(
 ): Promise<SupportedSettingKey[]> {
   const cleaned: SupportedSettingKey[] = [];
 
+  const clearFolderLegacyValues = async (settingKey: SupportedSettingKey): Promise<void> => {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    for (const folder of folders) {
+      const legacyFolderConfig = vscode.workspace.getConfiguration(LEGACY_SETTINGS_NAMESPACE, folder.uri);
+      const inspect = inspectSetting<unknown>(legacyFolderConfig, settingKey);
+      if (inspect?.workspaceFolderValue !== undefined) {
+        await legacyFolderConfig.update(settingKey, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+      }
+    }
+  };
+
+  const clearLegacyValues = async (
+    settingKey: SupportedSettingKey,
+    legacyInspect: InspectResult<unknown>,
+  ): Promise<void> => {
+    if (legacyInspect.globalValue !== undefined) {
+      await legacyConfig.update(settingKey, undefined, vscode.ConfigurationTarget.Global);
+    }
+    if (legacyInspect.workspaceValue !== undefined) {
+      await legacyConfig.update(settingKey, undefined, vscode.ConfigurationTarget.Workspace);
+    }
+    if (legacyInspect.workspaceFolderValue !== undefined) {
+      await clearFolderLegacyValues(settingKey);
+    }
+  };
+
   for (const key of SUPPORTED_SETTING_KEYS) {
     const opilotInspect = inspectSetting<unknown>(opilotConfig, key);
     const legacyInspect = inspectSetting<unknown>(legacyConfig, key);
@@ -175,37 +202,12 @@ async function cleanupLegacyShadowedSettings(
       continue;
     }
 
-    const hasOpilotExplicitValue =
-      opilotInspect.globalValue !== undefined ||
-      opilotInspect.workspaceValue !== undefined ||
-      opilotInspect.workspaceFolderValue !== undefined;
-
-    const hasLegacyValue =
-      legacyInspect.globalValue !== undefined ||
-      legacyInspect.workspaceValue !== undefined ||
-      legacyInspect.workspaceFolderValue !== undefined;
-
-    if (!hasOpilotExplicitValue || !hasLegacyValue) {
+    if (!hasExplicitValue(opilotInspect) || !hasExplicitValue(legacyInspect)) {
       continue;
     }
 
     try {
-      if (legacyInspect.globalValue !== undefined) {
-        await legacyConfig.update(key, undefined, vscode.ConfigurationTarget.Global);
-      }
-      if (legacyInspect.workspaceValue !== undefined) {
-        await legacyConfig.update(key, undefined, vscode.ConfigurationTarget.Workspace);
-      }
-      if (legacyInspect.workspaceFolderValue !== undefined) {
-        const folders = vscode.workspace.workspaceFolders ?? [];
-        for (const folder of folders) {
-          const legacyFolderConfig = vscode.workspace.getConfiguration(LEGACY_SETTINGS_NAMESPACE, folder.uri);
-          const inspect = inspectSetting<unknown>(legacyFolderConfig, key);
-          if (inspect?.workspaceFolderValue !== undefined) {
-            await legacyFolderConfig.update(key, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
-          }
-        }
-      }
+      await clearLegacyValues(key, legacyInspect);
       cleaned.push(key);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

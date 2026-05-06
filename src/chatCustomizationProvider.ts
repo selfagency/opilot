@@ -13,6 +13,22 @@ export interface ChatCustomizationProviderContext {
   diagnostics?: DiagnosticsLogger;
 }
 
+type CancellationLike = { isCancellationRequested?: boolean };
+
+type ChatSessionCustomizationRegistrationApi = {
+  registerChatSessionCustomizationProvider?: (
+    id: string,
+    metadata: { label: string; iconId?: string },
+    provider: {
+      getCustomizationItems: (
+        session: unknown,
+        token: CancellationLike,
+      ) => Promise<vscode.ChatSessionCustomizationItem[]>;
+      readonly onDidChange?: vscode.Event<void>;
+    },
+  ) => vscode.Disposable;
+};
+
 /**
  * Create the chat session customization provider for Modelfiles.
  * Returns a provider that scans the modelfiles folder and returns customization items.
@@ -24,8 +40,11 @@ export function createChatCustomizationProvider(ctx: ChatCustomizationProviderCo
     /**
      * Get all Modelfile customization items.
      */
-    async getCustomizationItems(_session: any, _token: any): Promise<any> {
-      if ((_token as any)?.isCancellationRequested) return [];
+    async getCustomizationItems(
+      _session: unknown,
+      _token: CancellationLike,
+    ): Promise<vscode.ChatSessionCustomizationItem[]> {
+      if (_token?.isCancellationRequested) return [];
 
       try {
         const modelfilesUri = vscode.Uri.parse(ctx.modelfilesFolder);
@@ -51,8 +70,8 @@ export function createChatCustomizationProvider(ctx: ChatCustomizationProviderCo
 
         ctx.diagnostics?.debug?.(`[chat-customization] found ${items.length} modelfiles`);
         return items;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         ctx.diagnostics?.debug?.(`[chat-customization] failed to read modelfiles: ${msg}`);
         return [];
       }
@@ -63,6 +82,10 @@ export function createChatCustomizationProvider(ctx: ChatCustomizationProviderCo
      */
     get onDidChange(): vscode.Event<void> {
       return changeEmitter.event;
+    },
+
+    refresh() {
+      changeEmitter.fire();
     },
 
     /**
@@ -80,14 +103,15 @@ export function createChatCustomizationProvider(ctx: ChatCustomizationProviderCo
  */
 export function registerChatCustomizationProvider(ctx: ChatCustomizationProviderContext): vscode.Disposable {
   try {
+    const chatApi = vscode.chat as unknown as ChatSessionCustomizationRegistrationApi;
     // Guard: only available on VS Code with proposed API
-    if (typeof (vscode.chat as any).registerChatSessionCustomizationProvider !== 'function') {
+    if (typeof chatApi.registerChatSessionCustomizationProvider !== 'function') {
       return new vscode.Disposable(() => {});
     }
 
     const provider = createChatCustomizationProvider(ctx);
 
-    const disposable = (vscode.chat as any).registerChatSessionCustomizationProvider(
+    const disposable = chatApi.registerChatSessionCustomizationProvider(
       'opilot',
       {
         label: 'Ollama Modelfiles',
@@ -103,9 +127,7 @@ export function registerChatCustomizationProvider(ctx: ChatCustomizationProvider
 
     const onChanged = () => {
       // Trigger provider update via onDidChange event
-      if ((provider as any).onDidChange) {
-        (provider as any).onDidChange?.fire?.();
-      }
+      provider.refresh();
     };
 
     watcher.onDidCreate(onChanged);
@@ -113,8 +135,8 @@ export function registerChatCustomizationProvider(ctx: ChatCustomizationProvider
     watcher.onDidChange(onChanged);
 
     return vscode.Disposable.from(disposable, watcher);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
     ctx.diagnostics?.debug?.(`[chat-customization] registration failed: ${msg}`);
     return new vscode.Disposable(() => {});
   }

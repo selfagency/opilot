@@ -1514,23 +1514,8 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     const localNames = this.getLocalModelNames();
 
     const filteredEntries = Array.from(groups.entries())
-      .filter(
-        ([familyName, familyModels]) =>
-          (!filterLower ||
-            familyName.toLowerCase().includes(filterLower) ||
-            familyModels.some(
-              m =>
-                m.label.toLowerCase().includes(filterLower) ||
-                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
-            )) &&
-          (!this.recommendedOnly ||
-            familyModels.some(m => {
-              const cached = this.variantsCache.get(m.label);
-              if (!cached) return true;
-              return cached.some(v => isRecommendedForHardware(v.name));
-            })) &&
-          (this.capabilityFilters.size === 0 ||
-            familyModels.some(m => this.modelMatchesCapabilityFilters(m.label, localNames))),
+      .filter(([familyName, familyModels]) =>
+        this.shouldIncludeFamilyGroup(familyName, familyModels, filterLower, localNames),
       )
       .sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -1564,6 +1549,43 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       }
     }
     return result;
+  }
+
+  private shouldIncludeFamilyGroup(
+    familyName: string,
+    familyModels: ModelTreeItem[],
+    filterLower: string,
+    localNames: Set<string>,
+  ): boolean {
+    const matchesText =
+      !filterLower ||
+      familyName.toLowerCase().includes(filterLower) ||
+      familyModels.some(
+        m =>
+          m.label.toLowerCase().includes(filterLower) ||
+          (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+      );
+
+    if (!matchesText) {
+      return false;
+    }
+
+    const matchesRecommended =
+      !this.recommendedOnly ||
+      familyModels.some(m => {
+        const cached = this.variantsCache.get(m.label);
+        if (!cached) return true;
+        return cached.some(v => isRecommendedForHardware(v.name));
+      });
+
+    if (!matchesRecommended) {
+      return false;
+    }
+
+    return (
+      this.capabilityFilters.size === 0 ||
+      familyModels.some(m => this.modelMatchesCapabilityFilters(m.label, localNames))
+    );
   }
 
   refresh(): void {
