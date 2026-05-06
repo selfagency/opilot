@@ -87,7 +87,14 @@ describe('lmTools registration', () => {
 
     const listModelsHandler = registrations.get('opilot_list_models');
     expect(listModelsHandler).toBeDefined();
-    const result = await listModelsHandler!({}, {});
+    let result: unknown | undefined;
+    if (listModelsHandler) {
+      result = await listModelsHandler({}, {});
+      expect(result).toBeDefined();
+    } else {
+      // fail safe for missing handler
+      expect(listModelsHandler).toBeDefined();
+    }
     // Handler returns { content: [LanguageModelTextPart(JSON.stringify(...))] }
     expect(result).toBeDefined();
   });
