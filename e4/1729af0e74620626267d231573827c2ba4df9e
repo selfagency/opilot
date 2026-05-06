@@ -1,0 +1,33 @@
+src/lmTools.test.ts
+  s_1b879d0ddd3a7c::t_bd472b7927ead3 90,92
+  s_b1883c276b2c97::t_ce0c5f8fc28699 91,93-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "e41729af0e74620626267d231573827c2ba4df9e",
+  "prompts": {},
+  "humans": {
+    "h_627b419bd8fa0f": {
+      "author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_1b879d0ddd3a7c": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "87d330ab-acaf-488e-9f68-cf28aa68c350",
+        "model": "unknown"
+      },
+      "human_author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    },
+    "s_b1883c276b2c97": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "7979e8a8-4c61-4aa8-8f7a-7fbdf392aab4",
+        "model": "unknown"
+      },
+      "human_author": "Daniel Sieradski <2541728+selfagency@users.noreply.github.com>"
+    }
+  }
+}
