@@ -42,14 +42,14 @@ describe('lmTools registration', () => {
 
   it('registered tools are callable via vscode.lm mock', async () => {
     // Reset modules to mock vscode differently for this test
-    const registrations: Record<string, ToolHandler> = {};
+    const registrations = new Map<string, ToolHandler>();
     // Clear module cache so we can re-mock 'vscode' safely for this case
     vi.resetModules();
     // Minimal vscode mock for this test: only the pieces used by lmTools
     const mockVscode: Record<string, unknown> = {
       lm: {
         registerTool: vi.fn((name: string, _schema: unknown, handler: ToolHandler) => {
-          registrations[name] = handler;
+          registrations.set(name, handler);
           return { dispose: vi.fn() };
         }),
       },
@@ -82,10 +82,12 @@ describe('lmTools registration', () => {
     registerOpilotLmTools(mockContext, mockClient, mockLocalProvider, mockDiagnostics);
 
     // Ensure the list tool was registered and then invoke its handler
-    expect(Object.keys(registrations).length).toBeGreaterThan(0);
-    expect(typeof registrations.opilot_list_models).toBe('function');
+    expect(registrations.size).toBeGreaterThan(0);
+    expect(typeof registrations.get('opilot_list_models')).toBe('function');
 
-    const result = await registrations.opilot_list_models({}, {});
+    const listModelsHandler = registrations.get('opilot_list_models');
+    expect(listModelsHandler).toBeDefined();
+    const result = await listModelsHandler!({}, {});
     // Handler returns { content: [LanguageModelTextPart(JSON.stringify(...))] }
     expect(result).toBeDefined();
   });

@@ -36,6 +36,32 @@ import {
   splitLeadingXmlContextBlocks,
 } from './formatting';
 import { getModelOptionsForModel, type ModelOptionOverrides, type ModelSettingsStore } from './modelSettings.js';
+import {
+  deepFindInObject as deepFindInObjectUtil,
+  deepFindPromptString as deepFindPromptStringUtil,
+  extractMeaningfulUserText as extractMeaningfulUserTextUtil,
+  extractPromptFromOptions as extractPromptFromOptionsUtil,
+  extractTextFromDataPart as extractTextFromDataPartUtil,
+  extractTextFromUnknownInputPart as extractTextFromUnknownInputPartUtil,
+  isImageMimeType as isImageMimeTypeUtil,
+  isTextualMimeType as isTextualMimeTypeUtil,
+  normalizeMimeType as normalizeMimeTypeUtil,
+  summarizeIncomingRequest as summarizeIncomingRequestUtil,
+  summarizePart as summarizePartUtil,
+} from './providerPromptUtils.js';
+import {
+  buildReducedCloudRescueMessages as buildReducedCloudRescueMessagesUtil,
+  extractContextLengthFromInfo as extractContextLengthFromInfoUtil,
+  extractContextLengthFromParameters as extractContextLengthFromParametersUtil,
+  getAdvertisedContextLength as getAdvertisedContextLengthUtil,
+  getAdvertisedToolCalling as getAdvertisedToolCallingUtil,
+  isThinkingModel as isThinkingModelUtil,
+  isToolModel as isToolModelUtil,
+  isVisionModel as isVisionModelUtil,
+  parseModelContextLength as parseModelContextLengthUtil,
+  parseModelMaxOutputTokens as parseModelMaxOutputTokensUtil,
+  withModelPickerMetadata as withModelPickerMetadataUtil,
+} from './providerModelUtils.js';
 import { getSetting } from './settings.js';
 import { ThinkingParser } from './thinkingParser.js';
 import { buildNativeToolsArray, isToolsNotSupportedError } from './toolUtils.js';
@@ -47,13 +73,6 @@ const MODEL_SHOW_TIMEOUT_MS = 2_000;
 const NON_TOOL_MODEL_MIN_PICKER_CONTEXT_TOKENS = 131_072;
 const ASK_PICKER_CATEGORY = { label: 'Ask', order: 1 } as const;
 const MODEL_ID_PREFIX = 'ollama:';
-type LanguageModelChatInformationWithPicker = LanguageModelChatInformation & {
-  category?: {
-    label: string;
-    order: number;
-  };
-  isUserSelectable?: boolean;
-};
 
 type ChatStreamFn = (
   think: boolean,
@@ -280,17 +299,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    * capabilities.
    */
   private getAdvertisedContextLength(contextLength: number, supportsTools: boolean): number {
-    if (supportsTools) {
-      return contextLength;
-    }
-
-    // For non-tool models, only use the picker minimum when the context length
-    // is unknown or not set — never inflate a real known context length.
-    if (contextLength && contextLength > 0) {
-      return contextLength;
-    }
-
-    return NON_TOOL_MODEL_MIN_PICKER_CONTEXT_TOKENS;
+    return getAdvertisedContextLengthUtil(contextLength, supportsTools, NON_TOOL_MODEL_MIN_PICKER_CONTEXT_TOKENS);
   }
 
   /**
@@ -302,7 +311,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    * `nativeToolCallingByModelId` before sending tools in requests.
    */
   private getAdvertisedToolCalling(_nativeToolCalling: boolean): boolean {
-    return true;
+    return getAdvertisedToolCallingUtil(_nativeToolCalling);
   }
 
   /**
@@ -312,19 +321,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     info: LanguageModelChatInformation,
     nativeToolCalling: boolean,
   ): LanguageModelChatInformation {
-    const selectable = {
-      ...info,
-      isUserSelectable: true,
-    } as LanguageModelChatInformationWithPicker;
-
-    if (nativeToolCalling) {
-      return selectable;
-    }
-
-    return {
-      ...selectable,
-      category: ASK_PICKER_CATEGORY,
-    } as LanguageModelChatInformationWithPicker;
+    return withModelPickerMetadataUtil(info, nativeToolCalling, ASK_PICKER_CATEGORY);
   }
 
   /**
@@ -350,29 +347,14 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
    * Extract context_length from a Map or object by searching for the key or key.context_length suffix
    */
   private extractContextLengthFromInfo(modelinfo: Map<string, unknown> | Record<string, unknown>): unknown {
-    if (modelinfo instanceof Map) {
-      for (const [key, value] of modelinfo.entries()) {
-        if (key === 'context_length' || key.endsWith('.context_length')) {
-          return value;
-        }
-      }
-    } else {
-      for (const [key, value] of Object.entries(modelinfo)) {
-        if (key === 'context_length' || key.endsWith('.context_length')) {
-          return value;
-        }
-      }
-    }
-    return undefined;
+    return extractContextLengthFromInfoUtil(modelinfo);
   }
 
   /**
    * Extract context_length from parameters string (num_ctx field)
    */
   private extractContextLengthFromParameters(parameters: string | undefined): number {
-    if (!parameters) return 0;
-    const match = /^num_ctx\s+(\d+)/m.exec(parameters);
-    return match ? Number.parseInt(match[1], 10) : 0;
+    return extractContextLengthFromParametersUtil(parameters);
   }
 
   /**
@@ -382,26 +364,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     modelinfo: Map<string, unknown> | Record<string, unknown> | undefined,
     parameters: string | undefined,
   ): number {
-    if (modelinfo) {
-      const infoCtx = this.extractContextLengthFromInfo(modelinfo);
-      if (typeof infoCtx === 'number' && infoCtx > 0) {
-        return infoCtx;
-      }
-    }
-
-    const parametersCtx = this.extractContextLengthFromParameters(parameters);
-    return Math.max(parametersCtx, 0);
+    return parseModelContextLengthUtil(modelinfo, parameters);
   }
 
   private parseModelMaxOutputTokens(parameters: string | undefined, advertisedContextLength: number): number {
-    if (parameters) {
-      const predictMatch = /num_predict\s+(-?\d+)/m.exec(parameters);
-      if (predictMatch) {
-        const val = parseInt(predictMatch[1], 10);
-        return val > 0 ? val : advertisedContextLength;
-      }
-    }
-    return 4096;
+    return parseModelMaxOutputTokensUtil(parameters, advertisedContextLength);
   }
 
   private async getChatModelInfo(modelId: string): Promise<LanguageModelChatInformation | undefined> {
@@ -489,60 +456,28 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   // normalizeToolParameters/isToolsNotSupportedError provided by src/toolUtils.ts
 
   private buildReducedCloudRescueMessages(messages: Message[]): Message[] {
-    const system = messages.find(m => m.role === 'system');
-    const lastUser = [...messages].reverse().find(m => m.role === 'user');
-
-    const reduced: Message[] = [];
-    if (system) {
-      reduced.push(system);
-    }
-    if (lastUser) {
-      reduced.push(lastUser);
-    }
-
-    return reduced.length > 0 ? reduced : messages;
+    return buildReducedCloudRescueMessagesUtil(messages);
   }
 
   /**
    * Check if model supports tool use
    */
   private isToolModel(modelResponse: unknown): boolean {
-    const response = modelResponse as Record<string, unknown>;
-    const capabilities = response.capabilities;
-    if (Array.isArray(capabilities) && capabilities.some(cap => String(cap).toLowerCase().includes('tool'))) {
-      return true;
-    }
-
-    const template = response.template as string | undefined;
-    return template ? template.includes('{{ .Tools }}') : false;
+    return isToolModelUtil(modelResponse);
   }
 
   /**
    * Check if model supports extended thinking / reasoning
    */
   private isThinkingModel(modelResponse: unknown): boolean {
-    const response = modelResponse as Record<string, unknown>;
-    const capabilities = response.capabilities;
-    return Array.isArray(capabilities) && capabilities.some(cap => String(cap).toLowerCase().includes('thinking'));
+    return isThinkingModelUtil(modelResponse);
   }
 
   /**
    * Check if model supports vision/image inputs
    */
   private isVisionModel(modelResponse: unknown): boolean {
-    const response = modelResponse as Record<string, unknown>;
-    const capabilities = response.capabilities;
-    if (Array.isArray(capabilities) && capabilities.some(cap => String(cap).toLowerCase().includes('vision'))) {
-      return true;
-    }
-
-    if (response.projector_info) {
-      return true;
-    }
-
-    const details = response.details as Record<string, unknown> | undefined;
-    const families = details?.families as string[] | undefined;
-    return families ? families.includes('clip') || families.includes('vision') : false;
+    return isVisionModelUtil(modelResponse);
   }
 
   private reportThinkingChunk(
@@ -1351,109 +1286,34 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   }
 
   private isImageMimeType(mimeType: string | undefined): boolean {
-    return this.normalizeMimeType(mimeType).startsWith('image/');
+    return isImageMimeTypeUtil(mimeType);
   }
 
   private isTextualMimeType(mimeType: string | undefined): boolean {
-    const normalized = this.normalizeMimeType(mimeType);
-    return (
-      normalized.startsWith('text/') ||
-      normalized === 'application/json' ||
-      normalized.endsWith('+json') ||
-      normalized === 'application/xml' ||
-      normalized.endsWith('+xml')
-    );
+    return isTextualMimeTypeUtil(mimeType);
   }
 
   private normalizeMimeType(mimeType: string | undefined): string {
-    return (mimeType ?? '').split(';', 1)[0]?.trim().toLowerCase();
+    return normalizeMimeTypeUtil(mimeType);
   }
 
   private extractTextFromDataPart(part: LanguageModelDataPart): string | undefined {
-    if (!this.isTextualMimeType(part.mimeType)) {
-      return undefined;
-    }
-
-    try {
-      return new TextDecoder('utf-8').decode(part.data);
-    } catch {
-      return undefined;
-    }
+    return extractTextFromDataPartUtil(part);
   }
 
   private extractTextFromUnknownInputPart(part: unknown): string {
-    if (typeof part === 'string') {
-      return part;
-    }
-    if (!part || typeof part !== 'object') {
-      return '';
-    }
-
-    const maybePart = part as Record<string, unknown>;
-    const directStringKeys = ['value', 'text', 'prompt', 'content'];
-
-    for (const key of directStringKeys) {
-      if (typeof maybePart[key] === 'string') {
-        return maybePart[key];
-      }
-    }
-
-    for (const key of directStringKeys) {
-      const nested = maybePart[key];
-      if (nested && typeof nested === 'object') {
-        const nestedVal = (nested as Record<string, unknown>).value;
-        if (typeof nestedVal === 'string') {
-          return nestedVal;
-        }
-      }
-    }
-
-    const toStringFn = (part as { toString?: () => string }).toString;
-    if (typeof toStringFn !== 'function') {
-      return '';
-    }
-    const converted = toStringFn.call(part);
-    return converted && converted !== '[object Object]' ? converted : '';
+    return extractTextFromUnknownInputPartUtil(part);
   }
 
   private summarizeIncomingRequest(
     messages: readonly LanguageModelChatRequestMessage[],
     options: ProvideLanguageModelChatResponseOptions,
   ): Record<string, unknown> {
-    const summarizedMessages = messages.map((message, index) => ({
-      index,
-      role: message.role,
-      name: message.name,
-      contentParts: message.content.map((part, partIndex) => this.summarizePart(part, partIndex)),
-    }));
-
-    return {
-      messageCount: messages.length,
-      messages: summarizedMessages,
-      optionKeys: Object.keys((options as unknown as Record<string, unknown>) ?? {}),
-      modelOptionKeys:
-        options.modelOptions && typeof options.modelOptions === 'object'
-          ? Object.keys(options.modelOptions as Record<string, unknown>)
-          : [],
-    };
+    return summarizeIncomingRequestUtil(messages, options);
   }
 
   private summarizePart(part: unknown, index: number): Record<string, unknown> {
-    const partRecord = (part && typeof part === 'object' ? (part as Record<string, unknown>) : {}) as Record<
-      string,
-      unknown
-    >;
-    const ctorName =
-      part && typeof part === 'object' ? (part as { constructor?: { name?: string } }).constructor?.name : typeof part;
-    return {
-      index,
-      type: ctorName,
-      keys: Object.keys(partRecord),
-      mimeType: part instanceof LanguageModelDataPart ? part.mimeType : undefined,
-      sample:
-        this.extractTextFromUnknownInputPart(part)?.slice(0, 120) ||
-        (part instanceof LanguageModelTextPart ? part.value.slice(0, 120) : ''),
-    };
+    return summarizePartUtil(part, index);
   }
 
   private ensurePromptMessage(messages: Message[], options: ProvideLanguageModelChatResponseOptions): Message[] {
@@ -1473,89 +1333,19 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
   }
 
   private extractMeaningfulUserText(messages: Message[]): string {
-    const userMessages = messages
-      .filter(m => m.role === 'user')
-      .map(m => (typeof m.content === 'string' ? m.content : ''));
-    const combined = userMessages.join('\n').trim();
-    if (!combined) {
-      return '';
-    }
-
-    const stripped = combined
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // Ignore known scaffolding blocks that can appear without the actual ask
-    const onlyScaffolding =
-      /^(No user preferences|Session memory|I am working in a workspace|The user's current OS)/i.test(stripped);
-    return onlyScaffolding ? '' : stripped;
+    return extractMeaningfulUserTextUtil(messages);
   }
 
   private extractPromptFromOptions(options: ProvideLanguageModelChatResponseOptions): string {
-    const sources: unknown[] = [];
-    if (options.modelOptions) {
-      sources.push(options.modelOptions as unknown);
-    }
-    sources.push(options as unknown);
-
-    for (const source of sources) {
-      const prompt = this.deepFindPromptString(source, 0, new Set());
-      if (prompt) {
-        return prompt;
-      }
-    }
-
-    return '';
+    return extractPromptFromOptionsUtil(options);
   }
 
   private deepFindPromptString(value: unknown, depth: number, seen: Set<unknown>): string {
-    if (depth > 5 || value == null) {
-      return '';
-    }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return '';
-      }
-      const isLikelyXmlScaffold = trimmed.startsWith('<') && trimmed.includes('>');
-      const looksLikeNaturalPrompt = /\s/.test(trimmed) || /[?.!,:;]/.test(trimmed);
-      return isLikelyXmlScaffold || !looksLikeNaturalPrompt ? '' : trimmed;
-    }
-    if (typeof value !== 'object' || seen.has(value)) {
-      return '';
-    }
-    seen.add(value);
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        const found = this.deepFindPromptString(item, depth + 1, seen);
-        if (found) return found;
-      }
-      return '';
-    }
-
-    return this.deepFindInObject(value as Record<string, unknown>, depth, seen);
+    return deepFindPromptStringUtil(value, depth, seen);
   }
 
   private deepFindInObject(record: Record<string, unknown>, depth: number, seen: Set<unknown>): string {
-    const priorityKeys = ['prompt', 'userPrompt', 'query', 'input', 'text', 'message'];
-    for (const key of priorityKeys) {
-      if (key in record) {
-        const found = this.deepFindPromptString(record[key], depth + 1, seen);
-        if (found) return found;
-      }
-    }
-
-    const ignoredKeys = new Set(['toolMode', 'tools']);
-    for (const [key, child] of Object.entries(record)) {
-      if (!ignoredKeys.has(key)) {
-        const found = this.deepFindPromptString(child, depth + 1, seen);
-        if (found) return found;
-      }
-    }
-
-    return '';
+    return deepFindInObjectUtil(record, depth, seen);
   }
 
   /**

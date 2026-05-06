@@ -33,8 +33,7 @@ type GlobalStateLike = {
   update(key: string, value: unknown): Thenable<void>;
 };
 
-// nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
-const SETTINGS_MIGRATION_VERSION_KEY = 'opilot.settingsMigrationVersion'; // nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
+const SETTINGS_MIGRATION_STATE_KEY = 'opilot.settingsMigrationVersion';
 const SETTINGS_MIGRATION_VERSION = 1;
 
 type InspectResult<T> = {
@@ -147,7 +146,7 @@ export async function migrateLegacySettingsWithState(
       logger?.info?.(`[settings] removed shadowed legacy settings: ${cleaned.join(', ')}`);
     }
 
-    await globalState.update(SETTINGS_MIGRATION_VERSION_KEY, SETTINGS_MIGRATION_VERSION);
+    await globalState.update(SETTINGS_MIGRATION_STATE_KEY, SETTINGS_MIGRATION_VERSION);
   }
 
   return migrated;
@@ -162,7 +161,7 @@ function shouldSkipMigration(
     return false;
   }
 
-  const previousVersion = globalState.get<number>(SETTINGS_MIGRATION_VERSION_KEY) ?? 0;
+  const previousVersion = globalState.get<number>(SETTINGS_MIGRATION_STATE_KEY) ?? 0;
   if (previousVersion < SETTINGS_MIGRATION_VERSION) {
     return false;
   }

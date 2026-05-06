@@ -63,6 +63,9 @@ const PARAMETER_DOCS: Record<string, string> = {
   mirostat_eta: '`mirostat_eta` — Mirostat learning rate. Default: 0.1',
 };
 
+const KEYWORD_DOCS_MAP = new Map(Object.entries(KEYWORD_DOCS));
+const PARAMETER_DOCS_MAP = new Map(Object.entries(PARAMETER_DOCS));
+
 // ---------------------------------------------------------------------------
 // Modelfile parser — extracts structured fields for the Ollama create API
 // ---------------------------------------------------------------------------
@@ -97,10 +100,13 @@ interface ParsedModelfile {
 
 type ModelfileParseState = {
   result: ParsedModelfile;
-  parameters: Record<string, unknown>;
+  parameters: Map<string, unknown>;
+  adapters: Map<string, string>;
   messages: Message[];
   licenses: string[];
 };
+
+const RESERVED_PARAMETER_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 
 export function parseMultiLineTripleQuoted(
   lines: string[],
@@ -139,15 +145,21 @@ export function resolveLineValue(value: string, lines: string[], lineIdx: number
   return { value, newIdx: lineIdx };
 }
 
-// eslint-disable-next-line complexity
 function applyParameterEntry(value: string, state: ModelfileParseState): void {
   const paramSpaceIdx = value.indexOf(' ');
-  if (paramSpaceIdx !== -1) {
-    const paramName = value.substring(0, paramSpaceIdx);
-    const paramValue = value.substring(paramSpaceIdx + 1).trim();
-    const numVal = Number(paramValue);
-    state.parameters[paramName] = Number.isFinite(numVal) ? numVal : paramValue;
+  if (paramSpaceIdx === -1) {
+    return;
   }
+
+  const paramName = value.substring(0, paramSpaceIdx).trim();
+  if (paramName.length === 0 || RESERVED_PARAMETER_KEYS.has(paramName)) {
+    return;
+  }
+
+  const rawValue = value.substring(paramSpaceIdx + 1).trim();
+  const numericValue = Number(rawValue);
+  const parsedValue = Number.isFinite(numericValue) ? numericValue : rawValue;
+  state.parameters.set(paramName, parsedValue);
 }
 
 function applyMessageEntry(value: string, state: ModelfileParseState): void {
@@ -176,8 +188,7 @@ function applyKeyword(keyword: string, value: string, state: ModelfileParseState
       state.licenses.push(value);
       break;
     case 'ADAPTER':
-      state.result.adapters ??= {};
-      state.result.adapters[value] = value;
+      state.adapters.set(value, value);
       break;
     case 'PARAMETER':
       applyParameterEntry(value, state);
@@ -189,8 +200,14 @@ function applyKeyword(keyword: string, value: string, state: ModelfileParseState
 }
 
 export function parseModelfile(content: string): ParsedModelfile {
-  const state: ModelfileParseState = { result: {}, parameters: {}, messages: [], licenses: [] };
-  const { result, parameters, messages, licenses } = state;
+  const state: ModelfileParseState = {
+    result: {},
+    parameters: new Map<string, unknown>(),
+    adapters: new Map<string, string>(),
+    messages: [],
+    licenses: [],
+  };
+  const { result, parameters, adapters, messages, licenses } = state;
   const lines = content.split('\n');
 
   let i = 0;
@@ -218,7 +235,8 @@ export function parseModelfile(content: string): ParsedModelfile {
     i++;
   }
 
-  if (Object.keys(parameters).length > 0) result.parameters = parameters;
+  if (parameters.size > 0) result.parameters = Object.fromEntries(parameters.entries());
+  if (adapters.size > 0) result.adapters = Object.fromEntries(adapters.entries());
   if (messages.length > 0) result.messages = messages;
   if (licenses.length === 1) result.license = licenses[0];
   else if (licenses.length > 1) result.license = licenses;
@@ -492,7 +510,7 @@ export function createHoverProvider(): vscode.HoverProvider {
       if (!wordRange) return null;
 
       const word = document.getText(wordRange);
-      const doc = KEYWORD_DOCS[word] ?? PARAMETER_DOCS[word];
+      const doc = KEYWORD_DOCS_MAP.get(word) ?? PARAMETER_DOCS_MAP.get(word);
       if (!doc) return null;
 
       return new vscode.Hover(new vscode.MarkdownString(doc), wordRange);

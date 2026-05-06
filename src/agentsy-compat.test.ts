@@ -4,7 +4,7 @@ import { mapLegacyContextToNew, mapToolPayload, normalizeThinkingPart } from './
 describe('agentsy-compat', () => {
   it('maps legacy context object to new context', () => {
     const legacy = { remaining: 'hello world', metadata: { a: 1 } };
-    const res = mapLegacyContextToNew(legacy as any);
+    const res = mapLegacyContextToNew(legacy);
     expect(res.content).toBe('hello world');
     expect(res.meta).toEqual({ a: 1 });
   });
@@ -16,12 +16,12 @@ describe('agentsy-compat', () => {
 
   it('mapToolPayload is identity by default', () => {
     const p = { x: 1, y: 'z' };
-    expect(mapToolPayload(p as any)).toEqual(p);
+    expect(mapToolPayload(p)).toEqual(p);
   });
 
   it('normalizeThinkingPart handles variants', () => {
     expect(normalizeThinkingPart('abc')).toBe('abc');
-    expect(normalizeThinkingPart({ text: 't' } as any)).toBe('t');
+    expect(normalizeThinkingPart({ text: 't' })).toBe('t');
     expect(normalizeThinkingPart(undefined)).toBe('');
   });
 });

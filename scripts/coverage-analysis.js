@@ -14,11 +14,18 @@ for (const [filePath, info] of Object.entries(data)) {
   const safeFnMap = info.fnMap ?? {};
   const safeBranchMap = info.branchMap ?? {};
 
+  const findById = (mapLike, id) => {
+    for (const [entryId, entryValue] of Object.entries(mapLike)) {
+      if (entryId === id) return entryValue;
+    }
+    return undefined;
+  };
+
   const uncoveredLines = Object.entries(info.s)
     .filter(([, count]) => count === 0)
     .map(([key]) => {
-      if (!Object.hasOwn(safeStatementMap, key)) return null;
-      const statement = safeStatementMap[key];
+      const statement = findById(safeStatementMap, key);
+      if (!statement) return null;
       return statement?.start?.line ?? null;
     })
     .filter(Boolean)
@@ -27,8 +34,8 @@ for (const [filePath, info] of Object.entries(data)) {
   const uncoveredFns = Object.entries(info.f)
     .filter(([, count]) => count === 0)
     .map(([key]) => {
-      if (!Object.hasOwn(safeFnMap, key)) return null;
-      const fn = safeFnMap[key];
+      const fn = findById(safeFnMap, key);
+      if (!fn) return null;
       return fn ? `${fn.name}:L${fn.loc.start.line}` : null;
     })
     .filter(Boolean);
@@ -36,8 +43,8 @@ for (const [filePath, info] of Object.entries(data)) {
   const uncoveredBranches = Object.entries(info.b)
     .filter(([, counts]) => counts.some(c => c === 0))
     .map(([key]) => {
-      if (!Object.hasOwn(safeBranchMap, key)) return null;
-      const branch = safeBranchMap[key];
+      const branch = findById(safeBranchMap, key);
+      if (!branch) return null;
       return branch ? `L${branch.loc.start.line}(${branch.type})` : null;
     })
     .filter(Boolean);

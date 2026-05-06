@@ -24,14 +24,14 @@ describe('activate', () => {
       }),
     }));
     vi.doMock('@agentsy/formatting', () => ({
-      formatXmlLikeResponseForDisplay: (s: any) => s,
-      sanitizeNonStreamingModelOutput: (s: any) => s,
-      appendToBlockquote: (s: any) => s,
+      formatXmlLikeResponseForDisplay: (s: unknown) => s,
+      sanitizeNonStreamingModelOutput: (s: unknown) => s,
+      appendToBlockquote: (s: unknown) => s,
     }));
     vi.doMock('@agentsy/context', () => ({
-      splitLeadingXmlContextBlocks: (s: any) => ({ contextBlocks: [], remaining: String(s ?? '') }),
-      dedupeXmlContextBlocksByTag: (s: any) => s,
-      stripXmlContextTags: (s: any) => s,
+      splitLeadingXmlContextBlocks: (s: unknown) => ({ contextBlocks: [], remaining: String(s ?? '') }),
+      dedupeXmlContextBlocksByTag: (s: unknown) => s,
+      stripXmlContextTags: (s: unknown) => s,
     }));
     vi.doMock('@agentsy/tool-calls', () => ({
       buildXmlToolSystemPrompt: () => '',
@@ -51,7 +51,7 @@ describe('activate', () => {
     }));
     vi.doMock('@agentsy/xml-filter', () => ({
       createXmlStreamFilter: () => ({
-        write: (c: any) => c,
+        write: (c: unknown) => c,
         end: () => '',
       }),
     }));

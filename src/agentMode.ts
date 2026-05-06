@@ -63,22 +63,36 @@ export interface CodeBlock {
   code: string;
 }
 
-const CODE_BLOCK_HEADER_RE = /^(\w+)(?:\s+(.+))?$/;
-const WORD_ONLY_RE = /^\w+$/;
 const MAX_CODE_BLOCK_SIZE = 1_048_576; // 1 MB
+
+function isWordOnly(input: string): boolean {
+  if (input.length === 0) return false;
+  for (const char of input) {
+    const code = char.charCodeAt(0);
+    const isNumber = code >= 48 && code <= 57;
+    const isUpper = code >= 65 && code <= 90;
+    const isLower = code >= 97 && code <= 122;
+    const isUnderscore = code === 95;
+    if (!isNumber && !isUpper && !isLower && !isUnderscore) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function parseCodeBlockHeader(header: string): { language: string; filename?: string } {
   if (!header) {
     return { language: 'text' };
   }
 
-  const parsed = CODE_BLOCK_HEADER_RE.exec(header);
-  if (!parsed) {
-    return WORD_ONLY_RE.exec(header) ? { language: header } : { language: 'text', filename: header };
+  const trimmed = header.trim();
+  const firstWhitespace = trimmed.search(/\s/);
+  if (firstWhitespace === -1) {
+    return isWordOnly(trimmed) ? { language: trimmed } : { language: 'text', filename: trimmed };
   }
 
-  const language = parsed[1] || 'text';
-  const rest = parsed[2]?.trim();
+  const language = trimmed.slice(0, firstWhitespace) || 'text';
+  const rest = trimmed.slice(firstWhitespace).trim();
   if (!rest) {
     return { language };
   }

@@ -1,19 +1,29 @@
-export function deepMerge<T>(target: T, source: Partial<T>): T {
-  if (!source) return target;
-  const out: any = Array.isArray(target) ? [...(target as any)] : { ...(target as any) };
-  for (const key of Object.keys(source as any)) {
-    const srcVal: any = (source as any)[key];
-    const tgtVal: any = (target as any)[key];
-    if (srcVal && typeof srcVal === 'object' && !Array.isArray(srcVal) && tgtVal && typeof tgtVal === 'object') {
-      out[key] = deepMerge(tgtVal, srcVal);
-    } else {
-      out[key] = srcVal;
-    }
-  }
-  return out;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function createVscodeMock(overrides: any = {}) {
+export function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
+  if (!source) return target;
+  const out: Record<string, unknown> = { ...target };
+  // nosemgrep: javascript.lang.security.detect-object-injection
+  // Test-only deep merge helper: keys come from Object.entries(source) and are not user-controlled.
+  for (const [key, srcVal] of Object.entries(source as Record<string, unknown>)) {
+    if (!Object.hasOwn(source, key)) {
+      continue;
+    }
+
+    const tgtVal = (target as Record<string, unknown>)[key];
+    if (isRecord(srcVal) && isRecord(tgtVal)) {
+      out[key] = deepMerge(tgtVal, srcVal);
+      continue;
+    }
+
+    out[key] = srcVal;
+  }
+  return out as T;
+}
+
+export function createVscodeMock(overrides: Record<string, unknown> = {}) {
   const base = {
     TreeItem: class {
       constructor(public label: string) {}
@@ -55,7 +65,7 @@ export function createVscodeMock(overrides: any = {}) {
       showInputBox: () => {},
       showErrorMessage: () => {},
       showInformationMessage: () => {},
-      withProgress: async (_options: any, callback: any) => callback({}),
+      withProgress: async (_options: unknown, callback: (progress: Record<string, never>) => unknown) => callback({}),
     },
     commands: {
       registerCommand: () => ({ dispose: () => {} }),
@@ -76,10 +86,10 @@ export function createVscodeMock(overrides: any = {}) {
     },
     Uri: {
       file: (path: string) => ({ fsPath: path }),
-      joinPath: (_base: any, _path: string) => ({ fsPath: _path }),
+      joinPath: (_base: unknown, _path: string) => ({ fsPath: _path }),
     },
     ChatResponseMarkdownPart: class {
-      value: any = {};
+      value: Record<string, unknown> = {};
     },
     LanguageModelChatMessage: {
       User: () => {},
@@ -102,9 +112,9 @@ export function createVscodeMock(overrides: any = {}) {
         };
       }
     },
-  } as any;
+  } as Record<string, unknown>;
 
-  return deepMerge(base, overrides) as any;
+  return deepMerge(base, overrides);
 }
 
 export default createVscodeMock;
