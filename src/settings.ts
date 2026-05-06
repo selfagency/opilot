@@ -33,6 +33,7 @@ type GlobalStateLike = {
   update(key: string, value: unknown): Thenable<void>;
 };
 
+// nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
 const SETTINGS_MIGRATION_VERSION_KEY = 'opilot.settingsMigrationVersion';
 const SETTINGS_MIGRATION_VERSION = 1;
 

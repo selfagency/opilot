@@ -142,5 +142,5 @@ tasks:
   docs:preview:
     desc: Preview built documentation
     cmds:
-      - '{{.BIN}}vitepress preview docs/.vitepress/dist'
+      - '{{.BIN}}vitepress preview docs'
     silent: false

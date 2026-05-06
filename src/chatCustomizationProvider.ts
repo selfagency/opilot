@@ -47,7 +47,7 @@ export function createChatCustomizationProvider(ctx: ChatCustomizationProviderCo
       if (_token?.isCancellationRequested) return [];
 
       try {
-        const modelfilesUri = vscode.Uri.parse(ctx.modelfilesFolder);
+        const modelfilesUri = vscode.Uri.file(ctx.modelfilesFolder);
         const files = await vscode.workspace.fs.readDirectory(modelfilesUri);
 
         const items: vscode.ChatSessionCustomizationItem[] = [];
@@ -122,7 +122,7 @@ export function registerChatCustomizationProvider(ctx: ChatCustomizationProvider
 
     // Set up file watcher for modelfiles folder
     const watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(vscode.Uri.parse(ctx.modelfilesFolder), '*.modelfile'),
+      new vscode.RelativePattern(vscode.Uri.file(ctx.modelfilesFolder), '*.modelfile'),
     );
 
     const onChanged = () => {

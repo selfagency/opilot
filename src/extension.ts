@@ -72,6 +72,19 @@ type ChatParticipantDetectionRegistrationApi = {
   ) => vscode.Disposable;
 };
 
+type RequestToolSelectionMapLike = Map<string, vscode.LanguageModelToolInformation>;
+
+function getSelectedLmTools(request: vscode.ChatRequest): readonly vscode.LanguageModelToolInformation[] {
+  const availableTools = vscode.lm.tools ?? [];
+  const selectedTools = (request as unknown as { tools?: RequestToolSelectionMapLike }).tools;
+  if (!(selectedTools instanceof Map) || selectedTools.size === 0) {
+    return availableTools;
+  }
+
+  const selectedNames = new Set(selectedTools.keys());
+  return availableTools.filter(tool => selectedNames.has(tool.name));
+}
+
 export function toRuntimeModelId(modelId: string): string {
   return modelId.startsWith(PROVIDER_MODEL_ID_PREFIX) ? modelId.slice(PROVIDER_MODEL_ID_PREFIX.length) : modelId;
 }
@@ -360,6 +373,31 @@ async function promptReloadAfterDisable(
   }
 }
 
+async function hasBuiltInOllamaModels(lmApi: Pick<typeof vscode.lm, 'selectChatModels'>): Promise<boolean> {
+  const conflictModels = await lmApi.selectChatModels({ vendor: 'ollama' });
+  return conflictModels.length > 0;
+}
+
+async function resolveBuiltInOllamaConflictFlow(
+  win: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage' | 'showErrorMessage'>,
+  ws: Pick<typeof vscode.workspace, 'getConfiguration'>,
+  commands: Pick<typeof vscode.commands, 'executeCommand'>,
+  context?: Pick<vscode.ExtensionContext, 'globalStorageUri'>,
+): Promise<void> {
+  if (!(await promptDisableBuiltInProvider(win))) return;
+
+  const disabled = await disableBuiltInOllamaProvider(ws, win, context);
+
+  if (!disabled) {
+    await win.showErrorMessage(
+      'Built-in Ollama provider appears to still be enabled. Please disable it in Chat Language Models settings.',
+    );
+    return;
+  }
+
+  await promptReloadAfterDisable(win, commands);
+}
+
 export async function handleBuiltInOllamaConflict(
   windowApi?: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage' | 'showErrorMessage'>,
   workspaceApi?: Pick<typeof vscode.workspace, 'getConfiguration'>,
@@ -376,23 +414,11 @@ export async function handleBuiltInOllamaConflict(
   const lm = lmApi ?? vscode.lm;
   const commands = commandsApi ?? vscode.commands;
 
-  const conflictModels = await lm.selectChatModels({ vendor: 'ollama' });
-  if (!conflictModels.length) return;
+  if (!(await hasBuiltInOllamaModels(lm))) return;
 
   builtInOllamaConflictPromptInProgress = true;
   try {
-    if (!(await promptDisableBuiltInProvider(win))) return;
-
-    const disabled = await disableBuiltInOllamaProvider(ws, win, context);
-
-    if (!disabled) {
-      await win.showErrorMessage(
-        'Built-in Ollama provider appears to still be enabled. Please disable it in Chat Language Models settings.',
-      );
-      return;
-    }
-
-    await promptReloadAfterDisable(win, commands);
+    await resolveBuiltInOllamaConflictFlow(win, ws, commands, context);
   } finally {
     builtInOllamaConflictPromptInProgress = false;
   }
@@ -1438,11 +1464,17 @@ async function handleDirectOllamaRequest(
     }
 
     // Handle editedFileEvents for recent workspace context
-    const editedFileEvents = (request as unknown as { editedFileEvents?: Array<{ uri: string }> }).editedFileEvents;
+    const editedFileEvents = (request as unknown as { editedFileEvents?: Array<{ uri: vscode.Uri | string }> })
+      .editedFileEvents;
     if (editedFileEvents && editedFileEvents.length > 0) {
       const recentFiles = editedFileEvents
         .slice(0, 3)
-        .map(e => e.uri.split('/').pop())
+        .map(event => {
+          if (event.uri instanceof vscode.Uri) {
+            return event.uri.path.split('/').pop() || event.uri.path;
+          }
+          return event.uri.split('/').pop() || event.uri;
+        })
         .join(', ');
       systemPrompt += `\n\nRecently edited files: ${recentFiles}`;
     }
@@ -1476,7 +1508,7 @@ async function handleDirectOllamaRequest(
     }
 
     // Tool invocation loop — only when VS Code tools and an invocation token are available.
-    const vscodeLmTools = vscode.lm.tools ?? [];
+    const vscodeLmTools = getSelectedLmTools(request);
     let useXmlFallback = false;
     if (vscodeLmTools.length > 0 && request.toolInvocationToken) {
       const ollamaTools: Tool[] = buildNativeToolsArray(

@@ -551,12 +551,15 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     hideThinkingContent: boolean,
   ): void {
     const reportUnknownPart = progress.report as unknown as (part: unknown) => void;
+    const ThinkingPartCtor = LanguageModelThinkingPart as unknown as (new (thinking: string) => unknown) | undefined;
     if (!state.thinkingStarted) {
       // Phase 3: Emit native LanguageModelThinkingPart if available
-      try {
-        reportUnknownPart(new LanguageModelThinkingPart(hideThinkingContent ? '' : 'Thinking...'));
-      } catch {
-        // Fallback to markdown if LanguageModelThinkingPart not available
+      if (typeof ThinkingPartCtor === 'function') {
+        try {
+          reportUnknownPart(new ThinkingPartCtor(hideThinkingContent ? '' : 'Thinking...'));
+        } catch {
+          // Fallback to markdown if LanguageModelThinkingPart not available
+        }
       }
       progress.report(new LanguageModelTextPart('\n\n> 💭 **Thinking**\n>\n'));
       state.thinkingStarted = true;
@@ -565,10 +568,12 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     }
     if (!hideThinkingContent) {
       // Phase 3: Emit thinking content via native API
-      try {
-        reportUnknownPart(new LanguageModelThinkingPart(text));
-      } catch {
-        // Fallback to markdown if API not available
+      if (typeof ThinkingPartCtor === 'function') {
+        try {
+          reportUnknownPart(new ThinkingPartCtor(text));
+        } catch {
+          // Fallback to markdown if API not available
+        }
       }
       const formatted = appendToBlockquote(text, state.thinkingLineStart);
       state.thinkingLineStart = false;
@@ -717,7 +722,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       return { response, effectiveTools: tools, shouldThink: false };
     } catch (retryError) {
       // After disabling thinking, try disabling tools for cloud models
-      if (isCloudModel && tools && this.isThinkingInternalServerError(retryError)) {
+      if (
+        isCloudModel &&
+        tools &&
+        (this.isThinkingInternalServerError(retryError) || isToolsNotSupportedError(retryError))
+      ) {
         this.outputChannel.warn(
           `[client] cloud model ${runtimeModelId} failed with tools after think retry; retrying without tools`,
         );
@@ -916,7 +925,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             if (!transport) {
               return nativeSdkStreamChat({
                 modelId: runtimeModelId,
-                messages: ollamaMessages as Message[],
+                messages: ollamaMessages,
                 tools: t,
                 shouldThink: think,
                 effectiveClient: perRequestClient,
@@ -925,7 +934,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             }
             return openAiCompatStreamChat({
               modelId: runtimeModelId,
-              messages: ollamaMessages as Message[],
+              messages: ollamaMessages,
               tools: t,
               shouldThink: think,
               effectiveClient: perRequestClient,
@@ -937,7 +946,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         : (think: boolean, t?: typeof tools) =>
             nativeSdkStreamChat({
               modelId: runtimeModelId,
-              messages: ollamaMessages as Message[],
+              messages: ollamaMessages,
               tools: t,
               shouldThink: think,
               effectiveClient: perRequestClient,
@@ -1056,7 +1065,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
               if (!transport) {
                 return nativeSdkChatOnce({
                   modelId: runtimeModelId,
-                  messages: ollamaMessages as Message[],
+                  messages: ollamaMessages,
                   tools: effectiveTools,
                   shouldThink: think,
                   effectiveClient: perRequestClient,
@@ -1065,7 +1074,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
               }
               return openAiCompatChatOnce({
                 modelId: runtimeModelId,
-                messages: ollamaMessages as Message[],
+                messages: ollamaMessages,
                 tools: effectiveTools,
                 shouldThink: think,
                 effectiveClient: perRequestClient,
@@ -1077,7 +1086,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
           : (think: boolean) =>
               nativeSdkChatOnce({
                 modelId: runtimeModelId,
-                messages: ollamaMessages as Message[],
+                messages: ollamaMessages,
                 tools: effectiveTools,
                 shouldThink: think,
                 effectiveClient: perRequestClient,

@@ -49,7 +49,9 @@ export function createChatStatusItem(): vscode.ChatStatusItem | undefined {
     chatStatusItem.isLoading = true;
 
     return chatStatusItem;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[chat-status] createChatStatusItem failed: ${message}`);
     // Graceful degradation if API not available
     return undefined;
   }

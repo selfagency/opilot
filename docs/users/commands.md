@@ -193,14 +193,7 @@ Opilot exposes six tools via the VS Code Language Model API. These tools are aut
 
 ```json
 {
-  "content": [
-    {
-      "id": "llama3.2:3b",
-      "size": 1234567890,
-      "downloaded": true,
-      "running": true
-    }
-  ]
+  "content": ["[{\"id\":\"llama3.2:3b\",\"size\":1234567890,\"downloaded\":true,\"running\":true}]"]
 }
 ```
 

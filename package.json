@@ -36,6 +36,12 @@
   "publisher": "selfagency",
   "main": "./dist/extension.js",
   "scripts": {
+    "compile": "task compile",
+    "test": "task unit-tests",
+    "test:extension": "task extension-tests",
+    "test:coverage": "task unit-test-coverage",
+    "watch": "task watch",
+    "lint": "task lint",
     "prepare": "husky",
     "task": "task"
   },

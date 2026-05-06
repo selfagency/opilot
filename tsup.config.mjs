@@ -8,7 +8,7 @@ export default defineConfig({
   format: ['cjs'],
   platform: 'node',
   external: ['vscode'],
-  noExternal: ['ollama', /^@agentsy\/(core|vscode)/],
+  noExternal: ['ollama', /^@agentsy\//, '@vscode/prompt-tsx'],
   sourcemap: !production,
   minify: production,
   clean: true,

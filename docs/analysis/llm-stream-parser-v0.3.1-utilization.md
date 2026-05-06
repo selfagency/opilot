@@ -312,7 +312,7 @@ provider.ts:streamModelResponse()
 
 **After (With Agent Loop + Adapters)**:
 
-```
+```text
 provider.ts:streamModelResponse()
 ├── createAgentLoop() with VSCodeCopilotAdapter
 │   ├── Automated step coordination

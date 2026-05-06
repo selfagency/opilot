@@ -199,7 +199,7 @@ PARAMETER num_ctx 4096
 
 See the [Ollama Modelfile Docs](https://github.com/ollama/ollama/blob/main/docs/modelfile.md) for the full syntax reference.
 
-## � Available Tools
+## 🧰 Available Tools
 
 Opilot exposes six VS Code Language Model tools for programmatic model management and agentic workflows:
 
@@ -212,7 +212,7 @@ Opilot exposes six VS Code Language Model tools for programmatic model managemen
 
 Tools are auto-discovered by Copilot Chat and other extensions. For detailed tool specifications, parameters, and use cases, see [**Available Tools** in the docs](https://opilot.self.agency/users/commands/#tools).
 
-## �🛡️ Privacy & Security
+## 🛡️ Privacy & Security
 
 - Your models and conversations run **completely locally** - no data is sent to external services
 - The extension communicates only with your local Ollama instance (or your specified remote instance)

@@ -101,11 +101,13 @@ describe('activate', () => {
       Disposable: class {
         constructor(public dispose: () => void) {}
         static from(...disposables: Array<{ dispose?: () => void }>) {
-          return new this(() => {
-            for (const disposable of disposables) {
-              disposable.dispose?.();
-            }
-          });
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -235,8 +237,14 @@ describe('activate', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -369,8 +377,14 @@ describe('activate', () => {
       },
       Disposable: class {
         constructor(public dispose: () => void) {}
-        static from(...disposables: any[]) {
-          return new (this as any)(() => disposables.forEach(d => d.dispose?.()));
+        static from(...disposables: Array<{ dispose?: () => void }>) {
+          return {
+            dispose: () => {
+              for (const disposable of disposables) {
+                disposable.dispose?.();
+              }
+            },
+          };
         }
       },
     }));
@@ -1795,7 +1809,11 @@ describe('setupChatParticipant', () => {
     const mockHandler = vi.fn() as unknown as import('vscode').ChatRequestHandler;
     const mockContext = { extensionUri: { fsPath: '/test' } };
 
-    const result = await ext.setupChatParticipant(mockContext as any, mockHandler, { createChatParticipant } as any);
+    const result = await ext.setupChatParticipant(
+      mockContext as unknown as import('vscode').ExtensionContext,
+      mockHandler,
+      { createChatParticipant } as unknown as Pick<typeof import('vscode').chat, 'createChatParticipant'>,
+    );
 
     expect(createChatParticipant).toHaveBeenCalledWith('opilot.ollama', mockHandler);
     expect(mockParticipant.iconPath).toBeDefined();

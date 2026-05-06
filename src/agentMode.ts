@@ -40,8 +40,17 @@ export function shouldUseAgentMode(ctx: AgentModeContext, prompt: string): boole
   if (ctx.permissionLevel === 'autopilot' || ctx.permissionLevel === 'autoApprove') return true;
   if (prompt.includes('#file') || prompt.includes('#selection')) return true;
 
+  const lowerPrompt = prompt.toLowerCase();
   const agentKeywords = ['edit', 'refactor', 'fix', 'update', 'replace', 'modify', 'create file', 'new file'];
-  return agentKeywords.some(kw => prompt.toLowerCase().includes(kw));
+  const hasEditIntent = agentKeywords.some(kw => lowerPrompt.includes(kw));
+  const hasFileCue =
+    lowerPrompt.includes(' file') ||
+    lowerPrompt.includes('.ts') ||
+    lowerPrompt.includes('.js') ||
+    lowerPrompt.includes('.md') ||
+    lowerPrompt.includes('path:');
+
+  return hasEditIntent && hasFileCue;
 }
 
 /**
@@ -81,7 +90,8 @@ export function generateTextEdits(originalContent: string, newContent: string): 
   // Replace entire document
   const lines = originalContent.split('\n');
   const lastLine = lines.at(-1) ?? '';
-  const range = new vscode.Range(new vscode.Position(0, 0), new vscode.Position(lines.length, lastLine.length));
+  const lastLineIndex = Math.max(lines.length - 1, 0);
+  const range = new vscode.Range(new vscode.Position(0, 0), new vscode.Position(lastLineIndex, lastLine.length));
 
   return [vscode.TextEdit.replace(range, newContent)];
 }
@@ -110,7 +120,9 @@ export async function requestEditConfirmation(
     }
 
     return result === 'Apply';
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[agent-mode] confirmation prompt failed: ${message}`);
     return false;
   }
 }
@@ -130,14 +142,19 @@ export async function applyTextEdits(
 ): Promise<boolean> {
   try {
     const editStream = stream as ChatResponseEditStream;
+    if (typeof editStream.textEdit !== 'function') {
+      return false;
+    }
     // Phase 2 method: stream.textEdit(uri, edits)
-    editStream.textEdit?.(uri, edits);
+    editStream.textEdit(uri, edits);
 
     // Signal completion
-    editStream.textEdit?.(uri, true);
+    editStream.textEdit(uri, true);
 
     return true;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[agent-mode] textEdit failed for ${uri.fsPath}: ${message}`);
     return false;
   }
 }
@@ -151,10 +168,15 @@ export async function applyWorkspaceEdit(
 ): Promise<boolean> {
   try {
     const editStream = stream as ChatResponseEditStream;
+    if (typeof editStream.workspaceEdit !== 'function') {
+      return false;
+    }
     // Phase 2 method: stream.workspaceEdit(edits)
-    editStream.workspaceEdit?.(edits);
+    editStream.workspaceEdit(edits);
     return true;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[agent-mode] workspaceEdit failed: ${message}`);
     return false;
   }
 }

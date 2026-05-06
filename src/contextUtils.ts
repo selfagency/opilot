@@ -263,6 +263,16 @@ export async function renderOllamaPrompt(
       endpoint,
       tokenizer,
     );
+
+    const hasNonTextParts = result.messages.some((message: Raw.ChatMessage) =>
+      message.content.some(
+        (part: Raw.ChatCompletionContentPart) => part.type !== Raw.ChatCompletionContentPartKind.Text,
+      ),
+    );
+    if (hasNonTextParts) {
+      return truncateMessages(messages, maxInputTokens);
+    }
+
     return result.messages.map((m: Raw.ChatMessage) => ({
       role: chatRoleToString(m.role),
       content: m.content
