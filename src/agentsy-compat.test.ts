@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mapLegacyContextToNew, mapToolPayload, normalizeThinkingPart } from './agentsy-compat';
 
 describe('agentsy-compat', () => {

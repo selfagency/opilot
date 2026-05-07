@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import * as vscode from 'vscode';
-import type { ResolvedReference } from '../prompts/OllamaPrompt.js';
 import type { DiagnosticsLogger } from '../diagnostics.js';
+import type { ResolvedReference } from '../prompts/OllamaPrompt.js';
 
 // Expose the ResolvedReference type for external consumers to import if needed
 export type _ResolvedReference = ResolvedReference;

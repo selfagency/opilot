@@ -173,29 +173,34 @@ function applyMessageEntry(value: string, state: ModelfileParseState): void {
   }
 }
 
+const keywordHandlers: Record<string, (value: string, state: ModelfileParseState) => void> = {
+  FROM: (value, state) => {
+    state.result.from = value;
+  },
+  SYSTEM: (value, state) => {
+    state.result.system = value;
+  },
+  TEMPLATE: (value, state) => {
+    state.result.template = value;
+  },
+  LICENSE: (value, state) => {
+    state.licenses.push(value);
+  },
+  ADAPTER: (value, state) => {
+    state.adapters.set(value, value);
+  },
+  PARAMETER: (value, state) => {
+    applyParameterEntry(value, state);
+  },
+  MESSAGE: (value, state) => {
+    applyMessageEntry(value, state);
+  },
+};
+
 function applyKeyword(keyword: string, value: string, state: ModelfileParseState): void {
-  switch (keyword) {
-    case 'FROM':
-      state.result.from = value;
-      break;
-    case 'SYSTEM':
-      state.result.system = value;
-      break;
-    case 'TEMPLATE':
-      state.result.template = value;
-      break;
-    case 'LICENSE':
-      state.licenses.push(value);
-      break;
-    case 'ADAPTER':
-      state.adapters.set(value, value);
-      break;
-    case 'PARAMETER':
-      applyParameterEntry(value, state);
-      break;
-    case 'MESSAGE':
-      applyMessageEntry(value, state);
-      break;
+  const handler = keywordHandlers[keyword];
+  if (handler) {
+    handler(value, state);
   }
 }
 

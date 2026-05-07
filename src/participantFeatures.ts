@@ -147,7 +147,7 @@ Chat with models running on your local Ollama instance or remote server.
 /**
  * Phase 5.4: additionalWelcomeMessage — Server status on first open
  */
-export async function getAdditionalWelcomeMessage(ctx: ParticipantFeaturesContext): Promise<string> {
+export async function getAdditionalWelcomeMessage(): Promise<string> {
   try {
     // Use a short timeout to avoid stalling activation when the Ollama host is slow or unreachable.
     const timeoutMs = 3000;

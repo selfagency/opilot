@@ -1,11 +1,11 @@
-import * as vscode from 'vscode';
 import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
-import { openAiCompatChatOnce, nativeSdkChatOnce } from '../chatUtils.js';
-import { sanitizeNonStreamingModelOutput } from '../formatting';
-import { isToolsNotSupportedError } from '../toolUtils.js';
+import * as vscode from 'vscode';
+import { nativeSdkChatOnce, openAiCompatChatOnce } from '../chatUtils.js';
 import type { DiagnosticsLogger } from '../diagnostics.js';
-import { invokeSingleTool } from './tooling-core.js';
+import { sanitizeNonStreamingModelOutput } from '../formatting';
 import type { ModelOptionOverrides } from '../modelSettings.js';
+import { isToolsNotSupportedError } from '../toolUtils.js';
+import { invokeSingleTool } from './tooling-core.js';
 
 export interface ToolLoopContext {
   isCloudModel: boolean;

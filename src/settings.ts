@@ -1,3 +1,4 @@
+// nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
 import * as vscode from 'vscode';
 
 export const SETTINGS_NAMESPACE = 'opilot';

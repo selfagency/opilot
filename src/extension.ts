@@ -1,9 +1,8 @@
 /* eslint-disable max-lines */
 import { createVSCodeChatRenderer, mapUsageToVSCode, toVSCodeToolCallPart } from '@agentsy/vscode';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { promises as fsPromises } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
 import { registerChatCustomizationProvider } from './chatCustomizationProvider.js';
@@ -15,6 +14,8 @@ import { BASE_SYSTEM_PROMPT, detectsRepetition, renderOllamaPrompt, resolveConte
 import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './errorHandler.js';
 import { resolvePromptReferences } from './extension/chat-helpers.js';
+import { handleVsCodeLmRequest } from './extension/lm-api.js';
+import { setupChatParticipant } from './extension/participant-setup.js';
 import {
   beginToolInvocationSafely,
   reportThinkingProgressSafely,
@@ -23,7 +24,6 @@ import {
   updateToolInvocationSafely,
 } from './extension/stream-ui.js';
 import { executeToolCallingLoop } from './extension/tooling-loop.js';
-import { handleVsCodeLmRequest } from './extension/lm-api.js';
 import {
   handleConfigurationChange,
   handleConnectionTestFailure,
@@ -45,15 +45,6 @@ import {
   type ModelOptionOverrides,
   type ModelSettingsStore,
 } from './modelSettings.js';
-import {
-  createFollowupProvider,
-  createParticipantDetectionProvider,
-  createParticipantVariableProvider,
-  createSummarizer,
-  createTitleProvider,
-  getAdditionalWelcomeMessage,
-  getHelpTextPrefix,
-} from './participantFeatures.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { getSetting, migrateLegacySettingsWithState } from './settings.js';
 import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settingsWebview.js';
@@ -67,13 +58,16 @@ import {
   isToolsNotSupportedError,
 } from './toolUtils.js';
 
+import { handleBuiltInOllamaConflict } from './extension/built-in-ollama-conflict';
+import { removeBuiltInOllamaFromChatLanguageModels } from './extension/built-in-ollama-conflict';
+import { builtInOllamaConflictPromptInProgress } from './participantOrchestration';
+
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
 const HERMES_MODEL_PATTERN = /qwen2\.5|qwen3|qwq/i;
 
 /** VS Code Autopilot signals task completion by having the model call this tool. */
 const TASK_COMPLETE_TOOL_NAME = 'task_complete';
-let builtInOllamaConflictPromptInProgress = false;
 
 type ChatParticipantDetectionRegistrationApi = {
   registerChatParticipantDetectionProvider?: (
@@ -123,98 +117,6 @@ export function getWindowsLogTailPowerShellArgs(
 }
 
 // normalizeToolParameters/isToolsNotSupportedError moved to src/toolUtils.ts
-
-async function tryUpdateChatLanguageModelsFile(modelsPath: string, maxRetries: number): Promise<boolean> {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      const raw = await fsPromises.readFile(modelsPath, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        break;
-      }
-
-      const filtered = parsed.filter(
-        item => !(item && typeof item === 'object' && (item as Record<string, unknown>).vendor === 'ollama'),
-      );
-
-      if (filtered.length === parsed.length) {
-        break;
-      }
-
-      const latestRaw = await fsPromises.readFile(modelsPath, 'utf8');
-      if (latestRaw !== raw) {
-        if (attempt < maxRetries - 1) {
-          continue;
-        }
-        break;
-      }
-
-      await fsPromises.writeFile(modelsPath, `${JSON.stringify(filtered, null, 2)}\n`, 'utf8');
-      return true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[opilot] failed to update chat language models file (${modelsPath}): ${message}`);
-      break;
-    }
-  }
-  return false;
-}
-
-async function removeBuiltInOllamaFromChatLanguageModels(
-  context: Pick<vscode.ExtensionContext, 'globalStorageUri'>,
-): Promise<boolean> {
-  const candidatePaths = new Set<string>();
-
-  // globalStorageUri: .../profiles/<profile-id>/globalStorage/<extension-id>
-  // or .../User/globalStorage/<extension-id>
-  const profileDir = dirname(dirname(context.globalStorageUri.fsPath));
-  candidatePaths.add(join(profileDir, 'chatLanguageModels.json'));
-
-  // Standard VS Code user folders per platform where profile data lives.
-  const userDirs: string[] = [];
-  if (process.platform === 'darwin') {
-    userDirs.push(join(homedir(), 'Library', 'Application Support', 'Code', 'User'));
-  } else if (process.platform === 'win32') {
-    const appData = process.env['APPDATA'];
-    if (appData) {
-      userDirs.push(join(appData, 'Code', 'User'));
-    }
-  } else {
-    // Linux (and other POSIX)
-    const xdgConfig = process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config');
-    userDirs.push(join(xdgConfig, 'Code', 'User'));
-  }
-  for (const userDir of userDirs) {
-    candidatePaths.add(join(userDir, 'chatLanguageModels.json'));
-  }
-
-  // Profile-scoped files: User/profiles/<id>/chatLanguageModels.json
-  for (const userDir of userDirs) {
-    try {
-      const profilesDir = join(userDir, 'profiles');
-      const entries = await fsPromises.readdir(profilesDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          candidatePaths.add(join(profilesDir, entry.name, 'chatLanguageModels.json'));
-        }
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.debug(`[opilot] skipping profiles directory scan for ${userDir}: ${message}`);
-    }
-  }
-
-  const MAX_WRITE_RETRIES = 3;
-  let changed = false;
-
-  for (const modelsPath of candidatePaths) {
-    if (await tryUpdateChatLanguageModelsFile(modelsPath, MAX_WRITE_RETRIES)) {
-      changed = true;
-    }
-  }
-
-  return changed;
-}
 
 function logPerformanceSnapshot(
   diagnostics: DiagnosticsLogger,

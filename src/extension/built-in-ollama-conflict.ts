@@ -1,30 +1,17 @@
 import { promises as fsPromises } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { Ollama } from 'ollama';
 import * as vscode from 'vscode';
-import type { DiagnosticsLogger } from './diagnostics.js';
-import { isSelectedAction } from './extensionHelpers.js';
-import { formatBytes } from './formatUtils.js';
-import {
-  createFollowupProvider,
-  createParticipantDetectionProvider,
-  createParticipantVariableProvider,
-  createSummarizer,
-  createTitleProvider,
-  getAdditionalWelcomeMessage,
-  getHelpTextPrefix,
-} from './participantFeatures.js';
-import { getSetting } from './settings.js';
-import type { SidebarProfilingSnapshot } from './sidebar.js';
+import { isSelectedAction } from '../extensionHelpers.js';
+import { builtInOllamaConflictPromptInProgress as builtInOllamaConflictPromptInProgressExported } from '../participantOrchestration';
+import { homedir } from 'node:os';
 
-type ChatParticipantDetectionRegistrationApi = {
-  registerChatParticipantDetectionProvider?: (
-    id: string,
-    provider: { detectChatParticipant?(input: string): boolean },
-  ) => vscode.Disposable;
-};
+const MAX_WRITE_RETRIES = 3;
+let builtInOllamaConflictPromptInProgress = builtInOllamaConflictPromptInProgressExported;
 
+/**
+ * Update chat language models JSON file with bounded compare-and-retry logic.
+ * Retries up to maxRetries if file changes between read and write.
+ */
 async function tryUpdateChatLanguageModelsFile(modelsPath: string, maxRetries: number): Promise<boolean> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -61,6 +48,10 @@ async function tryUpdateChatLanguageModelsFile(modelsPath: string, maxRetries: n
   return false;
 }
 
+/**
+ * Remove Copilot's built-in Ollama provider from all chat language models JSON files.
+ * Scans profile-scoped and user-global config locations across platforms.
+ */
 async function removeBuiltInOllamaFromChatLanguageModels(
   context: Pick<vscode.ExtensionContext, 'globalStorageUri'>,
 ): Promise<boolean> {
@@ -85,6 +76,7 @@ async function removeBuiltInOllamaFromChatLanguageModels(
     const xdgConfig = process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config');
     userDirs.push(join(xdgConfig, 'Code', 'User'));
   }
+
   for (const userDir of userDirs) {
     candidatePaths.add(join(userDir, 'chatLanguageModels.json'));
   }
@@ -105,7 +97,6 @@ async function removeBuiltInOllamaFromChatLanguageModels(
     }
   }
 
-  const MAX_WRITE_RETRIES = 3;
   let changed = false;
 
   for (const modelsPath of candidatePaths) {
@@ -117,152 +108,8 @@ async function removeBuiltInOllamaFromChatLanguageModels(
   return changed;
 }
 
-export function logPerformanceSnapshot(
-  diagnostics: DiagnosticsLogger,
-  sidebarSnapshot?: SidebarProfilingSnapshot,
-  label = 'manual',
-): void {
-  const memory = process.memoryUsage();
-
-  const payload = {
-    kind: 'performance_snapshot',
-    label,
-    timestamp: new Date().toISOString(),
-    memory: {
-      rssBytes: memory.rss,
-      heapUsedBytes: memory.heapUsed,
-      heapTotalBytes: memory.heapTotal,
-      externalBytes: memory.external,
-      arrayBuffersBytes: memory.arrayBuffers,
-      rss: formatBytes(memory.rss),
-      heapUsed: formatBytes(memory.heapUsed),
-      heapTotal: formatBytes(memory.heapTotal),
-      external: formatBytes(memory.external),
-      arrayBuffers: formatBytes(memory.arrayBuffers),
-    },
-    sidebar: sidebarSnapshot ?? null,
-  };
-
-  diagnostics.info(`[client] ${JSON.stringify(payload)}`);
-}
-
 /**
- * Set up chat participant with icon and register it
- */
-export async function setupChatParticipant(
-  context: vscode.ExtensionContext,
-  participantHandler: vscode.ChatRequestHandler,
-  chatApi?: Pick<typeof vscode.chat, 'createChatParticipant'>,
-  client?: Ollama,
-  diagnostics?: DiagnosticsLogger,
-): Promise<vscode.Disposable> {
-  const chat = chatApi || vscode.chat;
-  const chatDetectionApi = vscode.chat as unknown as ChatParticipantDetectionRegistrationApi;
-  const participantRecord = (value: vscode.ChatParticipant) => value as unknown as Record<string, unknown>;
-
-  type OptionalParticipantFeatureName =
-    | 'titleProvider'
-    | 'summarizer'
-    | 'additionalWelcomeMessage'
-    | 'followupProvider'
-    | 'participantVariableProvider';
-
-  const setOptionalParticipantFeature = (featureName: OptionalParticipantFeatureName, value: unknown) => {
-    try {
-      const record = participantRecord(participant) as {
-        titleProvider?: unknown;
-        summarizer?: unknown;
-        additionalWelcomeMessage?: unknown;
-        followupProvider?: unknown;
-        participantVariableProvider?: unknown;
-      };
-      switch (featureName) {
-        case 'titleProvider':
-          record.titleProvider = value;
-          break;
-        case 'summarizer':
-          record.summarizer = value;
-          break;
-        case 'additionalWelcomeMessage':
-          record.additionalWelcomeMessage = value;
-          break;
-        case 'followupProvider':
-          record.followupProvider = value;
-          break;
-        case 'participantVariableProvider':
-          record.participantVariableProvider = value;
-          break;
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      diagnostics?.debug?.(`[participantFeatures] skipping ${featureName}: ${message}`);
-    }
-  };
-
-  const participant = chat.createChatParticipant('opilot.ollama', participantHandler);
-  participant.iconPath = vscode.Uri.joinPath(context.extensionUri, 'logo.png');
-  participant.helpTextPrefix = getHelpTextPrefix();
-
-  // Phase 5: Wire up Chat Participant providers
-  if (client && diagnostics) {
-    const modelId = getSetting<string>('selectedModel', 'llama3.2');
-    const serverHost = getSetting<string>('host', 'http://localhost:11434');
-
-    // Title provider
-    const titleProvider = createTitleProvider({
-      client,
-      diagnostics,
-      modelId,
-      serverHost,
-    });
-    setOptionalParticipantFeature('titleProvider', titleProvider);
-
-    // Summarizer
-    const summarizer = createSummarizer({
-      client,
-      diagnostics,
-      modelId,
-      serverHost,
-    });
-    setOptionalParticipantFeature('summarizer', summarizer);
-
-    // Welcome message
-    setOptionalParticipantFeature(
-      'additionalWelcomeMessage',
-      await getAdditionalWelcomeMessage({
-        client,
-        diagnostics,
-        modelId,
-        serverHost,
-      }),
-    );
-
-    // Followup provider
-    const followupProvider = createFollowupProvider();
-    setOptionalParticipantFeature('followupProvider', followupProvider);
-
-    // Variable completions
-    const varProvider = createParticipantVariableProvider({
-      client,
-      diagnostics,
-      modelId,
-      serverHost,
-    });
-    setOptionalParticipantFeature('participantVariableProvider', varProvider);
-
-    // Phase 5.7: Detection provider
-    const detectionProvider = createParticipantDetectionProvider();
-    if (typeof chatDetectionApi.registerChatParticipantDetectionProvider === 'function') {
-      chatDetectionApi.registerChatParticipantDetectionProvider('opilot.ollama', detectionProvider);
-    }
-  }
-
-  return participant;
-}
-
-/**
- * Detect and offer to disable Copilot's conflicting built-in Ollama provider.
- * Detects via LM models registered under vendor 'ollama'.
+ * Disable Copilot's built-in Ollama provider via configuration or file mutation fallback.
  */
 async function disableBuiltInOllamaProvider(
   ws: Pick<typeof vscode.workspace, 'getConfiguration'>,
@@ -293,6 +140,9 @@ async function disableBuiltInOllamaProvider(
   }
 }
 
+/**
+ * Show warning prompt to user about disabling built-in Ollama provider.
+ */
 async function promptDisableBuiltInProvider(win: Pick<typeof vscode.window, 'showWarningMessage'>): Promise<boolean> {
   const selection = await win.showWarningMessage(
     "Copilot's built-in Ollama provider is active and will show duplicate models alongside this extension. Disable it?",
@@ -301,6 +151,9 @@ async function promptDisableBuiltInProvider(win: Pick<typeof vscode.window, 'sho
   return isSelectedAction(selection, 'Disable Built-in Ollama Provider');
 }
 
+/**
+ * Show information prompt to user after disabling built-in provider.
+ */
 async function promptReloadAfterDisable(
   win: Pick<typeof vscode.window, 'showInformationMessage'>,
   commands: Pick<typeof vscode.commands, 'executeCommand'>,
@@ -315,11 +168,17 @@ async function promptReloadAfterDisable(
   }
 }
 
+/**
+ * Check if Copilot's built-in Ollama provider has any registered models.
+ */
 async function hasBuiltInOllamaModels(lmApi: Pick<typeof vscode.lm, 'selectChatModels'>): Promise<boolean> {
   const conflictModels = await lmApi.selectChatModels({ vendor: 'ollama' });
   return conflictModels.length > 0;
 }
 
+/**
+ * Execute full conflict resolution flow: prompt → disable → reload.
+ */
 async function resolveBuiltInOllamaConflictFlow(
   win: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage' | 'showErrorMessage'>,
   ws: Pick<typeof vscode.workspace, 'getConfiguration'>,
@@ -340,8 +199,10 @@ async function resolveBuiltInOllamaConflictFlow(
   await promptReloadAfterDisable(win, commands);
 }
 
-export let builtInOllamaConflictPromptInProgress = false;
-
+/**
+ * Detect and offer to disable Copilot's conflicting built-in Ollama provider.
+ * Detects via LM models registered under vendor 'ollama'.
+ */
 export async function handleBuiltInOllamaConflict(
   windowApi?: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage' | 'showErrorMessage'>,
   workspaceApi?: Pick<typeof vscode.workspace, 'getConfiguration'>,
