@@ -69,13 +69,12 @@ beforeAll(async () => {
         setTimeout(() => reject(new Error('cloud auth check timed out')), 15_000),
       );
       await Promise.race([
-        cloudClient.generate({
+        cloudClient.chat({
           model: cloudModelName,
-          prompt: '',
+          messages: [{ role: 'user', content: 'hi' }],
           stream: false,
-          keep_alive: 0,
           options: { num_predict: 1 },
-        } as Parameters<typeof cloudClient.generate>[0]),
+        }),
         timeout,
       ]);
       cloudAuthValid = true;

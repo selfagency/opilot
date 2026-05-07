@@ -12,59 +12,33 @@ Date: April 15, 2026
 
 **Table of Contents**
 
-[1\. Executive Summary 1](#_Toc100000)
-
-[2\. Background & Objectives 2](#_Toc100001)
-
-[2.1 Project Overview 2](#_Toc100002)
-
-[3\. Scope & Methodology 2](#_Toc100003)
-
-[3.1 Review Methodology 2](#_Toc100004)
-
-[4\. Review Findings Summary 3](#_Toc100005)
-
-[5\. Detailed Issue Analysis 3](#_Toc100006)
-
-[5.1 Architecture & Code Duplication 4](#_Toc100007)
-
-[1.1 Massive Code Duplication Between extension.ts and provider.ts 4](#_Toc100008)
-
-[1.2 formatBytes() Utility Duplicated Three Times 4](#_Toc100009)
-
-[1.3 extension.ts Exceeds Maintainable Size 5](#_Toc100010)
-
-[5.2 Security 6](#_Toc100011)
-
-[2.1 Shell Command Construction via String Interpolation 6](#_Toc100012)
-
-[2.2 Unsafe File Write Without Locking 6](#_Toc100013)
-
-[5.3 Error Handling 7](#_Toc100014)
-
-[3.1 Silent Catch Blocks Masking Errors 7](#_Toc100015)
-
-[3.2 Missing Error Handling on Stream Iteration 8](#_Toc100016)
-
-[5.4 Cross-Reference Gaps: VS Code AI Documentation 8](#_Toc100017)
-
-[6\. Remediation Plan 9](#_Toc100018)
-
-[Phase 1: Immediate Stabilization (Sprint 1-2) 9](#_Toc100019)
-
-[Phase 2: Architectural Consolidation (Sprint 3-5) 10](#_Toc100020)
-
-[Phase 3: Platform Maturity (Sprint 6-10) 10](#_Toc100021)
-
-[7\. Implementation Roadmap 10](#_Toc100022)
-
-[8\. Risk Assessment 11](#_Toc100023)
-
-[9\. Appendices 11](#_Toc100024)
-
-[A. Reviewed Documentation Sources 11](#_Toc100025)
-
-[B. Complete Issue Inventory 12](#_Toc100026)
+- 1. Executive Summary
+- 2. Background & Objectives
+- 2.1 Project Overview
+- 3. Scope & Methodology
+- 3.1 Review Methodology
+- 4. Review Findings Summary
+- 5. Detailed Issue Analysis
+- 5.1 Architecture & Code Duplication
+- 1.1 Massive Code Duplication Between extension.ts and provider.ts
+- 1.2 formatBytes() Utility Duplicated Three Times
+- 1.3 extension.ts Exceeds Maintainable Size
+- 5.2 Security
+- 2.1 Shell Command Construction via String Interpolation
+- 2.2 Unsafe File Write Without Locking
+- 5.3 Error Handling
+- 3.1 Silent Catch Blocks Masking Errors
+- 3.2 Missing Error Handling on Stream Iteration
+- 5.4 Cross-Reference Gaps: VS Code AI Documentation
+- 6. Remediation Plan
+- Phase 1: Immediate Stabilization (Sprint 1-2)
+- Phase 2: Architectural Consolidation (Sprint 3-5)
+- Phase 3: Platform Maturity (Sprint 6-10)
+- 7. Implementation Roadmap
+- 8. Risk Assessment
+- 9. Appendices
+- A. Reviewed Documentation Sources
+- B. Complete Issue Inventory
 
 _Note: Right-click the table of contents and select "Update Field" to refresh page numbers after opening in Word._
 
@@ -76,7 +50,7 @@ The Opilot extension is a mature, well-engineered project with strong fundamenta
 
 The most impactful finding is the duplication of six chat utility functions across extension.ts and provider.ts, which creates a maintenance burden and increases the risk of behavioral divergence during future updates. Secondary concerns include silent error swallowing in OpenAI-compatibility fallback paths, the absence of timeouts on connection testing, unsafe file-write operations without locking, and several opportunities to better leverage the VS Code AI extension APIs as documented in the official guides. The remediation plan prioritizes these findings into three phases: an immediate stabilization sprint addressing the high-impact items, a consolidation phase for architectural improvements, and a maturity phase for long-term quality enhancements.
 
-# **2\. Background & Objectives**
+## **2\. Background & Objectives**
 
 ## **2.1 Project Overview**
 
@@ -86,7 +60,7 @@ The extension architecture comprises 18 TypeScript source files organized into f
 
 The review was initiated to ensure that the Opilot extension fully conforms to the latest VS Code AI extension APIs and best practices documented across six official Microsoft guides covering Language Model Tools, Chat Participants, Language Model Chat Providers, the Language Model consumer API, Prompt TSX, and MCP (Model Context Protocol). Additionally, the review validates correct usage of the Ollama JavaScript SDK (ollama-js) and REST API. The objective is to produce a gap analysis and a prioritized remediation roadmap that the maintainers can execute to bring the extension to full compliance with documented best practices.
 
-# **3\. Scope & Methodology**
+## **3\. Scope & Methodology**
 
 ## **3.1 Review Methodology**
 
@@ -96,7 +70,7 @@ Cross-referencing was performed by mapping each finding against the relevant doc
 
 The review scope covers the complete source tree at version 1.5.0, including 18 TypeScript source files, package.json configuration, tsconfig.json, and tsup.config.mjs. The review does not cover the compiled output, marketplace listing content, CI/CD pipeline configuration, or third-party dependencies beyond their declared versions. Test files were examined for coverage gaps but were not themselves reviewed for correctness.
 
-# **4\. Review Findings Summary**
+## **4\. Review Findings Summary**
 
 The comprehensive review identified a total of 42 distinct issues distributed across 13 categories. The distribution reveals a healthy project with no critical vulnerabilities but several areas requiring focused attention. The single high-severity finding relates to architectural code duplication that poses the greatest maintenance risk. Seven medium-severity issues span error handling, robustness, security, type safety, and configuration management, representing meaningful gaps that should be addressed in the near term. The remaining 34 low-severity items cover code quality, performance optimization, documentation completeness, dependency management, and minor VS Code API modernization opportunities.
 
@@ -119,7 +93,7 @@ The comprehensive review identified a total of 42 distinct issues distributed ac
 
 The cross-reference gaps category (10 low-severity items) represents areas where the Opilot implementation does not fully leverage features or patterns recommended in the VS Code AI extension documentation. These are not bugs or defects, but rather missed opportunities to improve the extension's integration quality, user experience, and alignment with the evolving VS Code AI platform. Examples include the absence of @vscode/prompt-tsx for prompt management, missing disambiguation configuration for chat participant auto-routing, and the potential to expose Ollama capabilities as MCP tools for broader ecosystem integration.
 
-# **5\. Detailed Issue Analysis**
+## **5\. Detailed Issue Analysis**
 
 ## **5.1 Architecture & Code Duplication**
 
@@ -202,9 +176,58 @@ The following cross-reference gaps were identified by comparing the Opilot imple
 | 9     | Ollama SDK           | Abort semantics: ollama.abort() kills ALL streams on a client instance. The extension should use per-request client instances for isolation, or implement a per-stream abort mechanism.                                                                  | Low          |
 | 10    | Ollama API           | Error response parsing: Mid-stream errors are returned as NDJSON objects with an error property. The OpenAI-compat layer should detect and surface these mid-stream errors to the user.                                                                  | Low          |
 
-# **6\. Remediation Plan**
+## **6\. Remediation Plan**
 
 The remediation plan is organized into three phases, ordered by urgency and dependency. Phase 1 addresses immediate stability and maintainability concerns. Phase 2 focuses on architectural consolidation and API compliance. Phase 3 targets long-term quality improvements and platform alignment. Each action item includes an estimated effort, dependencies, and expected outcome.
+
+## **Phase 0: Agentsy Surface Adoption**
+
+`@agentsy/core` is deprecated and superseded by the focused `@agentsy/*` packages. The current Opilot codebase already uses package-backed wrappers for the core parsing/formatting helpers and the VS Code renderer bridge, so Phase 0 is now about completing the broader surface-area adoption rather than just replacing the old parser shim.
+
+### Complete now
+
+| Package                            | Status   | Current use in Opilot                                                                                                     | Notes                                                                                   |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `@agentsy/thinking`                | Complete | `src/thinkingParser.ts` re-exports `ThinkingParser`                                                                       | Matches current stream tests and preserves the existing `forModel()` API.               |
+| `@agentsy/context`                 | Complete | `src/formatting.ts` wraps `splitLeadingXmlContextBlocks`, `dedupeXmlContextBlocksByTag`, `stripXmlContextTags`            | Wrapper keeps legacy `content` shape while using the package implementation internally. |
+| `@agentsy/formatting`              | Complete | `src/formatting.ts` re-exports `appendToBlockquote`, `formatXmlLikeResponseForDisplay`, `sanitizeNonStreamingModelOutput` | Used for display sanitization and blockquote formatting.                                |
+| `@agentsy/xml-filter`              | Complete | `src/formatting.ts` re-exports `createXmlStreamFilter`                                                                    | Used by both chat paths for privacy-safe XML scrubbing.                                 |
+| `@agentsy/tool-calls`              | Complete | `src/toolUtils.ts` re-exports tool-call helpers                                                                           | Used to build tool prompts, parse XML tool calls, and format tool payloads.             |
+| `@agentsy/vscode` renderer helpers | Complete | `createVSCodeChatRenderer`, `mapUsageToVSCode`, `toVSCodeToolCallPart`, `cancellationTokenToAbortSignal`                  | `showThinking` now follows `hideThinkingContent` instead of being hard-disabled.        |
+
+### In progress / next layer to adopt
+
+| Package                                         | Status      | Intended use                                                                                                                                              | Next step                                                                                                       |
+| ----------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `@agentsy/processor`                            | Not started | Replace hand-rolled stream tokenization with `LLMStreamProcessor`, `createPipeline`, `createThinkingFilter`, `createToolCallFilter`, `createSmoothStream` | Refactor `extension.ts`/`provider.ts` stream loops around the processor pipeline.                               |
+| `@agentsy/normalizers`                          | Not started | Normalize Ollama/OpenAI-compatible chunks before processing                                                                                               | Feed raw provider chunks into the processor with `normalizeOllamaChatChunk` / `normalizeOpenAICompatibleChunk`. |
+| `@agentsy/adapters`                             | Not started | Provider and raw-stream adapter helpers                                                                                                                   | Use for provider integration and any raw-stream bridging instead of bespoke glue.                               |
+| `@agentsy/structured`                           | Not started | JSON parsing/repair for tool arguments and structured responses                                                                                           | Use for resilient tool-input parsing and model-output validation.                                               |
+| `@agentsy/recovery`                             | Not started | Stream snapshot/retry continuation helpers                                                                                                                | Use for interrupted stream recovery and continuation prompts.                                                   |
+| `@agentsy/agent`                                | Not started | Multi-step agent loop orchestration                                                                                                                       | Adopt when agent mode / file edits are enabled.                                                                 |
+| `@agentsy/vscode` agent/provider helpers        | Not started | `createVSCodeAgentLoop`, `BaseLanguageModelChatProvider`, `ApiKeyManager`, settings/MCP helpers                                                           | Move the provider and agent-mode paths onto the package once the stream pipeline is characterized.              |
+| `@agentsy/renderers`                            | Not started | Standalone renderer primitives                                                                                                                            | Use for non-VS Code renderer primitives and shared renderer typing.                                             |
+| `@agentsy/ui`, `@agentsy/ag-ui`, `@agentsy/sse` | Not started | Conversation store / AG-UI bridge / SSE parsing                                                                                                           | Defer unless Opilot needs conversation-state persistence, protocol bridging, or direct SSE parsing.             |
+
+### Adoption strategy
+
+- Keep the current package-backed compatibility wrappers for `thinking`, `context`, `formatting`, `xml-filter`, and `tool-calls` so existing imports remain stable while the underlying implementation is now the published package.
+- Move the next implementation slice to `@agentsy/processor` + `@agentsy/normalizers`; that is the real missing layer for full tool-surface adoption because it removes custom stream parsing, XML chunk management, and thinking/tool-call orchestration from `extension.ts` and `provider.ts`.
+- After the processor layer lands, adopt `@agentsy/adapters` and `@agentsy/recovery` for fallback, continuation, and raw provider-stream bridging.
+- Only then move to `@agentsy/vscode` agent/provider abstractions (`createVSCodeAgentLoop`, `BaseLanguageModelChatProvider`, `ApiKeyManager`) so the agent-mode/file-edit path can be added without more bespoke orchestration.
+- Treat `@agentsy/ui` and `@agentsy/ag-ui` as optional expansion layers, not prerequisites for the current extension.
+
+### Remaining work
+
+| Item                                                                              | Status      | Why it remains                                                                                              |
+| --------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------- |
+| Remove the last `@agentsy/core` references from documentation and any stale notes | In progress | Code now uses package-backed wrappers, but the docs still mention the deprecated package in several places. |
+| Add `@agentsy/processor`/`@agentsy/normalizers` adoption in the chat pipeline     | Not started | Needed to replace manual thinking parsing and stream assembly with the package pipeline.                    |
+| Add `@agentsy/adapters`/`@agentsy/recovery` integration                           | Not started | Needed for a robust fallback/retry/continuation story.                                                      |
+| Add `@agentsy/vscode` agent/provider base classes and MCP/settings helpers        | Not started | Needed to finish the agent-mode and settings-management surface.                                            |
+| Decide whether `@agentsy/ui` / `@agentsy/ag-ui` are required for Opilot           | Not started | Only needed if we want shared conversation state or AG-UI protocol bridging.                                |
+
+Recommendation: keep the current release focused on the complete package-backed wrapper set and the next `processor`/`normalizers` adoption slice. Once that lands, the remainder should be implemented in the order above rather than adding any more custom parser or renderer logic.
 
 ## **Phase 1: Immediate Stabilization (Sprint 1-2)**
 
@@ -247,22 +270,23 @@ Phase 3 encompasses the longer-term improvements that align the extension with t
 | Improve mid-stream error detection in OpenAI-compat layer       | Low          | 1 day      | openaiCompat.ts                               |
 | Split extension.ts into focused modules                         | Low          | 3-5 days   | extension.ts -> multiple modules              |
 
-# **7\. Implementation Roadmap**
+## **7\. Implementation Roadmap**
 
 The implementation roadmap provides a visual timeline for executing the remediation plan across three phases. The timeline assumes a single developer working part-time on remediation alongside normal feature development. If a dedicated sprint is allocated, the timeline can be compressed accordingly.
 
-| **Sprint** | **Phase**     | **Key Deliverables**                                                  | **Exit Criteria**                                                                |
-| ---------- | ------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| 1          | Stabilization | chatUtils.ts extraction, silent catch logging, testConnection timeout | All Phase 1 items merged; existing tests pass; no regression in E2E tests        |
-| 2          | Stabilization | execFileSync migration, formatBytes consolidation, dead code removal  | Code duplication reduced by 80%+; zero silent catch blocks remain                |
-| 3-4        | Consolidation | File locking, stream error handling, disambiguation config            | No data loss from race conditions; stream errors gracefully reported             |
-| 5          | Consolidation | Legacy settings cleanup, deprecated API updates, tool descriptions    | Zero deprecation warnings; settings migration fully complete                     |
-| 6-7        | Maturity      | prompt-tsx evaluation, MCP investigation, chat location awareness     | Architecture decision record published for prompt-tsx and MCP                    |
-| 8-10       | Maturity      | extension.ts split, per-request client isolation, mid-stream errors   | No file exceeds 400 lines; all recommended patterns from VS Code AI docs adopted |
+| **Sprint** | **Phase**         | **Key Deliverables**                                                  | **Exit Criteria**                                                                |
+| ---------- | ----------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 0          | Agentsy Migration | Focused-package import migration, dependency swap, docs refresh       | No `@agentsy/core` imports remain; compile/tests green                           |
+| 1          | Stabilization     | chatUtils.ts extraction, silent catch logging, testConnection timeout | All Phase 1 items merged; existing tests pass; no regression in E2E tests        |
+| 2          | Stabilization     | execFileSync migration, formatBytes consolidation, dead code removal  | Code duplication reduced by 80%+; zero silent catch blocks remain                |
+| 3-4        | Consolidation     | File locking, stream error handling, disambiguation config            | No data loss from race conditions; stream errors gracefully reported             |
+| 5          | Consolidation     | Legacy settings cleanup, deprecated API updates, tool descriptions    | Zero deprecation warnings; settings migration fully complete                     |
+| 6-7        | Maturity          | prompt-tsx evaluation, MCP investigation, chat location awareness     | Architecture decision record published for prompt-tsx and MCP                    |
+| 8-10       | Maturity          | extension.ts split, per-request client isolation, mid-stream errors   | No file exceeds 400 lines; all recommended patterns from VS Code AI docs adopted |
 
 Each sprint should conclude with a full test run (unit tests, integration tests, and CodeQL analysis) to verify that no regressions have been introduced. The exit criteria for each sprint are defined above and should be treated as hard gates before proceeding to the next sprint.
 
-# **8\. Risk Assessment**
+## **8\. Risk Assessment**
 
 The following risk assessment identifies potential obstacles to successful remediation and proposes mitigation strategies for each.
 
@@ -275,21 +299,24 @@ The following risk assessment identifies potential obstacles to successful remed
 | Splitting extension.ts breaks activation timing           | Medium         | High       | Preserve the activate() function as the single entry point. Only extract internal logic, not activation orchestration.    |
 | Legacy settings cleanup affects existing users            | Medium         | Medium     | Add a settings version counter. Only clean up after confirming the user has successfully migrated (not on first install). |
 
-# **9\. Appendices**
+## **9\. Appendices**
 
 ## **A. Reviewed Documentation Sources**
 
-| **Source**          | **URL**                                                                    | **Key Topics**                                   |
-| ------------------- | -------------------------------------------------------------------------- | ------------------------------------------------ |
-| VS Code AI Tools    | code.visualstudio.com/api/extension-guides/ai/tools                        | Tool naming, descriptions, confirmation, schema  |
-| VS Code Chat API    | code.visualstudio.com/api/extension-guides/ai/chat                         | Participants, commands, follow-ups, streaming    |
-| VS Code LM Provider | code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider | Provider interface, model info, silent mode      |
-| VS Code LM Consumer | code.visualstudio.com/api/extension-guides/ai/language-model               | Model selection, sendRequest, error handling     |
-| VS Code Prompt TSX  | code.visualstudio.com/api/extension-guides/ai/prompt-tsx                   | Priority pruning, token budgets, component model |
-| VS Code MCP Guide   | code.visualstudio.com/api/extension-guides/ai/mcp                          | MCP servers, tools, resources, OAuth, apps       |
-| Ollama JS SDK       | github.com/ollama/ollama-js                                                | Client init, chat, streaming, model mgmt         |
-| Ollama REST API     | docs.ollama.com/api/introduction                                           | Endpoints, streaming, errors, OpenAI compat      |
-| Opilot Repository   | github.com/selfagency/opilot                                               | 18 source files, v1.5.0                          |
+| **Source**              | **URL**                                                                    | **Key Topics**                                    |
+| ----------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
+| VS Code AI Tools        | code.visualstudio.com/api/extension-guides/ai/tools                        | Tool naming, descriptions, confirmation, schema   |
+| VS Code Chat API        | code.visualstudio.com/api/extension-guides/ai/chat                         | Participants, commands, follow-ups, streaming     |
+| VS Code LM Provider     | code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider | Provider interface, model info, silent mode       |
+| VS Code LM Consumer     | code.visualstudio.com/api/extension-guides/ai/language-model               | Model selection, sendRequest, error handling      |
+| VS Code Prompt TSX      | code.visualstudio.com/api/extension-guides/ai/prompt-tsx                   | Priority pruning, token budgets, component model  |
+| VS Code MCP Guide       | code.visualstudio.com/api/extension-guides/ai/mcp                          | MCP servers, tools, resources, OAuth, apps        |
+| Agentsy Migration Guide | agentsy.self.agency/migrating-from-llm-stream-parser.html                  | Focused package mapping, install/import migration |
+| Agentsy Package Catalog | agentsy.self.agency/packages.html                                          | Published package boundaries and status           |
+| Agentsy API Index       | agentsy.self.agency/api.html                                               | Current public exports across package family      |
+| Ollama JS SDK           | github.com/ollama/ollama-js                                                | Client init, chat, streaming, model mgmt          |
+| Ollama REST API         | docs.ollama.com/api/introduction                                           | Endpoints, streaming, errors, OpenAI compat       |
+| Opilot Repository       | github.com/selfagency/opilot                                               | 18 source files, v1.5.0                           |
 
 ## **B. Complete Issue Inventory**
 

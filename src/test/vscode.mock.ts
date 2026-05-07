@@ -116,6 +116,7 @@ export const lm = {
   registerLanguageModelChatProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
   selectChatModels: vi.fn().mockResolvedValue([]),
   onDidChangeChatModels: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+  registerTool: vi.fn().mockReturnValue({ dispose: vi.fn() }),
 };
 
 export const workspace = {

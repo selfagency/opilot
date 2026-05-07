@@ -178,3 +178,237 @@ Outputs a performance timing snapshot to the **Opilot** output channel. Useful w
 ### `Ollama: Refresh Ollama Models`
 
 Re-fetches all model lists (local + library + cloud) in one operation.
+
+## Tools (VS Code Language Model API)
+
+Opilot exposes six tools via the VS Code Language Model API. These tools are automatically discovered by Copilot Chat and can be invoked by the language model for programmatic model management and agentic workflows.
+
+### `opilot_list_models`
+
+**Purpose:** Lists all locally installed and cloud Ollama models with metadata.
+
+**Input Parameters:** None
+
+**Returns:**
+
+```json
+{
+  "content": ["[{\"id\":\"llama3.2:3b\",\"size\":1234567890,\"downloaded\":true,\"running\":true}]"]
+}
+```
+
+**Use Cases:**
+
+- Populate model selection pickers
+- Check which models are currently running
+- Verify model availability before attempting operations
+- Discover installed model variants
+
+---
+
+### `opilot_get_model_info`
+
+**Purpose:** Returns detailed capabilities and metadata for a specific model.
+
+**Input Parameters:**
+
+- `modelId` (string): Model identifier, e.g., `"llama3.2:3b"`
+
+**Returns:**
+
+```json
+{
+  "content": [
+    {
+      "modelId": "llama3.2:3b",
+      "capabilities": {
+        "vision": true,
+        "tools": true,
+        "thinking": false,
+        "embedding": false
+      }
+    }
+  ]
+}
+```
+
+**Use Cases:**
+
+- Check if a model supports vision before sending images
+- Verify tool/function-calling capability for agentic workflows
+- Detect extended thinking models (e.g., DeepSeek-R1, Qwen QwQ)
+- Adapt request payloads based on model capabilities
+
+---
+
+### `opilot_check_server_health`
+
+**Purpose:** Verifies connectivity to the configured Ollama server (local or remote).
+
+**Input Parameters:** None
+
+**Returns:**
+
+```json
+{
+  "content": [
+    {
+      "reachable": true,
+      "host": "http://localhost:11434",
+      "error": null
+    }
+  ]
+}
+```
+
+or on failure:
+
+```json
+{
+  "content": [
+    {
+      "reachable": false,
+      "host": "http://localhost:11434",
+      "error": "Connection refused"
+    }
+  ]
+}
+```
+
+**Timeout:** 5 seconds
+
+**Use Cases:**
+
+- Diagnose connection issues before attempting model operations
+- Verify server authentication (if using a bearer token)
+- Test remote Ollama instance availability
+- Provide diagnostic information in error reporting
+
+---
+
+### `opilot_pull_model`
+
+**Purpose:** Downloads a model from the Ollama library to the local machine.
+
+**Input Parameters:**
+
+- `modelId` (string): Model identifier, e.g., `"llama3.2:3b"`
+
+**Returns:**
+
+```json
+{
+  "content": [
+    {
+      "pulled": true,
+      "modelId": "llama3.2:3b"
+    }
+  ]
+}
+```
+
+or on failure:
+
+```json
+{
+  "content": [
+    {
+      "error": "Model not found in library"
+    }
+  ]
+}
+```
+
+**Note:** Downloads are synchronous to simplify tool semantics. Large models can take minutes to download depending on network speed.
+
+**Use Cases:**
+
+- Programmatic model acquisition for agentic workflows
+- Automatically prepare required models for tasks
+- Enable self-service model discovery workflows
+
+---
+
+### `opilot_start_model`
+
+**Purpose:** Warms up (loads into memory) a model so it responds without cold-start delay.
+
+**Input Parameters:**
+
+- `modelId` (string): Model identifier, e.g., `"llama3.2:3b"`
+
+**Returns:**
+
+```json
+{
+  "content": [
+    {
+      "started": true,
+      "modelId": "llama3.2:3b"
+    }
+  ]
+}
+```
+
+or on failure:
+
+```json
+{
+  "content": [
+    {
+      "error": "Model not found"
+    }
+  ]
+}
+```
+
+**Idempotent:** Safe to call on an already-running model; returns success without reloading.
+
+**Use Cases:**
+
+- Prepare models before agentic tasks to reduce response latency
+- Pre-warm frequently-used models on startup
+- Optimize user experience by eliminating first-request delay
+
+---
+
+### `opilot_stop_model`
+
+**Purpose:** Unloads a running model from memory to free VRAM/RAM.
+
+**Input Parameters:**
+
+- `modelId` (string): Model identifier, e.g., `"llama3.2:3b"`
+
+**Returns:**
+
+```json
+{
+  "content": [
+    {
+      "stopped": true,
+      "modelId": "llama3.2:3b"
+    }
+  ]
+}
+```
+
+or on failure (non-existent model):
+
+```json
+{
+  "content": [
+    {
+      "error": "Model not running or not found"
+    }
+  ]
+}
+```
+
+**Safe:** Can be called on stopped or non-existent models without error.
+
+**Use Cases:**
+
+- Free resources between sequential tasks
+- Prevent VRAM exhaustion when running multiple large models
+- Implement resource management in agentic workflows

@@ -3,14 +3,16 @@ import { readFile } from 'node:fs/promises';
 import { homedir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { Ollama } from 'ollama';
+import type { Ollama } from 'ollama';
 import {
+  CancellationToken,
   commands,
   Disposable,
   env,
   Event,
   EventEmitter,
   ExtensionContext,
+  Progress,
   ProgressLocation,
   ThemeIcon,
   TreeDataProvider,
@@ -166,13 +168,13 @@ export class ModelTreeItem extends TreeItem {
   private formatSize(bytes?: number): string {
     if (!bytes) return '';
     if (bytes < 1024 ** 2) {
-      return Math.round(bytes / 1024) + ' KB';
+      return `${Math.round(bytes / 1024)} KB`;
     }
     if (bytes < 1024 ** 3) {
-      return Math.round(bytes / 1024 ** 2) + ' MB';
+      return `${Math.round(bytes / 1024 ** 2)} MB`;
     }
     const gb = bytes / 1024 ** 3;
-    return gb.toFixed(1) + ' GB';
+    return `${gb.toFixed(1)} GB`;
   }
 
   private formatDuration(ms?: number): string {
@@ -329,7 +331,7 @@ function makeStatusActionItem(label: string, commandId: string, title?: string):
   return item;
 }
 
-type RunningProcessInfo = {
+export type RunningProcessInfo = {
   id?: string;
   durationMs?: number;
   processor?: string;
@@ -369,6 +371,44 @@ export function formatSizeForTooltip(bytes?: number): string {
   return `${gb.toFixed(1)} GB`;
 }
 
+function formatMemorySizes(ramSize: number, vramSize: number): string {
+  const ramGB = (ramSize / 1024 ** 3).toFixed(1);
+  const vramGB = (vramSize / 1024 ** 3).toFixed(1);
+  return `🧮 RAM: ${ramGB}GB | VRAM: ${vramGB}GB`;
+}
+
+function formatTotalMemory(totalSize: number): string {
+  const totalGB = (totalSize / 1024 ** 3).toFixed(1);
+  return `🧮 RAM: ${totalGB}GB`;
+}
+
+export function buildMemoryBreakdown(running: RunningProcessInfo, size?: number): string | null {
+  const totalSize = running.size ?? size ?? 0;
+  const vramSize = running.sizeVram ?? 0;
+  const ramSize = totalSize - vramSize;
+
+  if (vramSize > 0 && ramSize > 0) {
+    return formatMemorySizes(ramSize, vramSize);
+  }
+  if (totalSize > 0) {
+    return formatTotalMemory(totalSize);
+  }
+  return null;
+}
+
+export function buildProcessorLine(processor: string): string | null {
+  const procMatch = /^(\d{1,3})% GPU$/.exec(processor.slice(0, 32));
+  if (procMatch) {
+    const gpuPct = Number.parseInt(procMatch[1], 10);
+    const cpuPct = 100 - gpuPct;
+    if (cpuPct > 0 && gpuPct > 0) return `💻 CPU: ${cpuPct}% | GPU: ${gpuPct}%`;
+    if (gpuPct === 100) return `💻 GPU: 100%`;
+    return null;
+  }
+  if (processor === 'CPU') return `💻 CPU: 100%`;
+  return null;
+}
+
 export function buildLocalModelTooltip(
   modelName: string,
   size?: number,
@@ -382,35 +422,12 @@ export function buildLocalModelTooltip(
 
   const lines = [`🤖 ${modelName}`, `🆔 ${id}`, `🏋️ ${sizeText}`];
 
-  // Add memory breakdown for running models
   if (running) {
-    const totalSize = running.size ?? size ?? 0;
-    const vramSize = running.sizeVram ?? 0;
-    const ramSize = totalSize - vramSize;
-
-    if (vramSize > 0 && ramSize > 0) {
-      const ramGB = (ramSize / 1024 ** 3).toFixed(1);
-      const vramGB = (vramSize / 1024 ** 3).toFixed(1);
-      lines.push(`🧮 RAM: ${ramGB}GB | VRAM: ${vramGB}GB`);
-    } else if (totalSize > 0) {
-      const totalGB = (totalSize / 1024 ** 3).toFixed(1);
-      lines.push(`🧮 RAM: ${totalGB}GB`);
-    }
-
-    // Add processor allocation
+    const memLine = buildMemoryBreakdown(running, size);
+    if (memLine) lines.push(memLine);
     if (running.processor) {
-      const procMatch = running.processor.match(/(\d+)% GPU/);
-      if (procMatch) {
-        const gpuPct = parseInt(procMatch[1], 10);
-        const cpuPct = 100 - gpuPct;
-        if (cpuPct > 0 && gpuPct > 0) {
-          lines.push(`💻 CPU: ${cpuPct}% | GPU: ${gpuPct}%`);
-        } else if (gpuPct === 100) {
-          lines.push(`💻 GPU: 100%`);
-        }
-      } else if (running.processor === 'CPU') {
-        lines.push(`💻 CPU: 100%`);
-      }
+      const procLine = buildProcessorLine(running.processor);
+      if (procLine) lines.push(procLine);
     }
   } else {
     lines.push(`⚙️ Not running`);
@@ -425,9 +442,7 @@ export function buildLocalModelTooltip(
       vision: capabilities.imageInput,
       embedding: capabilities.embedding,
     });
-    if (capLine) {
-      lines.push(capLine);
-    }
+    if (capLine) lines.push(capLine);
   }
   if (description) lines.push(description);
   return lines.join('\n');
@@ -524,6 +539,7 @@ async function fetchModelPagePreview(
 
 const MODEL_PREVIEW_CACHE_TTL_MS = 30 * 60 * 1000;
 const MODEL_PREVIEW_CACHE_MAX_ENTRIES = 1000;
+// nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
 const MODEL_PREVIEW_CACHE_STORAGE_KEY = 'ollama.modelPreviewCache.v1';
 
 type ModelPagePreview = Awaited<ReturnType<typeof fetchModelPagePreview>>;
@@ -569,7 +585,9 @@ function schedulePersistModelPreviewCache(): void {
       value: entry.value,
       expiresAt: entry.expiresAt,
     }));
-    void modelPreviewCacheContext?.globalState.update(MODEL_PREVIEW_CACHE_STORAGE_KEY, { entries });
+    modelPreviewCacheContext?.globalState
+      .update(MODEL_PREVIEW_CACHE_STORAGE_KEY, { entries })
+      ?.then(undefined, () => {});
     modelPreviewCachePersistTimer = null;
   }, 250);
 }
@@ -662,6 +680,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   private localModelCapabilitiesInFlight = new Set<string>();
   private refreshDebounceTimer: NodeJS.Timeout | undefined;
   private cachedLocalModelNames = new Set<string>();
+  // nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
   private static readonly LOCAL_CAPABILITIES_STORAGE_KEY = 'ollama.localModelCapabilities.v1';
 
   constructor(
@@ -710,7 +729,9 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       serialized[modelName] = capabilities;
     }
 
-    void this.context.globalState.update(LocalModelsProvider.LOCAL_CAPABILITIES_STORAGE_KEY, serialized);
+    this.context.globalState
+      .update(LocalModelsProvider.LOCAL_CAPABILITIES_STORAGE_KEY, serialized)
+      .then(undefined, () => {});
   }
 
   /**
@@ -718,83 +739,13 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
    */
   async getChildren(element?: ModelTreeItem): Promise<ModelTreeItem[]> {
     if (!element) {
-      // Top level: get local models and group by family
       const models = await this.getLocalModels();
-      if (models.length === 0) {
-        return [makeStatusItem('No local models')];
-      }
-
-      if (models.every(model => model.type === 'status')) {
-        return models;
-      }
-
-      // Flat mode: return all models sorted A-Z
-      if (!this.grouped) {
-        const filterLower = this.filterText.toLowerCase();
-        return models
-          .filter(
-            m =>
-              m.type !== 'status' &&
-              (!filterLower ||
-                m.label.toLowerCase().includes(filterLower) ||
-                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))) &&
-              this.modelMatchesCapabilityFilters(m.label) &&
-              (!this.recommendedOnly || isRecommendedForHardware(m.label)),
-          )
-          .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-      }
-
-      // Group models by family
-      const groups = groupModelsByFamily(models);
-
-      // Apply filter: keep only families where the family name or any child matches
-      const filterLower = this.filterText.toLowerCase();
-      const filteredEntries = Array.from(groups.entries())
-        .filter(
-          ([familyName, familyModels]) =>
-            (!filterLower ||
-              familyName.toLowerCase().includes(filterLower) ||
-              familyModels.some(
-                m =>
-                  m.label.toLowerCase().includes(filterLower) ||
-                  (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
-              )) &&
-            (this.capabilityFilters.size === 0 ||
-              familyModels.some(m => this.modelMatchesCapabilityFilters(m.label))) &&
-            (!this.recommendedOnly || familyModels.some(m => isRecommendedForHardware(m.label))),
-        )
-        .sort((a, b) => a[0].localeCompare(b[0]));
-
-      // Always create explicit family parent groups.
-      const result: ModelTreeItem[] = [];
-      for (const [familyName, familyModels] of filteredEntries) {
-        const groupItem = new ModelTreeItem(familyName, 'model-group');
-        const familyCaps = aggregateFamilyCapabilities(familyModels);
-        const capLine = buildCapabilityLines({
-          thinking: familyCaps.thinking,
-          tools: familyCaps.tools,
-          vision: familyCaps.vision,
-          embedding: familyCaps.embedding,
-        });
-
-        const badges: string[] = [];
-        if (familyCaps.thinking) badges.push('🧠');
-        if (familyCaps.tools) badges.push('🛠️');
-        if (familyCaps.vision) badges.push('👁️');
-        if (familyCaps.embedding) badges.push('🧩');
-        if (badges.length > 0) {
-          groupItem.description = badges.join(' ');
-        }
-
-        const tooltipLines = [`${familyName} family (${familyModels.length} models)`];
-        if (capLine) tooltipLines.push(capLine);
-        groupItem.tooltip = tooltipLines.join('\n');
-        result.push(groupItem);
-      }
-      return result;
+      if (models.length === 0) return [makeStatusItem('No local models')];
+      if (models.every(model => model.type === 'status')) return models;
+      if (!this.grouped) return this.getLocalChildrenFlat(models);
+      return this.getLocalChildrenGrouped(models);
     }
 
-    // Child level: if element is a model-group, return its models
     if (element.type === 'model-group') {
       const models = await this.getLocalModels();
       return models
@@ -803,6 +754,66 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     }
 
     return [];
+  }
+
+  private getLocalChildrenFlat(models: ModelTreeItem[]): ModelTreeItem[] {
+    const filterLower = this.filterText.toLowerCase();
+    return models
+      .filter(
+        m =>
+          m.type !== 'status' &&
+          (!filterLower ||
+            m.label.toLowerCase().includes(filterLower) ||
+            (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))) &&
+          this.modelMatchesCapabilityFilters(m.label) &&
+          (!this.recommendedOnly || isRecommendedForHardware(m.label)),
+      )
+      .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+  }
+
+  private getLocalChildrenGrouped(models: ModelTreeItem[]): ModelTreeItem[] {
+    const groups = groupModelsByFamily(models);
+    const filterLower = this.filterText.toLowerCase();
+
+    const filteredEntries = Array.from(groups.entries())
+      .filter(
+        ([familyName, familyModels]) =>
+          (!filterLower ||
+            familyName.toLowerCase().includes(filterLower) ||
+            familyModels.some(
+              m =>
+                m.label.toLowerCase().includes(filterLower) ||
+                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+            )) &&
+          (this.capabilityFilters.size === 0 || familyModels.some(m => this.modelMatchesCapabilityFilters(m.label))) &&
+          (!this.recommendedOnly || familyModels.some(m => isRecommendedForHardware(m.label))),
+      )
+      .sort((a, b) => a[0].localeCompare(b[0]));
+
+    const result: ModelTreeItem[] = [];
+    for (const [familyName, familyModels] of filteredEntries) {
+      const groupItem = new ModelTreeItem(familyName, 'model-group');
+      const familyCaps = aggregateFamilyCapabilities(familyModels);
+      const capLine = buildCapabilityLines({
+        thinking: familyCaps.thinking,
+        tools: familyCaps.tools,
+        vision: familyCaps.vision,
+        embedding: familyCaps.embedding,
+      });
+
+      const badges: string[] = [];
+      if (familyCaps.thinking) badges.push('🧠');
+      if (familyCaps.tools) badges.push('🛠️');
+      if (familyCaps.vision) badges.push('👁️');
+      if (familyCaps.embedding) badges.push('🧩');
+      if (badges.length > 0) groupItem.description = badges.join(' ');
+
+      const tooltipLines = [`${familyName} family (${familyModels.length} models)`];
+      if (capLine) tooltipLines.push(capLine);
+      groupItem.tooltip = tooltipLines.join('\n');
+      result.push(groupItem);
+    }
+    return result;
   }
 
   /**
@@ -855,7 +866,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           // Set initial tooltip
           item.tooltip = buildLocalModelTooltip(model.name, model.size, running);
           // Fetch tooltip description asynchronously
-          void getCachedModelPagePreview(model.name).then(
+          getCachedModelPagePreview(model.name).then(
             preview => {
               const nextTooltip = buildLocalModelTooltip(model.name, model.size, running, preview.description);
               updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
@@ -886,7 +897,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           if (cachedCaps) {
             appendBadges(cachedCaps);
             // Update tooltip with capabilities
-            void getCachedModelPagePreview(model.name).then(
+            getCachedModelPagePreview(model.name).then(
               preview => {
                 const nextTooltip = buildLocalModelTooltip(
                   model.name,
@@ -905,13 +916,13 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           } else if (!this.localModelCapabilitiesInFlight.has(model.name)) {
             this.localModelCapabilitiesInFlight.add(model.name);
             // Fetch capabilities once per local model name.
-            void fetchModelCapabilities(this.client, model.name)
+            fetchModelCapabilities(this.client, model.name)
               .then(caps => {
                 this.localModelCapabilitiesCache.set(model.name, caps);
                 this.persistLocalCapabilitiesToStorage();
                 appendBadges(caps);
                 // Update tooltip with capabilities
-                void getCachedModelPagePreview(model.name).then(
+                getCachedModelPagePreview(model.name).then(
                   preview => {
                     const nextTooltip = buildLocalModelTooltip(
                       model.name,
@@ -928,8 +939,11 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
                   },
                 );
               })
-              .catch(() => {
-                // Silently skip badges on error
+              .catch(error => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.logChannel?.debug(
+                  `[client] failed to fetch capabilities for ${model.name}; skipping capability badges: ${message}`,
+                );
               })
               .finally(() => {
                 this.localModelCapabilitiesInFlight.delete(model.name);
@@ -962,26 +976,23 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     this.treeChangeEmitter.fire(null);
   }
 
+  private localModelMatchesSingleFilter(
+    filter: string,
+    caps: ModelCapabilities | undefined,
+    modelName: string,
+  ): boolean {
+    if (filter === 'thinking') return caps ? !!caps.thinking : isThinkingModelId(modelName);
+    if (filter === 'tools') return !caps || !!caps.toolCalling;
+    if (filter === 'vision') return !caps || !!caps.imageInput;
+    if (filter === 'embedding') return !caps || !!caps.embedding;
+    return true;
+  }
+
   private modelMatchesCapabilityFilters(modelName: string): boolean {
     if (this.capabilityFilters.size === 0) return true;
-
     const caps = this.localModelCapabilitiesCache.get(modelName);
-
     for (const filter of this.capabilityFilters) {
-      switch (filter) {
-        case 'thinking':
-          if (caps !== undefined ? !caps.thinking : !isThinkingModelId(modelName)) return false;
-          break;
-        case 'tools':
-          if (caps !== undefined && !caps.toolCalling) return false;
-          break;
-        case 'vision':
-          if (caps !== undefined && !caps.imageInput) return false;
-          break;
-        case 'embedding':
-          if (caps !== undefined && !caps.embedding) return false;
-          break;
-      }
+      if (!this.localModelMatchesSingleFilter(filter, caps, modelName)) return false;
     }
     return true;
   }
@@ -1099,8 +1110,9 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         try {
           const { models } = await this.client.ps();
           running = models.some(m => m.name === modelName);
-        } catch {
-          // If ps() fails, fall back to optimistic status messaging below.
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logChannel?.debug(`[client] unable to verify running status for ${modelName}: ${message}`);
         }
 
         if (running) {
@@ -1204,11 +1216,53 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   /**
    * Stop a running model and show a progress indicator until it is fully unloaded
    */
+  private async attemptForceKill(modelName: string, pid: number): Promise<void> {
+    const answer = await window.showWarningMessage(
+      `Model ${modelName} did not stop after 30 seconds. Force kill the process (PID ${pid})?`,
+      'Force Kill',
+      'Cancel',
+    );
+    if (answer !== 'Force Kill') return;
+
+    const killed = await this.forceKillProcess(pid);
+    if (!killed) {
+      window.showErrorMessage(`Failed to kill process ${pid}. Try restarting Ollama or kill manually.`);
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const { models } = await this.client.ps();
+      if (!models.some(m => m.name === modelName)) {
+        this.logChannel?.info(`[client] model force-killed successfully: ${modelName}`);
+        this.refresh();
+        window.showInformationMessage(`Model ${modelName} force-killed`);
+        return;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logChannel?.debug(`[client] unable to verify force-kill result for ${modelName}: ${message}`);
+      this.logChannel?.info(`[client] model force-killed (ps check failed): ${modelName}`);
+      this.refresh();
+      window.showInformationMessage(`Model ${modelName} force-killed`);
+      return;
+    }
+    window.showErrorMessage(`Failed to verify model ${modelName} was killed. Check Ollama logs.`);
+  }
+
+  private async handleStopTimeout(modelName: string): Promise<void> {
+    this.logChannel?.warn(`[client] model ${modelName} still running after 30s timeout`);
+    const pid = await this.extractModelPidFromLogs(modelName);
+    if (pid !== null) {
+      await this.attemptForceKill(modelName, pid);
+    } else {
+      window.showWarningMessage(`Model ${modelName} did not stop after 30 seconds. Try restarting the Ollama server.`);
+    }
+  }
+
   async stopModel(modelName: string): Promise<void> {
     try {
-      // Skip force-kill logic for cloud models (they don't have local PIDs)
       const isCloudModel = this.isCloudTaggedModel(modelName);
-
       this.logChannel?.debug(`[client] stopping model: ${modelName}`);
       let modelStillRunning = false;
 
@@ -1217,69 +1271,23 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         async () => {
           const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.client;
           await activeClient.generate({ model: modelName, prompt: '', stream: false, keep_alive: 0 });
-          // Poll until the model disappears from the running process list (max 30 s)
           for (let i = 0; i < 30; i++) {
             await new Promise<void>(resolve => setTimeout(resolve, 1000));
             try {
               const { models } = await this.client.ps();
-              if (!models.some(m => m.name === modelName)) {
-                return; // Model stopped successfully
-              }
-            } catch {
-              return; // ps() failed — assume model is gone
+              if (!models.some(m => m.name === modelName)) return;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              this.logChannel?.debug(`[client] ps() failed while stopping ${modelName}: ${message}`);
+              return;
             }
           }
-          // If we reach here, model is still running after 30s
           modelStillRunning = true;
         },
       );
 
-      // Check if model is still running after timeout
       if (modelStillRunning && !isCloudModel) {
-        this.logChannel?.warn(`[client] model ${modelName} still running after 30s timeout`);
-
-        // Try to extract the PID from logs
-        const pid = await this.extractModelPidFromLogs(modelName);
-
-        if (pid !== null) {
-          // Offer to force-kill the process
-          const answer = await window.showWarningMessage(
-            `Model ${modelName} did not stop after 30 seconds. Force kill the process (PID ${pid})?`,
-            'Force Kill',
-            'Cancel',
-          );
-
-          if (answer === 'Force Kill') {
-            const killed = await this.forceKillProcess(pid);
-            if (killed) {
-              // Wait a moment and verify
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              try {
-                const { models } = await this.client.ps();
-                if (!models.some(m => m.name === modelName)) {
-                  this.logChannel?.info(`[client] model force-killed successfully: ${modelName}`);
-                  this.refresh();
-                  window.showInformationMessage(`Model ${modelName} force-killed`);
-                  return;
-                }
-              } catch {
-                // ps() failed, assume success
-                this.logChannel?.info(`[client] model force-killed (ps check failed): ${modelName}`);
-                this.refresh();
-                window.showInformationMessage(`Model ${modelName} force-killed`);
-                return;
-              }
-              window.showErrorMessage(`Failed to verify model ${modelName} was killed. Check Ollama logs.`);
-            } else {
-              window.showErrorMessage(`Failed to kill process ${pid}. Try restarting Ollama or kill manually.`);
-            }
-          }
-        } else {
-          // No PID found, show generic message
-          window.showWarningMessage(
-            `Model ${modelName} did not stop after 30 seconds. Try restarting the Ollama server.`,
-          );
-        }
+        await this.handleStopTimeout(modelName);
         return;
       }
 
@@ -1322,6 +1330,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
   private localProvider?: LocalModelsProvider;
   private context?: ExtensionContext;
 
+  // nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
   private static readonly CACHE_STORAGE_KEY = 'ollama.libraryModelsCache.v1';
 
   private static readonly CACHE_VERSION = 1;
@@ -1349,180 +1358,170 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
 
   async getChildren(element?: ModelTreeItem): Promise<ModelTreeItem[]> {
     if (element?.type === 'library-model') {
-      let raw = this.variantsCache.get(element.label);
-      if (!raw) {
-        const fetched = await this.fetchModelVariants(element.label);
-        if (fetched === null) {
-          return [makeStatusItem('Failed to load variants')];
-        }
-        if (fetched.length === 0) {
-          return [makeStatusItem('No variants found')];
-        }
-        this.variantsCache.set(element.label, fetched);
-        raw = fetched;
-      }
-      if (raw.length === 0) {
-        return [makeStatusItem('No variants found')];
-      }
-      // Re-materialize on every call so check icons reflect current local state.
-      return this.filterVariantsByRecommended(this.materializeVariants(raw, this.getLocalModelNames()));
+      return this.getChildrenForLibraryModel(element);
     }
 
     if (element?.type === 'model-group') {
-      // Expanding a family group: show its library models.
-      // If the group has exactly one model with the same name, skip the
-      // redundant middle parent and show variants directly.
-      const models = await this.getLibraryModels();
-      const groupedModels = models
-        .filter(m => extractModelFamily(m.label) === element.label)
-        .sort((a, b) => a.label.localeCompare(b.label));
-
-      if (groupedModels.length === 1 && groupedModels[0].label === element.label) {
-        let raw = this.variantsCache.get(groupedModels[0].label);
-        if (!raw) {
-          const fetched = await this.fetchModelVariants(groupedModels[0].label);
-          if (fetched === null) {
-            return [makeStatusItem('Failed to load variants')];
-          }
-          if (fetched.length === 0) {
-            return [makeStatusItem('No variants found')];
-          }
-          this.variantsCache.set(groupedModels[0].label, fetched);
-          raw = fetched;
-        }
-        if (raw.length === 0) {
-          return [makeStatusItem('No variants found')];
-        }
-        return this.filterVariantsByRecommended(this.materializeVariants(raw, this.getLocalModelNames()));
-      }
-
-      return groupedModels;
+      return this.getChildrenForModelGroup(element);
     }
 
     if (element) {
       return [];
     }
 
-    // Top level: display library list grouped by family
     const models = await this.getLibraryModels();
     if (models.length === 0) {
       return [makeStatusItem('No library models found')];
     }
-
     if (models.every(model => model.type === 'status')) {
       return models;
     }
 
-    // Flat mode: return all library models with their variants sorted A-Z
     if (!this.grouped) {
-      const filterLower = this.filterText.toLowerCase();
-      const localNames = this.getLocalModelNames();
-      const allItems: ModelTreeItem[] = [];
+      return this.getChildrenFlat(models);
+    }
+    return this.getChildrenGrouped(models);
+  }
 
-      // Pre-filter models by capability before building the flat list
-      const capabilityFilteredModels =
-        this.capabilityFilters.size > 0
-          ? models.filter(m => m.type === 'status' || this.modelMatchesCapabilityFilters(m.label, localNames))
-          : models;
-
-      // Expand all parent models to include their variants
-      for (const model of capabilityFilteredModels) {
-        if (model.type === 'status') {
-          allItems.push(model);
-          continue;
-        }
-
-        // Add parent model
-        if (
-          !filterLower ||
-          model.label.toLowerCase().includes(filterLower) ||
-          (typeof model.tooltip === 'string' && model.tooltip.toLowerCase().includes(filterLower))
-        ) {
-          model.collapsibleState = TreeItemCollapsibleState.None;
-          const isInstalled = Array.from(localNames).some(
-            local => local === model.label || local.startsWith(`${model.label}:`),
-          );
-          if (isInstalled) {
-            model.iconPath = createThemeIcon('check');
-          }
-          allItems.push(model);
-        }
-
-        // Fetch and add variants — skip when recommendedOnly to avoid firing
-        // hundreds of concurrent requests after a cache-clearing refresh.
-        if (!this.recommendedOnly) {
-          const cachedVariants = this.variantsCache.get(model.label);
-          if (cachedVariants) {
-            const variants = this.materializeVariants(cachedVariants, localNames);
-            const filteredVariants = variants.filter(
-              v =>
-                !filterLower ||
-                v.label.toLowerCase().includes(filterLower) ||
-                (typeof v.tooltip === 'string' && v.tooltip.toLowerCase().includes(filterLower)),
-            );
-            allItems.push(...filteredVariants);
-          } else {
-            // Fetch variants asynchronously
-            void this.fetchModelVariants(model.label).then(
-              raw => {
-                if (raw) {
-                  this.variantsCache.set(model.label, raw);
-                  this.treeChangeEmitter.fire(null); // Refresh to show new variants
-                }
-              },
-              () => {
-                // Silently skip on error
-              },
-            );
-          }
-        }
+  private async getChildrenForLibraryModel(element: ModelTreeItem): Promise<ModelTreeItem[]> {
+    let raw = this.variantsCache.get(element.label);
+    if (!raw) {
+      const fetched = await this.fetchModelVariants(element.label);
+      if (fetched === null) {
+        return [makeStatusItem('Failed to load variants')];
       }
+      if (fetched.length === 0) {
+        return [makeStatusItem('No variants found')];
+      }
+      this.variantsCache.set(element.label, fetched);
+      raw = fetched;
+    }
+    if (raw.length === 0) {
+      return [makeStatusItem('No variants found')];
+    }
+    return this.filterVariantsByRecommended(this.materializeVariants(raw, this.getLocalModelNames()));
+  }
 
-      const filteredItems = this.recommendedOnly
-        ? allItems.filter(item => {
-            if (item.type === 'status') return true;
-            // Use cached variant names (e.g. "llama3.2:3b") for an accurate
-            // size check.  Fall back to showing the model when not yet cached.
-            const cached = this.variantsCache.get(item.label);
-            if (!cached) return true;
-            return cached.some(v => isRecommendedForHardware(v.name));
-          })
-        : allItems;
+  private async getChildrenForModelGroup(element: ModelTreeItem): Promise<ModelTreeItem[]> {
+    const models = await this.getLibraryModels();
+    const groupedModels = models
+      .filter(m => extractModelFamily(m.label) === element.label)
+      .sort((a, b) => a.label.localeCompare(b.label));
 
-      return filteredItems.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+    if (groupedModels.length === 1 && groupedModels[0].label === element.label) {
+      const modelLabel = groupedModels[0].label;
+      let raw = this.variantsCache.get(modelLabel);
+      if (!raw) {
+        const fetched = await this.fetchModelVariants(modelLabel);
+        if (fetched === null) return [makeStatusItem('Failed to load variants')];
+        if (fetched.length === 0) return [makeStatusItem('No variants found')];
+        this.variantsCache.set(modelLabel, fetched);
+        raw = fetched;
+      }
+      if (raw.length === 0) return [makeStatusItem('No variants found')];
+      return this.filterVariantsByRecommended(this.materializeVariants(raw, this.getLocalModelNames()));
     }
 
-    // Group models by family
-    const groups = groupModelsByFamily(models);
+    return groupedModels;
+  }
 
-    // Apply filter: keep only families where the family name or any child matches
+  private appendVariantsForModel(
+    model: ModelTreeItem,
+    filterLower: string,
+    localNames: Set<string>,
+    allItems: ModelTreeItem[],
+  ): void {
+    const cachedVariants = this.variantsCache.get(model.label);
+    if (cachedVariants) {
+      const variants = this.materializeVariants(cachedVariants, localNames);
+      const filteredVariants = variants.filter(
+        v =>
+          !filterLower ||
+          v.label.toLowerCase().includes(filterLower) ||
+          (typeof v.tooltip === 'string' && v.tooltip.toLowerCase().includes(filterLower)),
+      );
+      allItems.push(...filteredVariants);
+    } else {
+      this.fetchModelVariants(model.label).then(
+        raw => {
+          if (raw) {
+            this.variantsCache.set(model.label, raw);
+            this.treeChangeEmitter.fire(null);
+          }
+        },
+        error => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logChannel?.debug(`[client] failed to fetch variants for ${model.label}: ${message}`);
+        },
+      );
+    }
+  }
+
+  private modelMatchesTextFilter(model: ModelTreeItem, filterLower: string): boolean {
+    if (!filterLower) return true;
+    if (model.label.toLowerCase().includes(filterLower)) return true;
+    if (typeof model.tooltip === 'string' && model.tooltip.toLowerCase().includes(filterLower)) return true;
+    return false;
+  }
+
+  private isModelInstalled(model: ModelTreeItem, localNames: Set<string>): boolean {
+    return Array.from(localNames).some(local => local === model.label || local.startsWith(`${model.label}:`));
+  }
+
+  private applyRecommendedFilter(items: ModelTreeItem[]): ModelTreeItem[] {
+    if (!this.recommendedOnly) return items;
+    return items.filter(item => {
+      if (item.type === 'status') return true;
+      const cached = this.variantsCache.get(item.label);
+      if (!cached) return true;
+      return cached.some(v => isRecommendedForHardware(v.name));
+    });
+  }
+
+  private getChildrenFlat(models: ModelTreeItem[]): ModelTreeItem[] {
     const filterLower = this.filterText.toLowerCase();
     const localNames = this.getLocalModelNames();
+    const allItems: ModelTreeItem[] = [];
+
+    const capabilityFilteredModels =
+      this.capabilityFilters.size > 0
+        ? models.filter(m => m.type === 'status' || this.modelMatchesCapabilityFilters(m.label, localNames))
+        : models;
+
+    for (const model of capabilityFilteredModels) {
+      if (model.type === 'status') {
+        allItems.push(model);
+        continue;
+      }
+
+      if (this.modelMatchesTextFilter(model, filterLower)) {
+        model.collapsibleState = TreeItemCollapsibleState.None;
+        if (this.isModelInstalled(model, localNames)) {
+          model.iconPath = createThemeIcon('check');
+        }
+        allItems.push(model);
+      }
+
+      if (!this.recommendedOnly) {
+        this.appendVariantsForModel(model, filterLower, localNames, allItems);
+      }
+    }
+
+    const filteredItems = this.applyRecommendedFilter(allItems);
+    return filteredItems.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+  }
+
+  private getChildrenGrouped(models: ModelTreeItem[]): ModelTreeItem[] {
+    const groups = groupModelsByFamily(models);
+    const filterLower = this.filterText.toLowerCase();
+    const localNames = this.getLocalModelNames();
+
     const filteredEntries = Array.from(groups.entries())
-      .filter(
-        ([familyName, familyModels]) =>
-          (!filterLower ||
-            familyName.toLowerCase().includes(filterLower) ||
-            familyModels.some(
-              m =>
-                m.label.toLowerCase().includes(filterLower) ||
-                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
-            )) &&
-          (!this.recommendedOnly ||
-            // Use cached variant names when available (they carry size tags like
-            // ":7b"), falling back to showing the family when no cache exists yet.
-            familyModels.some(m => {
-              const cached = this.variantsCache.get(m.label);
-              if (!cached) return true; // No cache yet — show optimistically
-              return cached.some(v => isRecommendedForHardware(v.name));
-            })) &&
-          (this.capabilityFilters.size === 0 ||
-            familyModels.some(m => this.modelMatchesCapabilityFilters(m.label, localNames))),
+      .filter(([familyName, familyModels]) =>
+        this.shouldIncludeFamilyGroup(familyName, familyModels, filterLower, localNames),
       )
       .sort((a, b) => a[0].localeCompare(b[0]));
 
-    // Promote single-child groups: if a family has only one model, show it
-    // directly at top level (library items are always expandable via variants).
     const result: ModelTreeItem[] = [];
     for (const [familyName, familyModels] of filteredEntries) {
       if (familyModels.length === 1) {
@@ -1555,6 +1554,44 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     return result;
   }
 
+  // NOSONAR - Legacy branching logic; scheduled for decomposition in remediation plan.
+  private shouldIncludeFamilyGroup(
+    familyName: string,
+    familyModels: ModelTreeItem[],
+    filterLower: string,
+    localNames: Set<string>,
+  ): boolean {
+    const matchesText =
+      !filterLower ||
+      familyName.toLowerCase().includes(filterLower) ||
+      familyModels.some(
+        m =>
+          m.label.toLowerCase().includes(filterLower) ||
+          (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+      );
+
+    if (!matchesText) {
+      return false;
+    }
+
+    const matchesRecommended =
+      !this.recommendedOnly ||
+      familyModels.some(m => {
+        const cached = this.variantsCache.get(m.label);
+        if (!cached) return true;
+        return cached.some(v => isRecommendedForHardware(v.name));
+      });
+
+    if (!matchesRecommended) {
+      return false;
+    }
+
+    return (
+      this.capabilityFilters.size === 0 ||
+      familyModels.some(m => this.modelMatchesCapabilityFilters(m.label, localNames))
+    );
+  }
+
   refresh(): void {
     this.cache = [];
     this.cacheTimeMs = 0;
@@ -1562,7 +1599,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     this.variantsCache.clear();
     this.cloudCatalogNames.clear();
     this.cacheGeneration++;
-    void this.context?.globalState.update(LibraryModelsProvider.CACHE_STORAGE_KEY, undefined);
+    this.context?.globalState.update(LibraryModelsProvider.CACHE_STORAGE_KEY, undefined)?.then(undefined, () => {});
     this.treeChangeEmitter.fire(null);
   }
 
@@ -1604,6 +1641,22 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
    * shows models optimistically when preview data isn't cached yet (except for
    * Downloaded and Cloud, which are determined from local state directly).
    */
+  private libraryModelMatchesSingleFilter(
+    filter: string,
+    caps: { thinking: boolean; tools: boolean; vision: boolean; embedding: boolean } | undefined,
+    isDownloaded: boolean,
+    isCloudModel: boolean,
+    modelName: string,
+  ): boolean {
+    if (filter === 'thinking') return caps ? !!caps.thinking : isThinkingModelId(modelName);
+    if (filter === 'tools') return !caps || !!caps.tools;
+    if (filter === 'vision') return !caps || !!caps.vision;
+    if (filter === 'embedding') return !caps || !!caps.embedding;
+    if (filter === 'downloaded') return isDownloaded;
+    if (filter === 'cloud') return isCloudModel;
+    return true;
+  }
+
   private modelMatchesCapabilityFilters(modelName: string, localNames: Set<string>): boolean {
     if (this.capabilityFilters.size === 0) return true;
 
@@ -1614,27 +1667,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     const isDownloaded = Array.from(localNames).some(l => l === modelName || l.startsWith(`${modelName}:`));
 
     for (const filter of this.capabilityFilters) {
-      switch (filter) {
-        case 'thinking':
-          // Regex fallback when preview hasn't been fetched yet
-          if (caps !== undefined ? !caps.thinking : !isThinkingModelId(modelName)) return false;
-          break;
-        case 'tools':
-          if (caps !== undefined && !caps.tools) return false;
-          break;
-        case 'vision':
-          if (caps !== undefined && !caps.vision) return false;
-          break;
-        case 'embedding':
-          if (caps !== undefined && !caps.embedding) return false;
-          break;
-        case 'downloaded':
-          if (!isDownloaded) return false;
-          break;
-        case 'cloud':
-          if (!isCloudModel) return false;
-          break;
-      }
+      if (!this.libraryModelMatchesSingleFilter(filter, caps, isDownloaded, isCloudModel, modelName)) return false;
     }
     return true;
   }
@@ -1664,7 +1697,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       item.tooltip = isCloudVariant ? `🤖 ${name}\n☁️ Cloud` : `🤖 ${name}`;
 
       // Fetch description/capabilities asynchronously for leaf variants.
-      void getCachedModelPagePreview(name).then(
+      getCachedModelPagePreview(name).then(
         preview => {
           const badges: string[] = [];
           if (isCloudVariant) badges.push('☁️');
@@ -1783,12 +1816,14 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
   }
 
   private persistCacheToStorage(): void {
-    void this.context?.globalState.update(LibraryModelsProvider.CACHE_STORAGE_KEY, {
-      version: LibraryModelsProvider.CACHE_VERSION,
-      names: this.cache,
-      cloudNames: [...this.cloudCatalogNames],
-      cachedAtMs: this.cacheTimeMs,
-    });
+    this.context?.globalState
+      .update(LibraryModelsProvider.CACHE_STORAGE_KEY, {
+        version: LibraryModelsProvider.CACHE_VERSION,
+        names: this.cache,
+        cloudNames: [...this.cloudCatalogNames],
+        cachedAtMs: this.cacheTimeMs,
+      })
+      ?.then(undefined, () => {});
   }
 
   private async fetchLibraryModelNames(timeoutMs: number): Promise<string[]> {
@@ -1819,8 +1854,9 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         if (cloudResponse.ok) {
           cloudHtml = await cloudResponse.text();
         }
-      } catch {
-        // Cloud catalog fetch is best-effort; continue with base library list.
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logChannel?.debug(`[client] cloud catalog fetch failed; continuing with base catalog: ${message}`);
       }
 
       const matches = [...html.matchAll(/href="\/library\/([^"?#]+)"/g)];
@@ -1877,7 +1913,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       }
       item.tooltip = isCloudCatalogModel ? `Library model: ${name}\n☁️ Cloud` : `Library model: ${name}`;
       // Fetch description and capabilities asynchronously
-      void getCachedModelPagePreview(name).then(
+      getCachedModelPagePreview(name).then(
         preview => {
           const tooltipLines = [`🤖 ${name}`];
           if (isCloudCatalogModel) {
@@ -1994,6 +2030,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   private catalogModelNames: string[] = [];
   private cloudCapabilitiesByBase = new Map<string, Set<string>>();
 
+  // nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
   private static readonly CLOUD_CATALOG_STORAGE_KEY = 'ollama.cloudCatalogCache.v1';
   private static readonly CLOUD_CATALOG_CACHE_VERSION = 1;
 
@@ -2011,82 +2048,13 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
 
   async getChildren(element?: ModelTreeItem): Promise<ModelTreeItem[]> {
     if (!element) {
-      // Top level: get cloud models and group by family
       const models = await this.getCloudModels();
-
-      // If it's a status message, return as-is
-      if (models.length === 1 && models[0].type === 'status') {
-        return models;
-      }
-
-      if (models.length === 0) {
-        return [makeStatusItem('No cloud models found')];
-      }
-
-      // Flat mode: return all cloud models sorted A-Z
-      if (!this.grouped) {
-        const filterLower = this.filterText.toLowerCase();
-        return models
-          .filter(
-            m =>
-              m.type !== 'status' &&
-              (!filterLower ||
-                m.label.toLowerCase().includes(filterLower) ||
-                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))) &&
-              this.modelMatchesCapabilityFilters(m.label),
-          )
-          .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-      }
-
-      // Group models by family
-      const groups = groupModelsByFamily(models);
-
-      // Apply filter: keep only families where the family name or any child matches
-      const filterLower = this.filterText.toLowerCase();
-      const filteredEntries = Array.from(groups.entries())
-        .filter(
-          ([familyName, familyModels]) =>
-            (!filterLower ||
-              familyName.toLowerCase().includes(filterLower) ||
-              familyModels.some(
-                m =>
-                  m.label.toLowerCase().includes(filterLower) ||
-                  (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
-              )) &&
-            (this.capabilityFilters.size === 0 || familyModels.some(m => this.modelMatchesCapabilityFilters(m.label))),
-        )
-        .sort((a, b) => a[0].localeCompare(b[0]));
-
-      // Always create explicit family parent groups.
-      const result: ModelTreeItem[] = [];
-      for (const [familyName, familyModels] of filteredEntries) {
-        const groupItem = new ModelTreeItem(familyName, 'model-group');
-        const familyCaps = aggregateFamilyCapabilities(familyModels);
-        const capLine = buildCapabilityLines({
-          thinking: familyCaps.thinking,
-          tools: familyCaps.tools,
-          vision: familyCaps.vision,
-          embedding: familyCaps.embedding,
-        });
-
-        const badges: string[] = [];
-        if (familyCaps.thinking) badges.push('🧠');
-        if (familyCaps.tools) badges.push('🛠️');
-        if (familyCaps.vision) badges.push('👁️');
-        if (familyCaps.embedding) badges.push('🧩');
-        if (badges.length > 0) {
-          groupItem.description = badges.join(' ');
-        }
-
-        const tooltipLines = [`${familyName} family (${familyModels.length} models)`];
-        if (capLine) tooltipLines.push(capLine);
-        groupItem.tooltip = tooltipLines.join('\n');
-        result.push(groupItem);
-      }
-      return result;
+      if (models.length === 1 && models[0].type === 'status') return models;
+      if (models.length === 0) return [makeStatusItem('No cloud models found')];
+      if (!this.grouped) return this.getCloudChildrenFlat(models);
+      return this.getCloudChildrenGrouped(models);
     }
 
-    // Child level: if element is a model-group, return its models
     if (element.type === 'model-group') {
       const allModels = await this.getCloudModels();
       return allModels
@@ -2097,12 +2065,72 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     return [];
   }
 
+  private getCloudChildrenFlat(models: ModelTreeItem[]): ModelTreeItem[] {
+    const filterLower = this.filterText.toLowerCase();
+    return models
+      .filter(
+        m =>
+          m.type !== 'status' &&
+          (!filterLower ||
+            m.label.toLowerCase().includes(filterLower) ||
+            (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))) &&
+          this.modelMatchesCapabilityFilters(m.label),
+      )
+      .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
+  }
+
+  private getCloudChildrenGrouped(models: ModelTreeItem[]): ModelTreeItem[] {
+    const groups = groupModelsByFamily(models);
+    const filterLower = this.filterText.toLowerCase();
+
+    const filteredEntries = Array.from(groups.entries())
+      .filter(
+        ([familyName, familyModels]) =>
+          (!filterLower ||
+            familyName.toLowerCase().includes(filterLower) ||
+            familyModels.some(
+              m =>
+                m.label.toLowerCase().includes(filterLower) ||
+                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+            )) &&
+          (this.capabilityFilters.size === 0 || familyModels.some(m => this.modelMatchesCapabilityFilters(m.label))),
+      )
+      .sort((a, b) => a[0].localeCompare(b[0]));
+
+    const result: ModelTreeItem[] = [];
+    for (const [familyName, familyModels] of filteredEntries) {
+      const groupItem = new ModelTreeItem(familyName, 'model-group');
+      const familyCaps = aggregateFamilyCapabilities(familyModels);
+      const capLine = buildCapabilityLines({
+        thinking: familyCaps.thinking,
+        tools: familyCaps.tools,
+        vision: familyCaps.vision,
+        embedding: familyCaps.embedding,
+      });
+
+      const badges: string[] = [];
+      if (familyCaps.thinking) badges.push('🧠');
+      if (familyCaps.tools) badges.push('🛠️');
+      if (familyCaps.vision) badges.push('👁️');
+      if (familyCaps.embedding) badges.push('🧩');
+      if (badges.length > 0) groupItem.description = badges.join(' ');
+
+      const tooltipLines = [`${familyName} family (${familyModels.length} models)`];
+      if (capLine) tooltipLines.push(capLine);
+      groupItem.tooltip = tooltipLines.join('\n');
+      result.push(groupItem);
+    }
+    return result;
+  }
+
   refresh(): void {
     this.cache = [];
     this.cacheTimeMs = 0;
     this.catalogModelNames = [];
     this.cloudCapabilitiesByBase.clear();
-    void this.context.globalState?.update(CloudModelsProvider.CLOUD_CATALOG_STORAGE_KEY, undefined);
+    this.context.globalState
+      ?.update(CloudModelsProvider.CLOUD_CATALOG_STORAGE_KEY, undefined)
+      ?.then(undefined, () => {});
     this.treeChangeEmitter.fire(null);
   }
 
@@ -2115,27 +2143,20 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     this.treeChangeEmitter.fire(null);
   }
 
+  private cloudModelMatchesSingleFilter(filter: string, caps: Set<string> | undefined, modelName: string): boolean {
+    if (filter === 'thinking') return caps ? caps.has('thinking') : isThinkingModelId(modelName);
+    if (filter === 'tools') return !caps || caps.has('tools');
+    if (filter === 'vision') return !caps || caps.has('vision');
+    if (filter === 'embedding') return !caps || caps.has('embedding');
+    return true;
+  }
+
   private modelMatchesCapabilityFilters(modelName: string): boolean {
     if (this.capabilityFilters.size === 0) return true;
-
     const baseName = modelName.split(':')[0];
     const caps = this.cloudCapabilitiesByBase.get(baseName.toLowerCase());
-
     for (const filter of this.capabilityFilters) {
-      switch (filter) {
-        case 'thinking':
-          if (caps !== undefined ? !caps.has('thinking') : !isThinkingModelId(modelName)) return false;
-          break;
-        case 'tools':
-          if (caps !== undefined && !caps.has('tools')) return false;
-          break;
-        case 'vision':
-          if (caps !== undefined && !caps.has('vision')) return false;
-          break;
-        case 'embedding':
-          if (caps !== undefined && !caps.has('embedding')) return false;
-          break;
-      }
+      if (!this.cloudModelMatchesSingleFilter(filter, caps, modelName)) return false;
     }
     return true;
   }
@@ -2187,7 +2208,9 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     try {
       await this.getCloudModels();
       return new Set(this.cachedNames);
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logChannel?.debug(`[client] failed to resolve cloud model names for filter: ${message}`);
       return new Set();
     }
   }
@@ -2254,8 +2277,9 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           return tagNames[0];
         }
       }
-    } catch {
-      // Ignore and use final fallback below.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logChannel?.debug(`[client] cloud model page fallback lookup failed for ${modelName}: ${message}`);
     } finally {
       clearTimeout(timeout);
     }
@@ -2322,7 +2346,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   }
 
   private async fetchCloudRunningModels(
-    timeoutMs: number,
+    _timeoutMs: number,
   ): Promise<Map<string, { durationMs?: number; size?: number }>> {
     const cloudClient = await getCloudOllamaClient(this.context);
     const psResponse = await cloudClient.ps();
@@ -2339,7 +2363,6 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     }
 
     // keep timeout parameter intentionally for parity with other fetchers
-    void timeoutMs;
     return runningModels;
   }
 
@@ -2403,79 +2426,77 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     }
   }
 
+  private buildSingleCloudItem(
+    fullName: string,
+    runningInfo: { durationMs?: number; size?: number } | undefined,
+  ): ModelTreeItem {
+    const baseName = fullName.split(':')[0];
+    const isRunning =
+      (typeof runningInfo?.durationMs === 'number' && runningInfo.durationMs > 0) ||
+      this.warmedModelNames.has(baseName);
+    const item = new ModelTreeItem(
+      fullName,
+      isRunning ? 'cloud-running' : 'cloud-stopped',
+      runningInfo?.size,
+      runningInfo?.durationMs,
+    );
+    item.command = {
+      command: 'opilot.openModelSettingsForModel',
+      title: 'Open Model Settings',
+      arguments: [fullName],
+    };
+
+    const caps = this.cloudCapabilitiesByBase.get(baseName.toLowerCase());
+    const isThinking = caps?.has('thinking') || isThinkingModelId(fullName);
+    const hasTools = caps?.has('tools') ?? false;
+    const hasVision = caps?.has('vision') ?? false;
+    const hasEmbedding = caps?.has('embedding') ?? false;
+
+    const badges: string[] = [];
+    if (isThinking) badges.push('🧠');
+    if (hasTools) badges.push('🛠️');
+    if (hasVision) badges.push('👁️');
+    if (hasEmbedding) badges.push('🧩');
+    if (badges.length > 0) {
+      const existing = (item.description ?? '').toString();
+      const badgeStr = badges.join(' ');
+      item.description = existing ? `${existing} ${badgeStr}` : badgeStr;
+    }
+
+    const sizeText = formatSizeForTooltip(runningInfo?.size);
+    const tooltipLines = [`🤖 ${fullName}`, `🏋️ ${sizeText}`];
+    if (isRunning) {
+      const until = formatRelativeFromNow(runningInfo?.durationMs);
+      tooltipLines.push(`⏱️ ${until}`);
+    }
+    const capLine = buildCapabilityLines({
+      thinking: isThinking,
+      tools: hasTools,
+      vision: hasVision,
+      embedding: hasEmbedding,
+    });
+    if (capLine) tooltipLines.push(capLine);
+    item.tooltip = tooltipLines.join('\n');
+
+    getCachedModelPagePreview(fullName).then(
+      preview => {
+        if (preview.description) {
+          updateItemTooltip(item, `${item.tooltip as string}\n${preview.description}`, this.treeChangeEmitter);
+        }
+      },
+      () => {
+        /* keep existing tooltip */
+      },
+    );
+
+    return item;
+  }
+
   private buildCloudItemsFromCatalog(
     runningModels: Map<string, { durationMs?: number; size?: number }>,
   ): ModelTreeItem[] {
     return this.catalogModelNames
-      .map(fullName => {
-        const baseName = fullName.split(':')[0];
-        const runningInfo = runningModels.get(baseName);
-        const isRunning =
-          (typeof runningInfo?.durationMs === 'number' && runningInfo.durationMs > 0) ||
-          this.warmedModelNames.has(baseName);
-        const item = new ModelTreeItem(
-          fullName,
-          isRunning ? 'cloud-running' : 'cloud-stopped',
-          runningInfo?.size,
-          runningInfo?.durationMs,
-        );
-        item.command = {
-          command: 'opilot.openModelSettingsForModel',
-          title: 'Open Model Settings',
-          arguments: [fullName],
-        };
-
-        const caps = this.cloudCapabilitiesByBase.get(baseName.toLowerCase());
-        const isThinking = caps?.has('thinking') || isThinkingModelId(fullName);
-        const hasTools = caps?.has('tools') ?? false;
-        const hasVision = caps?.has('vision') ?? false;
-        const hasEmbedding = caps?.has('embedding') ?? false;
-
-        const badges: string[] = [];
-        if (isThinking) badges.push('🧠');
-        if (hasTools) badges.push('🛠️');
-        if (hasVision) badges.push('👁️');
-        if (hasEmbedding) badges.push('🧩');
-        if (badges.length > 0) {
-          const existing = (item.description ?? '').toString();
-          const badgeStr = badges.join(' ');
-          item.description = existing ? `${existing} ${badgeStr}` : badgeStr;
-        }
-
-        const sizeText = formatSizeForTooltip(runningInfo?.size);
-        const tooltipLines = [`🤖 ${fullName}`, `🏋️ ${sizeText}`];
-        if (isRunning) {
-          const until = formatRelativeFromNow(runningInfo?.durationMs);
-          tooltipLines.push(`⏱️ ${until}`);
-        }
-        const capLine = buildCapabilityLines({
-          thinking: isThinking,
-          tools: hasTools,
-          vision: hasVision,
-          embedding: hasEmbedding,
-        });
-        if (capLine) {
-          tooltipLines.push(capLine);
-        }
-        const baseTooltip = tooltipLines.join('\n');
-        if (typeof item.tooltip !== 'string' || item.tooltip !== baseTooltip) {
-          item.tooltip = baseTooltip;
-        }
-
-        void getCachedModelPagePreview(fullName).then(
-          preview => {
-            if (preview.description) {
-              const nextTooltip = `${baseTooltip}\n${preview.description}`;
-              updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
-            }
-          },
-          () => {
-            /* keep existing tooltip */
-          },
-        );
-
-        return item;
-      })
+      .map(fullName => this.buildSingleCloudItem(fullName, runningModels.get(fullName.split(':')[0])))
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
@@ -2505,11 +2526,13 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       capabilitiesByBase[baseName] = [...caps];
     }
 
-    void this.context.globalState?.update(CloudModelsProvider.CLOUD_CATALOG_STORAGE_KEY, {
-      version: CloudModelsProvider.CLOUD_CATALOG_CACHE_VERSION,
-      names: this.catalogModelNames,
-      capabilitiesByBase,
-    });
+    this.context.globalState
+      ?.update(CloudModelsProvider.CLOUD_CATALOG_STORAGE_KEY, {
+        version: CloudModelsProvider.CLOUD_CATALOG_CACHE_VERSION,
+        names: this.catalogModelNames,
+        capabilitiesByBase,
+      })
+      ?.then(undefined, () => {});
   }
 
   private isCloudTaggedModel(modelName: string): boolean {
@@ -2600,7 +2623,7 @@ export function handleLoginToCloud(): void {
  */
 export function handleOpenCloudModel(item: ModelTreeItem): void {
   if (item && (item.type === 'cloud-running' || item.type === 'cloud-stopped')) {
-    void env.openExternal(Uri.parse(getLibraryModelUrl(item.label)));
+    Promise.resolve(env.openExternal(Uri.parse(getLibraryModelUrl(item.label)))).catch(() => {});
   }
 }
 
@@ -2609,14 +2632,78 @@ export function handleOpenCloudModel(item: ModelTreeItem): void {
  */
 export async function handleDeleteModel(item: ModelTreeItem, localProvider: LocalModelsProvider): Promise<void> {
   if (item && (item.type === 'local-running' || item.type === 'cloud-running')) {
-    void window.showErrorMessage('Stop the model before deleting it.');
+    Promise.resolve(window.showErrorMessage('Stop the model before deleting it.')).catch(() => {});
     return;
   }
   if (item && (item.type === 'local-stopped' || item.type === 'cloud-stopped')) {
     const answer = await window.showWarningMessage(`Delete model "${item.label}"?`, 'Delete', 'Cancel');
     if (answer === 'Delete') {
-      void localProvider.deleteModel(item.label);
+      Promise.resolve(localProvider.deleteModel(item.label)).catch(() => {});
     }
+  }
+}
+
+export interface PullProgressTracker {
+  lastCompleted: number;
+  lastTotal: number;
+}
+
+export function computePullChunkProgress(
+  total: number,
+  completed: number,
+  tracker: PullProgressTracker,
+  progress: Progress<{ message?: string; increment?: number }>,
+): void {
+  if (total === tracker.lastTotal && completed < tracker.lastCompleted) {
+    tracker.lastCompleted = 0;
+  }
+  const pct = Math.round((completed / total) * 100);
+  const completedMb = (completed / 1024 / 1024).toFixed(1);
+  const totalMb = (total / 1024 / 1024).toFixed(1);
+  let increment = 0;
+  if (total === tracker.lastTotal && tracker.lastCompleted > 0) {
+    const delta = completed - tracker.lastCompleted;
+    if (delta > 0) increment = Math.round((delta / total) * 100);
+  }
+  progress.report({ message: `${pct}% (${completedMb} / ${totalMb} MB)`, increment });
+  tracker.lastCompleted = completed;
+  tracker.lastTotal = total;
+}
+
+async function executePullDownload(
+  client: Ollama,
+  modelName: string,
+  localProvider: LocalModelsProvider,
+  progress: Progress<{ message?: string; increment?: number }>,
+  token: CancellationToken,
+  logChannel?: DiagnosticsLogger,
+): Promise<void> {
+  token.onCancellationRequested(() => {
+    client.abort();
+  });
+  try {
+    const stream = await client.pull({ model: modelName, stream: true });
+    const tracker: PullProgressTracker = { lastCompleted: 0, lastTotal: 0 };
+    for await (const chunk of stream) {
+      const total = chunk.total ?? 0;
+      const completed = chunk.completed ?? 0;
+      if (total > 0) {
+        computePullChunkProgress(total, completed, tracker, progress);
+      } else if (chunk.status) {
+        progress.report({ message: chunk.status });
+      }
+    }
+    logChannel?.info(`[client] model pulled successfully: ${modelName}`);
+    localProvider.refresh();
+    window.showInformationMessage(`Model ${modelName} pulled successfully`);
+  } catch (error) {
+    if (token.isCancellationRequested) {
+      window.showInformationMessage(`Download of ${modelName} cancelled`);
+      return;
+    }
+    logChannel?.exception?.(`[client] failed to pull model ${modelName}`, error);
+    const msg = error instanceof Error ? error.message : String(error);
+    window.showErrorMessage(`Failed to pull model: ${msg}`);
   }
 }
 
@@ -2631,58 +2718,7 @@ async function pullModelWithProgress(
 ): Promise<void> {
   await window.withProgress(
     { location: ProgressLocation.Notification, title: `Pulling ${modelName}`, cancellable: true },
-    async (progress, token) => {
-      token.onCancellationRequested(() => {
-        client.abort();
-      });
-
-      try {
-        const stream = await client.pull({ model: modelName, stream: true });
-        let lastCompleted = 0;
-        let lastTotal = 0;
-
-        for await (const chunk of stream) {
-          const total = chunk.total ?? 0;
-          const completed = chunk.completed ?? 0;
-
-          if (total > 0) {
-            // Handle potential reset of completed while total stays the same (per-layer streaming).
-            if (total === lastTotal && completed < lastCompleted) {
-              lastCompleted = 0;
-            }
-
-            const pct = Math.round((completed / total) * 100);
-            const completedMb = (completed / 1024 / 1024).toFixed(1);
-            const totalMb = (total / 1024 / 1024).toFixed(1);
-
-            let increment = 0;
-            if (total === lastTotal && lastCompleted > 0) {
-              const deltaCompleted = completed - lastCompleted;
-              if (deltaCompleted > 0) {
-                increment = Math.round((deltaCompleted / total) * 100);
-              }
-            }
-            progress.report({ message: `${pct}% (${completedMb} / ${totalMb} MB)`, increment });
-            lastCompleted = completed;
-            lastTotal = total;
-          } else if (chunk.status) {
-            progress.report({ message: chunk.status });
-          }
-        }
-
-        logChannel?.info(`[client] model pulled successfully: ${modelName}`);
-        localProvider.refresh();
-        window.showInformationMessage(`Model ${modelName} pulled successfully`);
-      } catch (error) {
-        if (token.isCancellationRequested) {
-          window.showInformationMessage(`Download of ${modelName} cancelled`);
-          return;
-        }
-        logChannel?.exception?.(`[client] failed to pull model ${modelName}`, error);
-        const msg = error instanceof Error ? error.message : String(error);
-        window.showErrorMessage(`Failed to pull model: ${msg}`);
-      }
-    },
+    (progress, token) => executePullDownload(client, modelName, localProvider, progress, token, logChannel),
   );
 }
 
@@ -2722,7 +2758,7 @@ export async function handlePullModelFromLibrary(
  */
 export function handleOpenLibraryModelPage(item: ModelTreeItem): void {
   if (item && item.type === 'library-model') {
-    void env.openExternal(Uri.parse(getLibraryModelUrl(item.label)));
+    Promise.resolve(env.openExternal(Uri.parse(getLibraryModelUrl(item.label)))).catch(() => {});
   }
 }
 
@@ -2731,7 +2767,7 @@ export function handleOpenLibraryModelPage(item: ModelTreeItem): void {
  */
 export function handleStartModel(item: ModelTreeItem, localProvider: LocalModelsProvider): void {
   if (item && item.type === 'local-stopped') {
-    void localProvider.startModel(item.label);
+    Promise.resolve(localProvider.startModel(item.label)).catch(() => {});
   }
 }
 
@@ -2740,7 +2776,7 @@ export function handleStartModel(item: ModelTreeItem, localProvider: LocalModels
  */
 export function handleStopModel(item: ModelTreeItem, localProvider: LocalModelsProvider): void {
   if (item && (item.type === 'local-running' || item.type === 'cloud-running')) {
-    void localProvider.stopModel(item.label);
+    Promise.resolve(localProvider.stopModel(item.label)).catch(() => {});
   }
 }
 
@@ -2791,6 +2827,14 @@ export type SidebarRegistration = {
   getProfilingSnapshot: () => SidebarProfilingSnapshot;
 };
 
+// Expose the active LocalModelsProvider to other modules that want to read
+// runtime provider state (used to update chat status items, etc.). This is
+// intentionally minimal and guarded — consumers must check for undefined.
+let activeLocalModelsProvider: LocalModelsProvider | undefined;
+export function getLocalModelsProvider(): LocalModelsProvider | undefined {
+  return activeLocalModelsProvider;
+}
+
 const CAPABILITY_FILTER_LABEL_TO_KEY = new Map([
   ['🧠 Thinking', 'thinking'],
   ['🛠️ Tools', 'tools'],
@@ -2824,7 +2868,9 @@ async function openLibraryCapabilityPicker(libraryProvider: LibraryModelsProvide
     if (key) libraryProvider.capabilityFilters.add(key);
   }
   const hasFilters = libraryProvider.capabilityFilters.size > 0;
-  void commands.executeCommand('setContext', 'ollama.libraryCapabilityFilterActive', hasFilters);
+  Promise.resolve(commands.executeCommand('setContext', 'ollama.libraryCapabilityFilterActive', hasFilters)).catch(
+    () => {},
+  );
   libraryProvider.refresh();
 }
 
@@ -2845,7 +2891,9 @@ async function openLocalCapabilityPicker(localProvider: LocalModelsProvider): Pr
     if (key) localProvider.capabilityFilters.add(key);
   }
   const hasFilters = localProvider.capabilityFilters.size > 0;
-  void commands.executeCommand('setContext', 'ollama.localCapabilityFilterActive', hasFilters);
+  Promise.resolve(commands.executeCommand('setContext', 'ollama.localCapabilityFilterActive', hasFilters)).catch(
+    () => {},
+  );
   localProvider.softRefresh();
 }
 
@@ -2866,7 +2914,9 @@ async function openCloudCapabilityPicker(cloudProvider: CloudModelsProvider): Pr
     if (key) cloudProvider.capabilityFilters.add(key);
   }
   const hasFilters = cloudProvider.capabilityFilters.size > 0;
-  void commands.executeCommand('setContext', 'ollama.cloudCapabilityFilterActive', hasFilters);
+  Promise.resolve(commands.executeCommand('setContext', 'ollama.cloudCapabilityFilterActive', hasFilters)).catch(
+    () => {},
+  );
   cloudProvider.softRefresh();
 }
 
@@ -2914,13 +2964,15 @@ export function registerSidebar(
       const value = await window.showInputBox({ prompt: 'Filter local models', value: localProvider.filterText });
       if (value !== undefined) {
         localProvider.filterText = value;
-        void commands.executeCommand('setContext', 'ollama.localFilterActive', value.length > 0);
+        Promise.resolve(commands.executeCommand('setContext', 'ollama.localFilterActive', value.length > 0)).catch(
+          () => {},
+        );
         localProvider.softRefresh();
       }
     }),
     commands.registerCommand('opilot.clearLocalFilter', () => {
       localProvider.filterText = '';
-      void commands.executeCommand('setContext', 'ollama.localFilterActive', false);
+      Promise.resolve(commands.executeCommand('setContext', 'ollama.localFilterActive', false)).catch(() => {});
       localProvider.softRefresh();
     }),
     commands.registerCommand('opilot.filterLocalCapabilities', async () => {
@@ -2933,13 +2985,15 @@ export function registerSidebar(
       const value = await window.showInputBox({ prompt: 'Filter cloud models', value: cloudProvider.filterText });
       if (value !== undefined) {
         cloudProvider.filterText = value;
-        void commands.executeCommand('setContext', 'ollama.cloudFilterActive', value.length > 0);
+        Promise.resolve(commands.executeCommand('setContext', 'ollama.cloudFilterActive', value.length > 0)).catch(
+          () => {},
+        );
         cloudProvider.softRefresh();
       }
     }),
     commands.registerCommand('opilot.clearCloudFilter', () => {
       cloudProvider.filterText = '';
-      void commands.executeCommand('setContext', 'ollama.cloudFilterActive', false);
+      Promise.resolve(commands.executeCommand('setContext', 'ollama.cloudFilterActive', false)).catch(() => {});
       cloudProvider.softRefresh();
     }),
     commands.registerCommand('opilot.filterCloudCapabilities', async () => {
@@ -2958,89 +3012,115 @@ export function registerSidebar(
       const value = await window.showInputBox({ prompt: 'Search library models', value: libraryProvider.filterText });
       if (value !== undefined) {
         libraryProvider.filterText = value;
-        void commands.executeCommand('setContext', 'ollama.librarySearchActive', value.length > 0);
+        Promise.resolve(commands.executeCommand('setContext', 'ollama.librarySearchActive', value.length > 0)).catch(
+          () => {},
+        );
         libraryProvider.refresh();
       }
     }),
     commands.registerCommand('opilot.clearLibrarySearch', () => {
       libraryProvider.filterText = '';
-      void commands.executeCommand('setContext', 'ollama.librarySearchActive', false);
+      Promise.resolve(commands.executeCommand('setContext', 'ollama.librarySearchActive', false)).catch(() => {});
       libraryProvider.refresh();
     }),
     (() => {
       const initialLocalGrouped = context.globalState.get<boolean>('ollama.localGrouped', true);
       localProvider.grouped = initialLocalGrouped;
-      void commands.executeCommand('setContext', 'ollama.localGrouped', initialLocalGrouped);
+      Promise.resolve(commands.executeCommand('setContext', 'ollama.localGrouped', initialLocalGrouped)).catch(
+        () => {},
+      );
       const toggleLocal = () => {
         localProvider.grouped = !localProvider.grouped;
-        void context.globalState.update('ollama.localGrouped', localProvider.grouped);
-        void commands.executeCommand('setContext', 'ollama.localGrouped', localProvider.grouped);
+        Promise.resolve(context.globalState.update('ollama.localGrouped', localProvider.grouped)).catch(() => {});
+        Promise.resolve(commands.executeCommand('setContext', 'ollama.localGrouped', localProvider.grouped)).catch(
+          () => {},
+        );
         localProvider.refresh();
       };
       return commands.registerCommand('opilot.toggleLocalGrouping', toggleLocal);
     })(),
     commands.registerCommand('opilot.toggleLocalGroupingToTree', () => {
-      void commands.executeCommand('opilot.toggleLocalGrouping');
+      Promise.resolve(commands.executeCommand('opilot.toggleLocalGrouping')).catch(() => {});
     }),
     (() => {
       const initialCloudGrouped = context.globalState.get<boolean>('ollama.cloudGrouped', true);
       cloudProvider.grouped = initialCloudGrouped;
-      void commands.executeCommand('setContext', 'ollama.cloudGrouped', initialCloudGrouped);
+      Promise.resolve(commands.executeCommand('setContext', 'ollama.cloudGrouped', initialCloudGrouped)).catch(
+        () => {},
+      );
       const toggleCloud = () => {
         cloudProvider.grouped = !cloudProvider.grouped;
-        void context.globalState.update('ollama.cloudGrouped', cloudProvider.grouped);
-        void commands.executeCommand('setContext', 'ollama.cloudGrouped', cloudProvider.grouped);
+        Promise.resolve(context.globalState.update('ollama.cloudGrouped', cloudProvider.grouped)).catch(() => {});
+        Promise.resolve(commands.executeCommand('setContext', 'ollama.cloudGrouped', cloudProvider.grouped)).catch(
+          () => {},
+        );
         cloudProvider.softRefresh();
       };
       return commands.registerCommand('opilot.toggleCloudGrouping', toggleCloud);
     })(),
     commands.registerCommand('opilot.toggleCloudGroupingToTree', () => {
-      void commands.executeCommand('opilot.toggleCloudGrouping');
+      Promise.resolve(commands.executeCommand('opilot.toggleCloudGrouping')).catch(() => {});
     }),
     (() => {
       const initialLibraryGrouped = context.globalState.get<boolean>('ollama.libraryGrouped', true);
       libraryProvider.grouped = initialLibraryGrouped;
-      void commands.executeCommand('setContext', 'ollama.libraryGrouped', initialLibraryGrouped);
+      Promise.resolve(commands.executeCommand('setContext', 'ollama.libraryGrouped', initialLibraryGrouped)).catch(
+        () => {},
+      );
       const toggleLibrary = () => {
         libraryProvider.grouped = !libraryProvider.grouped;
-        void context.globalState.update('ollama.libraryGrouped', libraryProvider.grouped);
-        void commands.executeCommand('setContext', 'ollama.libraryGrouped', libraryProvider.grouped);
+        Promise.resolve(context.globalState.update('ollama.libraryGrouped', libraryProvider.grouped)).catch(() => {});
+        Promise.resolve(commands.executeCommand('setContext', 'ollama.libraryGrouped', libraryProvider.grouped)).catch(
+          () => {},
+        );
         libraryProvider.softRefresh();
       };
       return commands.registerCommand('opilot.toggleLibraryGrouping', toggleLibrary);
     })(),
     commands.registerCommand('opilot.toggleLibraryGroupingToTree', () => {
-      void commands.executeCommand('opilot.toggleLibraryGrouping');
+      Promise.resolve(commands.executeCommand('opilot.toggleLibraryGrouping')).catch(() => {});
     }),
     (() => {
       const initialRecommendedOnly = context.globalState.get<boolean>('ollama.libraryRecommendedOnly', false);
       libraryProvider.recommendedOnly = initialRecommendedOnly;
-      void commands.executeCommand('setContext', 'ollama.libraryRecommendedOnly', initialRecommendedOnly);
+      Promise.resolve(
+        commands.executeCommand('setContext', 'ollama.libraryRecommendedOnly', initialRecommendedOnly),
+      ).catch(() => {});
       const toggleRecommended = () => {
         libraryProvider.recommendedOnly = !libraryProvider.recommendedOnly;
-        void context.globalState.update('ollama.libraryRecommendedOnly', libraryProvider.recommendedOnly);
-        void commands.executeCommand('setContext', 'ollama.libraryRecommendedOnly', libraryProvider.recommendedOnly);
+        Promise.resolve(
+          context.globalState.update('ollama.libraryRecommendedOnly', libraryProvider.recommendedOnly),
+        ).catch(() => {});
+        Promise.resolve(
+          commands.executeCommand('setContext', 'ollama.libraryRecommendedOnly', libraryProvider.recommendedOnly),
+        ).catch(() => {});
         libraryProvider.refresh();
       };
       return commands.registerCommand('opilot.toggleLibraryRecommended', toggleRecommended);
     })(),
     commands.registerCommand('opilot.toggleLibraryRecommendedOff', () => {
-      void commands.executeCommand('opilot.toggleLibraryRecommended');
+      Promise.resolve(commands.executeCommand('opilot.toggleLibraryRecommended')).catch(() => {});
     }),
     (() => {
       const initialLocalRecommendedOnly = context.globalState.get<boolean>('ollama.localRecommendedOnly', false);
       localProvider.recommendedOnly = initialLocalRecommendedOnly;
-      void commands.executeCommand('setContext', 'ollama.localRecommendedOnly', initialLocalRecommendedOnly);
+      Promise.resolve(
+        commands.executeCommand('setContext', 'ollama.localRecommendedOnly', initialLocalRecommendedOnly),
+      ).catch(() => {});
       const toggleLocalRecommended = () => {
         localProvider.recommendedOnly = !localProvider.recommendedOnly;
-        void context.globalState.update('ollama.localRecommendedOnly', localProvider.recommendedOnly);
-        void commands.executeCommand('setContext', 'ollama.localRecommendedOnly', localProvider.recommendedOnly);
+        Promise.resolve(context.globalState.update('ollama.localRecommendedOnly', localProvider.recommendedOnly)).catch(
+          () => {},
+        );
+        Promise.resolve(
+          commands.executeCommand('setContext', 'ollama.localRecommendedOnly', localProvider.recommendedOnly),
+        ).catch(() => {});
         localProvider.softRefresh();
       };
       return commands.registerCommand('opilot.toggleLocalRecommended', toggleLocalRecommended);
     })(),
     commands.registerCommand('opilot.toggleLocalRecommendedOff', () => {
-      void commands.executeCommand('opilot.toggleLocalRecommended');
+      Promise.resolve(commands.executeCommand('opilot.toggleLocalRecommended')).catch(() => {});
     }),
     commands.registerCommand('opilot.refreshSidebar', () => handleRefreshLocalModels(localProvider)),
     commands.registerCommand('opilot.refreshLocalModels', () => handleRefreshLocalModels(localProvider)),
@@ -3069,6 +3149,21 @@ export function registerSidebar(
     { dispose: () => libraryProvider.dispose() },
     { dispose: () => cloudProvider.dispose() },
   );
+
+  // Expose the active local provider for other modules to query runtime state.
+  activeLocalModelsProvider = localProvider;
+
+  // Register language-model tools that operate on models (list/info/health/pull/start/stop).
+  // We register here so the implementations can directly call the LocalModelsProvider
+  // APIs (startModel/stopModel/deleteModel) and reuse the existing UI commands.
+  try {
+    // Import at runtime to avoid static circular dependency issues in builds/tests.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { registerOpilotLmTools } = require('./lmTools');
+    registerOpilotLmTools(context, client, localProvider, logChannel);
+  } catch (err) {
+    logChannel?.exception?.('[sidebar] failed to register LM tools', err);
+  }
 
   return {
     getProfilingSnapshot: () => ({

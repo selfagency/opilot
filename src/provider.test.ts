@@ -141,11 +141,11 @@ describe('OllamaChatModelProvider caching', () => {
 
     const provider = new OllamaChatModelProvider(makeContext(), { list, show } as unknown as Ollama, makeLogger());
 
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+    await provider.provideLanguageModelChatInformation({ silent: false }, {} as unknown as CancellationToken);
     // Advance time past the 5-second throttle window so the next call re-fetches.
     vi.setSystemTime(new Date('2026-03-05T00:00:06.000Z'));
     const models = await provider.provideLanguageModelChatInformation(
-      { silent: true },
+      { silent: false },
       {} as unknown as CancellationToken,
     );
 
@@ -159,12 +159,37 @@ describe('OllamaChatModelProvider caching', () => {
 
     const provider = new OllamaChatModelProvider(makeContext(), { list, show } as unknown as Ollama, makeLogger());
 
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+    await provider.provideLanguageModelChatInformation({ silent: false }, {} as unknown as CancellationToken);
     vi.setSystemTime(new Date('2026-03-05T00:00:31.000Z'));
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+    await provider.provideLanguageModelChatInformation({ silent: false }, {} as unknown as CancellationToken);
 
     expect(list).toHaveBeenCalledTimes(2);
     expect(show).toHaveBeenCalledTimes(1);
+  });
+
+  it('silent=true uses 30-minute grace period for cache', async () => {
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce({ models: [{ name: 'llama3' }] })
+      .mockResolvedValueOnce({ models: [{ name: 'llama3' }, { name: 'starcoder2' }] });
+    const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
+
+    const provider = new OllamaChatModelProvider(makeContext(), { list, show } as unknown as Ollama, makeLogger());
+
+    // First call with silent=true caches models
+    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+
+    // Advance 10 minutes (600 seconds) - still within 30-minute grace period
+    vi.setSystemTime(new Date('2026-03-05T00:10:00.000Z'));
+    const models = await provider.provideLanguageModelChatInformation(
+      { silent: true },
+      {} as unknown as CancellationToken,
+    );
+
+    // Should still use cached models, not fetch new ones
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(models.map(m => m.id)).toContain('ollama:llama3');
+    expect(models.map(m => m.id)).not.toContain('ollama:starcoder2');
   });
 
   it('clearModelCache resets thinkingModels and nonThinkingModels sets', async () => {
@@ -442,11 +467,11 @@ describe('OllamaChatModelProvider error handling', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-05T00:00:00.000Z'));
 
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+    await provider.provideLanguageModelChatInformation({ silent: false }, {} as unknown as CancellationToken);
     vi.setSystemTime(new Date('2026-03-05T00:00:31.000Z'));
 
     // This should call list() again and prune mistral from cache
-    await provider.provideLanguageModelChatInformation({ silent: true }, {} as unknown as CancellationToken);
+    await provider.provideLanguageModelChatInformation({ silent: false }, {} as unknown as CancellationToken);
 
     expect(list).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
@@ -593,7 +618,7 @@ describe('OllamaChatModelProvider error handling', () => {
       {} as unknown as CancellationToken,
     );
     expect(models1.map((m: { id: string }) => m.id)).toContain('ollama:deepseek-r1:8b');
-    void models0;
+    expect(models0).toBeDefined();
   });
 });
 

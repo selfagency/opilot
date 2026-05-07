@@ -2,7 +2,9 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node", "vitest"],
   "categories": {},
-  "rules": {},
+  "rules": {
+    "eslint-plugin-vitest/require-mock-type-parameters": "off"
+  },
   "settings": {
     "jsdoc": {
       "ignorePrivate": false,

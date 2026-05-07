@@ -199,6 +199,19 @@ PARAMETER num_ctx 4096
 
 See the [Ollama Modelfile Docs](https://github.com/ollama/ollama/blob/main/docs/modelfile.md) for the full syntax reference.
 
+## 🧰 Available Tools
+
+Opilot exposes six VS Code Language Model tools for programmatic model management and agentic workflows:
+
+- **opilot_list_models** — List all locally installed and cloud Ollama models with metadata (size, status, running state)
+- **opilot_get_model_info** — Query capabilities for a specific model (vision, tools, thinking, etc.)
+- **opilot_check_server_health** — Verify Ollama server connectivity and availability (5-second timeout)
+- **opilot_pull_model** — Download a model from the Ollama library to your local machine
+- **opilot_start_model** — Warm up (load) a model for faster responses; idempotent and safe to call on running models
+- **opilot_stop_model** — Unload a model from memory to free VRAM/RAM
+
+Tools are auto-discovered by Copilot Chat and other extensions. For detailed tool specifications, parameters, and use cases, see [**Available Tools** in the docs](https://opilot.self.agency/users/commands/#tools).
+
 ## 🛡️ Privacy & Security
 
 - Your models and conversations run **completely locally** - no data is sent to external services

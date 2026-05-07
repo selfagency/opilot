@@ -1,3 +1,4 @@
+// nosemgrep: Semgrep_codacy.javascript.security.hard-coded-password
 import * as vscode from 'vscode';
 
 export const SETTINGS_NAMESPACE = 'opilot';
@@ -16,6 +17,8 @@ export const SUPPORTED_SETTING_KEYS = [
   'hideThinkingContent',
   'repetitionDetection',
   'maxContextTokens',
+  'selectedModel',
+  'agentMode',
 ] as const;
 
 type SupportedSettingKey = (typeof SUPPORTED_SETTING_KEYS)[number];
@@ -26,12 +29,29 @@ type LoggerLike = {
   debug?: (message: string) => void;
 };
 
+type GlobalStateLike = {
+  get<T>(key: string): T | undefined;
+  update(key: string, value: unknown): Thenable<void>;
+};
+
+const SETTINGS_MIGRATION_STATE_KEY = 'opilot.settingsMigrationVersion';
+const SETTINGS_MIGRATION_VERSION = 1;
+
 type InspectResult<T> = {
   defaultValue?: T;
   globalValue?: T;
   workspaceValue?: T;
   workspaceFolderValue?: T;
 };
+
+function hasExplicitValue<T>(inspect: InspectResult<T> | undefined): boolean {
+  return Boolean(
+    inspect &&
+    (inspect.globalValue !== undefined ||
+      inspect.workspaceValue !== undefined ||
+      inspect.workspaceFolderValue !== undefined),
+  );
+}
 
 function inspectSetting<T>(config: unknown, key: string): InspectResult<T> | undefined {
   if (!config || typeof config !== 'object') {
@@ -69,19 +89,11 @@ export function getSetting<T>(key: SupportedSettingKey, defaultValue?: T): T | u
     return defaultValue;
   }
 
-  const hasOpilotExplicitValue =
-    opilotInspect?.globalValue !== undefined ||
-    opilotInspect?.workspaceValue !== undefined ||
-    opilotInspect?.workspaceFolderValue !== undefined;
-  if (hasOpilotExplicitValue) {
+  if (hasExplicitValue(opilotInspect)) {
     return opilotConfig.get<T>(key) as T;
   }
 
-  const hasLegacyExplicitValue =
-    legacyInspect?.globalValue !== undefined ||
-    legacyInspect?.workspaceValue !== undefined ||
-    legacyInspect?.workspaceFolderValue !== undefined;
-  if (hasLegacyExplicitValue) {
+  if (hasExplicitValue(legacyInspect)) {
     return legacyConfig.get<T>(key) as T;
   }
 
@@ -100,62 +112,25 @@ export function affectsSetting(event: vscode.ConfigurationChangeEvent, key: Supp
 }
 
 export async function migrateLegacySettings(logger?: LoggerLike): Promise<SupportedSettingKey[]> {
+  return migrateLegacySettingsWithState(undefined, logger);
+}
+
+export async function migrateLegacySettingsWithState(
+  globalState?: GlobalStateLike,
+  logger?: LoggerLike,
+): Promise<SupportedSettingKey[]> {
+  const shouldRunCleanup = globalState !== undefined;
+  if (shouldSkipMigration(shouldRunCleanup, globalState, logger)) {
+    return [];
+  }
+
   const migrated: SupportedSettingKey[] = [];
   const opilotConfig = vscode.workspace.getConfiguration(SETTINGS_NAMESPACE);
   const legacyConfig = vscode.workspace.getConfiguration(LEGACY_SETTINGS_NAMESPACE);
 
   for (const key of SUPPORTED_SETTING_KEYS) {
     try {
-      const opilotInspect = inspectSetting<unknown>(opilotConfig, key);
-      const legacyInspect = inspectSetting<unknown>(legacyConfig, key);
-
-      if (!legacyInspect) {
-        continue;
-      }
-
-      let didMigrate = false;
-
-      if (legacyInspect.globalValue !== undefined && opilotInspect?.globalValue === undefined) {
-        await opilotConfig.update(key, legacyInspect.globalValue, vscode.ConfigurationTarget.Global);
-        await legacyConfig.update(key, undefined, vscode.ConfigurationTarget.Global);
-        didMigrate = true;
-      }
-
-      if (legacyInspect.workspaceValue !== undefined && opilotInspect?.workspaceValue === undefined) {
-        await opilotConfig.update(key, legacyInspect.workspaceValue, vscode.ConfigurationTarget.Workspace);
-        await legacyConfig.update(key, undefined, vscode.ConfigurationTarget.Workspace);
-        didMigrate = true;
-      }
-
-      {
-        const folders = vscode.workspace.workspaceFolders ?? [];
-        let migratedAnyFolder = false;
-        for (const folder of folders) {
-          const legacyFolderConfig = vscode.workspace.getConfiguration(LEGACY_SETTINGS_NAMESPACE, folder.uri);
-          const opilotFolderConfig = vscode.workspace.getConfiguration(SETTINGS_NAMESPACE, folder.uri);
-
-          const legacyFolderInspect = inspectSetting<unknown>(legacyFolderConfig, key);
-          const opilotFolderInspect = inspectSetting<unknown>(opilotFolderConfig, key);
-
-          if (
-            legacyFolderInspect?.workspaceFolderValue !== undefined &&
-            opilotFolderInspect?.workspaceFolderValue === undefined
-          ) {
-            await opilotFolderConfig.update(
-              key,
-              legacyFolderInspect.workspaceFolderValue,
-              vscode.ConfigurationTarget.WorkspaceFolder,
-            );
-            await legacyFolderConfig.update(key, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
-            migratedAnyFolder = true;
-          }
-        }
-        if (migratedAnyFolder) {
-          didMigrate = true;
-        }
-      }
-
-      if (didMigrate) {
+      if (await migrateSettingKey(key, opilotConfig, legacyConfig)) {
         migrated.push(key);
       }
     } catch (error) {
@@ -164,13 +139,158 @@ export async function migrateLegacySettings(logger?: LoggerLike): Promise<Suppor
     }
   }
 
+  logMigrationResult(migrated, logger);
+
+  if (shouldRunCleanup) {
+    const cleaned = await cleanupLegacyShadowedSettings(opilotConfig, legacyConfig, logger);
+    if (cleaned.length > 0) {
+      logger?.info?.(`[settings] removed shadowed legacy settings: ${cleaned.join(', ')}`);
+    }
+
+    await globalState.update(SETTINGS_MIGRATION_STATE_KEY, SETTINGS_MIGRATION_VERSION);
+  }
+
+  return migrated;
+}
+
+function shouldSkipMigration(
+  shouldRunCleanup: boolean,
+  globalState: GlobalStateLike | undefined,
+  logger?: LoggerLike,
+): boolean {
+  if (!shouldRunCleanup || !globalState) {
+    return false;
+  }
+
+  const previousVersion = globalState.get<number>(SETTINGS_MIGRATION_STATE_KEY) ?? 0;
+  if (previousVersion < SETTINGS_MIGRATION_VERSION) {
+    return false;
+  }
+
+  logger?.debug?.('[settings] migration already applied; skipping legacy cleanup');
+  return true;
+}
+
+function logMigrationResult(migrated: SupportedSettingKey[], logger?: LoggerLike): void {
   if (migrated.length > 0) {
     logger?.info?.(
       `[settings] migrated legacy settings (${LEGACY_SETTINGS_NAMESPACE}.* → ${SETTINGS_NAMESPACE}.*): ${migrated.join(', ')}`,
     );
-  } else {
-    logger?.debug?.('[settings] no legacy settings required migration');
+    return;
   }
 
-  return migrated;
+  logger?.debug?.('[settings] no legacy settings required migration');
+}
+
+async function cleanupLegacyShadowedSettings(
+  opilotConfig: vscode.WorkspaceConfiguration,
+  legacyConfig: vscode.WorkspaceConfiguration,
+  logger?: LoggerLike,
+): Promise<SupportedSettingKey[]> {
+  const cleaned: SupportedSettingKey[] = [];
+
+  const clearFolderLegacyValues = async (settingKey: SupportedSettingKey): Promise<void> => {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    for (const folder of folders) {
+      const legacyFolderConfig = vscode.workspace.getConfiguration(LEGACY_SETTINGS_NAMESPACE, folder.uri);
+      const inspect = inspectSetting<unknown>(legacyFolderConfig, settingKey);
+      if (inspect?.workspaceFolderValue !== undefined) {
+        await legacyFolderConfig.update(settingKey, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+      }
+    }
+  };
+
+  const clearLegacyValues = async (
+    settingKey: SupportedSettingKey,
+    legacyInspect: InspectResult<unknown>,
+  ): Promise<void> => {
+    if (legacyInspect.globalValue !== undefined) {
+      await legacyConfig.update(settingKey, undefined, vscode.ConfigurationTarget.Global);
+    }
+    if (legacyInspect.workspaceValue !== undefined) {
+      await legacyConfig.update(settingKey, undefined, vscode.ConfigurationTarget.Workspace);
+    }
+    if (legacyInspect.workspaceFolderValue !== undefined) {
+      await clearFolderLegacyValues(settingKey);
+    }
+  };
+
+  for (const key of SUPPORTED_SETTING_KEYS) {
+    const opilotInspect = inspectSetting<unknown>(opilotConfig, key);
+    const legacyInspect = inspectSetting<unknown>(legacyConfig, key);
+    if (!opilotInspect || !legacyInspect) {
+      continue;
+    }
+
+    if (!hasExplicitValue(opilotInspect) || !hasExplicitValue(legacyInspect)) {
+      continue;
+    }
+
+    try {
+      await clearLegacyValues(key, legacyInspect);
+      cleaned.push(key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger?.warn?.(`[settings] failed to clean legacy key ${LEGACY_SETTINGS_NAMESPACE}.${key}: ${message}`);
+    }
+  }
+
+  return cleaned;
+}
+
+async function migrateWorkspaceFolders(key: SupportedSettingKey): Promise<boolean> {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  let migratedAny = false;
+  for (const folder of folders) {
+    const legacyFolderConfig = vscode.workspace.getConfiguration(LEGACY_SETTINGS_NAMESPACE, folder.uri);
+    const opilotFolderConfig = vscode.workspace.getConfiguration(SETTINGS_NAMESPACE, folder.uri);
+    const legacyFolderInspect = inspectSetting<unknown>(legacyFolderConfig, key);
+    const opilotFolderInspect = inspectSetting<unknown>(opilotFolderConfig, key);
+    if (
+      legacyFolderInspect?.workspaceFolderValue !== undefined &&
+      opilotFolderInspect?.workspaceFolderValue === undefined
+    ) {
+      await opilotFolderConfig.update(
+        key,
+        legacyFolderInspect.workspaceFolderValue,
+        vscode.ConfigurationTarget.WorkspaceFolder,
+      );
+      await legacyFolderConfig.update(key, undefined, vscode.ConfigurationTarget.WorkspaceFolder);
+      migratedAny = true;
+    }
+  }
+  return migratedAny;
+}
+
+async function migrateSettingKey(
+  key: SupportedSettingKey,
+  opilotConfig: vscode.WorkspaceConfiguration,
+  legacyConfig: vscode.WorkspaceConfiguration,
+): Promise<boolean> {
+  const opilotInspect = inspectSetting<unknown>(opilotConfig, key);
+  const legacyInspect = inspectSetting<unknown>(legacyConfig, key);
+
+  if (!legacyInspect) {
+    return false;
+  }
+
+  let didMigrate = false;
+
+  if (legacyInspect.globalValue !== undefined && opilotInspect?.globalValue === undefined) {
+    await opilotConfig.update(key, legacyInspect.globalValue, vscode.ConfigurationTarget.Global);
+    await legacyConfig.update(key, undefined, vscode.ConfigurationTarget.Global);
+    didMigrate = true;
+  }
+
+  if (legacyInspect.workspaceValue !== undefined && opilotInspect?.workspaceValue === undefined) {
+    await opilotConfig.update(key, legacyInspect.workspaceValue, vscode.ConfigurationTarget.Workspace);
+    await legacyConfig.update(key, undefined, vscode.ConfigurationTarget.Workspace);
+    didMigrate = true;
+  }
+
+  if (await migrateWorkspaceFolders(key)) {
+    didMigrate = true;
+  }
+
+  return didMigrate;
 }

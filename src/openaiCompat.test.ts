@@ -6,8 +6,10 @@ import {
   chatCompletionsOnce,
   chatCompletionsStream,
   createOpenAICompatUrl,
+  extractSseDataLines,
   initiateChatCompletionsStream,
   parseSseDataPayloadsFromTextChunks,
+  processTrailingFrame,
 } from './openaiCompat.js';
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
@@ -483,5 +485,58 @@ describe('initiateChatCompletionsStream', () => {
     await expect(collect(generator)).rejects.toThrow(
       'OpenAI-compat stream payload error: upstream failure | server_error',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractSseDataLines
+// ---------------------------------------------------------------------------
+
+describe('extractSseDataLines', () => {
+  it('extracts data lines from a single-event frame', () => {
+    expect(extractSseDataLines('data: {"foo":1}')).toEqual(['{"foo":1}']);
+  });
+
+  it('strips leading space after data:', () => {
+    expect(extractSseDataLines('data:   {"foo":1}')).toEqual(['{"foo":1}']);
+  });
+
+  it('ignores non-data lines like event: and id:', () => {
+    const frame = 'event: update\nid: 1\ndata: hello';
+    expect(extractSseDataLines(frame)).toEqual(['hello']);
+  });
+
+  it('handles CRLF line endings', () => {
+    expect(extractSseDataLines('data: first\r\ndata: second')).toEqual(['first', 'second']);
+  });
+
+  it('returns empty array when no data lines present', () => {
+    expect(extractSseDataLines('event: ping\nid: 42')).toEqual([]);
+  });
+
+  it('returns empty array for empty string', () => {
+    expect(extractSseDataLines('')).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// processTrailingFrame
+// ---------------------------------------------------------------------------
+
+describe('processTrailingFrame', () => {
+  it('yields the payload from a valid trailing data line', () => {
+    expect([...processTrailingFrame('data: {"done":true}')]).toEqual(['{"done":true}']);
+  });
+
+  it('yields nothing for an empty trailing buffer', () => {
+    expect([...processTrailingFrame('')]).toEqual([]);
+  });
+
+  it('yields nothing for a [DONE] payload', () => {
+    expect([...processTrailingFrame('data: [DONE]')]).toEqual([]);
+  });
+
+  it('yields nothing when buffer has no data lines', () => {
+    expect([...processTrailingFrame('event: end')]).toEqual([]);
   });
 });

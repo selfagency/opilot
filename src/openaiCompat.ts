@@ -98,7 +98,9 @@ async function readErrorBody(response: Response): Promise<string> {
   try {
     const text = await response.text();
     return text.slice(0, 4000);
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[openai-compat] failed to read error response body: ${message}`);
     return '';
   }
 }
@@ -150,12 +152,40 @@ function assertNoMidStreamError(parsed: unknown): void {
   throw new Error(`OpenAI-compat stream payload error: ${parts.join(' | ') || 'unknown error'}`);
 }
 
+export function extractSseDataLines(rawEvent: string): string[] {
+  return rawEvent
+    .split(/\r?\n/)
+    .map(line => line.trimEnd())
+    .filter(line => line.startsWith('data:'))
+    .map(line => line.slice(5).trimStart());
+}
+
+export function* processTrailingFrame(trailing: string): Generator<string> {
+  if (!trailing) return;
+  const dataLines = extractSseDataLines(trailing);
+  const payload = dataLines.join('\n').trim();
+  if (!payload || payload === '[DONE]') {
+    if (dataLines.length === 0) {
+      console.warn('[openai-compat] trailing SSE buffer contained no data payload and was discarded');
+    }
+    return;
+  }
+  // Guard against oversized SSE events (DoS protection)
+  const MAX_SSE_EVENT_SIZE = 1_048_576; // 1 MB
+  if (payload.length > MAX_SSE_EVENT_SIZE) {
+    throw new Error(`[openai-compat] SSE event exceeds max size (${payload.length} > ${MAX_SSE_EVENT_SIZE})`);
+  }
+  yield payload;
+}
+
 /**
  * Parses Server-Sent Events from an async sequence of text chunks and yields
  * only `data:` payloads. Stops on `[DONE]`.
+ * Guards against oversized events (DoS protection).
  */
 export async function* parseSseDataPayloadsFromTextChunks(chunks: AsyncIterable<string>): AsyncGenerator<string> {
   let buffer = '';
+  const MAX_SSE_EVENT_SIZE = 1_048_576; // 1 MB
 
   for await (const chunk of chunks) {
     buffer += chunk;
@@ -170,20 +200,16 @@ export async function* parseSseDataPayloadsFromTextChunks(chunks: AsyncIterable<
       const rawEvent = buffer.slice(0, separatorIndex);
       buffer = buffer.slice(separatorIndex + 2);
 
-      const lines = rawEvent
-        .split(/\r?\n/)
-        .map(line => line.trimEnd())
-        .filter(Boolean);
+      const dataLines = extractSseDataLines(rawEvent);
+      const payload = dataLines.join('\n').trim();
 
-      const dataLines = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart());
-
-      if (!dataLines.length) {
+      if (!payload) {
         continue;
       }
 
-      const payload = dataLines.join('\n').trim();
-      if (!payload) {
-        continue;
+      // Guard against oversized SSE events (DoS protection)
+      if (payload.length > MAX_SSE_EVENT_SIZE) {
+        throw new Error(`[openai-compat] SSE event exceeds max size (${payload.length} > ${MAX_SSE_EVENT_SIZE})`);
       }
 
       if (payload === '[DONE]') {
@@ -195,27 +221,7 @@ export async function* parseSseDataPayloadsFromTextChunks(chunks: AsyncIterable<
   }
 
   // Handle a trailing frame without the final separator.
-  const trailing = buffer.trim();
-  if (!trailing) {
-    return;
-  }
-
-  const lines = trailing
-    .split(/\r?\n/)
-    .map(line => line.trimEnd())
-    .filter(Boolean);
-
-  const dataLines = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart());
-
-  const payload = dataLines.join('\n').trim();
-  if (!payload || payload === '[DONE]') {
-    if (trailing.length > 0 && dataLines.length === 0) {
-      console.warn('[openai-compat] trailing SSE buffer contained no data payload and was discarded');
-    }
-    return;
-  }
-
-  yield payload;
+  yield* processTrailingFrame(buffer.trim());
 }
 
 export async function* chatCompletionsStream(
@@ -243,7 +249,12 @@ export async function* chatCompletionsStream(
     let parsed: unknown;
     try {
       parsed = JSON.parse(payload);
-    } catch {
+    } catch (err) {
+      // Log JSON parse errors for debugging stream issues. Invalid JSON in SSE streams may indicate
+      // an API incompatibility or malformed response. Skip malformed chunks and continue streaming.
+      console.warn(
+        `[openaiCompat] JSON parse error in stream chunk: ${err instanceof Error ? err.message : String(err)}`,
+      );
       continue;
     }
 
@@ -289,7 +300,12 @@ export async function initiateChatCompletionsStream(
       let parsed: unknown;
       try {
         parsed = JSON.parse(payload);
-      } catch {
+      } catch (err) {
+        // Log JSON parse errors for debugging stream issues. Invalid JSON in SSE streams may indicate
+        // an API incompatibility or malformed response. Skip malformed chunks and continue streaming.
+        console.warn(
+          `[openaiCompat] JSON parse error in stream chunk: ${err instanceof Error ? err.message : String(err)}`,
+        );
         continue;
       }
 

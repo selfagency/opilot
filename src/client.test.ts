@@ -502,3 +502,138 @@ describe('fetchModelCapabilities', () => {
     expect(caps.maxInputTokens).toBe(4096);
   });
 });
+
+// ---------------------------------------------------------------------------
+// findContextLengthInModelInfo
+// ---------------------------------------------------------------------------
+
+describe('findContextLengthInModelInfo', () => {
+  let findContextLengthInModelInfo: (
+    d: Record<string, unknown> | Map<string, unknown> | undefined | null,
+  ) => number | undefined;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => makeVscodeMock());
+    vi.doMock('ollama', () => ({ Ollama: function MockOllama() {} }));
+    ({ findContextLengthInModelInfo } = await import('./client.js'));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('should export findContextLengthInModelInfo', () => {
+    expect(typeof findContextLengthInModelInfo).toBe('function');
+  });
+
+  it('returns value from plain object with exact key context_length', () => {
+    expect(findContextLengthInModelInfo({ context_length: 8192 })).toBe(8192);
+  });
+
+  it('returns value from plain object with family-prefixed key', () => {
+    expect(findContextLengthInModelInfo({ 'llama.context_length': 4096 })).toBe(4096);
+  });
+
+  it('returns value from Map with exact key', () => {
+    const m = new Map<string, unknown>([['context_length', 16384]]);
+    expect(findContextLengthInModelInfo(m)).toBe(16384);
+  });
+
+  it('returns value from Map with family-prefixed key', () => {
+    const m = new Map<string, unknown>([['qwen2.context_length', 32768]]);
+    expect(findContextLengthInModelInfo(m)).toBe(32768);
+  });
+
+  it('returns undefined when value is non-positive', () => {
+    expect(findContextLengthInModelInfo({ context_length: 0 })).toBeUndefined();
+    expect(findContextLengthInModelInfo({ context_length: -1 })).toBeUndefined();
+  });
+
+  it('returns undefined when value is not a number', () => {
+    expect(findContextLengthInModelInfo({ context_length: 'big' })).toBeUndefined();
+  });
+
+  it('returns undefined for null/undefined input', () => {
+    expect(findContextLengthInModelInfo(null)).toBeUndefined();
+    expect(findContextLengthInModelInfo(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for empty object', () => {
+    expect(findContextLengthInModelInfo({})).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseContextLength
+// ---------------------------------------------------------------------------
+
+describe('parseContextLength', () => {
+  let parseContextLength: (modelInfoData: unknown, parameters: unknown) => number;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => makeVscodeMock());
+    vi.doMock('ollama', () => ({ Ollama: function MockOllama() {} }));
+    ({ parseContextLength } = await import('./client.js'));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('should export parseContextLength', () => {
+    expect(typeof parseContextLength).toBe('function');
+  });
+
+  it('prefers context_length from modelInfoData', () => {
+    expect(parseContextLength({ context_length: 8192 }, 'num_ctx 4096')).toBe(8192);
+  });
+
+  it('falls back to num_ctx in parameters string', () => {
+    expect(parseContextLength(null, 'num_ctx 4096')).toBe(4096);
+  });
+
+  it('returns 4096 default when no info and no parameters', () => {
+    expect(parseContextLength(null, null)).toBe(4096);
+  });
+
+  it('returns 4096 when parameters string has no num_ctx', () => {
+    expect(parseContextLength(null, 'temperature 0.7')).toBe(4096);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseMaxOutputTokens
+// ---------------------------------------------------------------------------
+
+describe('parseMaxOutputTokens', () => {
+  let parseMaxOutputTokens: (parameters: unknown, contextLength: number) => number;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => makeVscodeMock());
+    vi.doMock('ollama', () => ({ Ollama: function MockOllama() {} }));
+    ({ parseMaxOutputTokens } = await import('./client.js'));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('should export parseMaxOutputTokens', () => {
+    expect(typeof parseMaxOutputTokens).toBe('function');
+  });
+
+  it('returns num_predict from parameters string', () => {
+    expect(parseMaxOutputTokens('num_predict 2048', 4096)).toBe(2048);
+  });
+
+  it('returns contextLength when num_predict is non-positive', () => {
+    expect(parseMaxOutputTokens('num_predict -1', 8192)).toBe(8192);
+    expect(parseMaxOutputTokens('num_predict 0', 8192)).toBe(8192);
+  });
+
+  it('returns 4096 when parameters string has no num_predict', () => {
+    expect(parseMaxOutputTokens('temperature 0.7', 8192)).toBe(4096);
+  });
+
+  it('returns 4096 when parameters is not a string', () => {
+    expect(parseMaxOutputTokens(null, 8192)).toBe(4096);
+    expect(parseMaxOutputTokens(undefined, 8192)).toBe(4096);
+  });
+});

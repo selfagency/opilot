@@ -24,7 +24,9 @@ export function reportError(
 
   if (showToUser) {
     try {
-      void vscode.window.showErrorMessage(`${message}: ${error instanceof Error ? error.message : String(error)}`);
+      vscode.window
+        .showErrorMessage(`${message}: ${error instanceof Error ? error.message : String(error)}`)
+        .then(undefined, () => {});
     } catch {
       // ignore UI errors
     }

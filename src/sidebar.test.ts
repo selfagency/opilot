@@ -207,7 +207,9 @@ describe('LocalModelsProvider', () => {
     const fakeEvent = { affectsConfiguration: (key: string) => key === 'ollama.localModelRefreshInterval' };
     for (let i = 0; i < 3; i++) {
       // Fire ALL current listeners (simulates VS Code dispatching the event)
-      [...onDidChangeConfigListeners].forEach(l => l(fakeEvent));
+      for (const listener of onDidChangeConfigListeners.slice()) {
+        listener(fakeEvent);
+      }
       // Give time for any async operations
       await new Promise(resolve => setTimeout(resolve, 0));
     }
@@ -3520,5 +3522,178 @@ describe('fetchModelPagePreview via LibraryModelsProvider (MSW)', () => {
     await waitFor(() => item?.description?.toString().includes('🛠️') ?? false);
     expect(item?.description).toContain('🛠️');
     provider.dispose();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Minimal VS Code mock factory for pure-function sidebar tests
+// ---------------------------------------------------------------------------
+
+function makeMinimalSidebarVscodeMock() {
+  return {
+    TreeItem: class {
+      label: string;
+      description?: string;
+      contextValue?: string;
+      collapsibleState?: number;
+      constructor(label: string) {
+        this.label = label;
+      }
+    },
+    ThemeIcon: class {
+      id: string;
+      constructor(id: string) {
+        this.id = id;
+      }
+    },
+    TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+    EventEmitter: class {
+      event = {};
+      fire = vi.fn();
+    },
+    window: { registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })) },
+    workspace: {
+      getConfiguration: vi.fn(() => ({ get: vi.fn().mockReturnValue('') })),
+      onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      createFileSystemWatcher: vi.fn(() => ({
+        onDidCreate: vi.fn(),
+        onDidDelete: vi.fn(),
+        onDidChange: vi.fn(),
+        dispose: vi.fn(),
+      })),
+    },
+    Uri: { file: (fsPath: string) => ({ fsPath }) },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// buildMemoryBreakdown
+// ---------------------------------------------------------------------------
+
+describe('buildMemoryBreakdown', () => {
+  let buildMemoryBreakdown: (running: { size?: number; sizeVram?: number }, size?: number) => string | null;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => makeMinimalSidebarVscodeMock());
+    ({ buildMemoryBreakdown } = await import('./sidebar.js'));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('returns combined RAM/VRAM line when both are positive', () => {
+    const running = { size: 4 * 1024 ** 3, sizeVram: 2 * 1024 ** 3 };
+    const result = buildMemoryBreakdown(running);
+    expect(result).toMatch(/🧮 RAM:/);
+    expect(result).toMatch(/VRAM:/);
+  });
+
+  it('returns RAM-only line when sizeVram is 0', () => {
+    const running = { size: 4 * 1024 ** 3, sizeVram: 0 };
+    const result = buildMemoryBreakdown(running);
+    expect(result).toMatch(/🧮 RAM:/);
+    expect(result).not.toMatch(/VRAM/);
+  });
+
+  it('falls back to size parameter when running.size is undefined', () => {
+    const running = {};
+    const result = buildMemoryBreakdown(running, 4 * 1024 ** 3);
+    expect(result).toMatch(/🧮 RAM:/);
+  });
+
+  it('returns null when no size information is available', () => {
+    expect(buildMemoryBreakdown({})).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildProcessorLine
+// ---------------------------------------------------------------------------
+
+describe('buildProcessorLine', () => {
+  let buildProcessorLine: (processor: string) => string | null;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => makeMinimalSidebarVscodeMock());
+    ({ buildProcessorLine } = await import('./sidebar.js'));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('returns CPU/GPU split when GPU% is between 0 and 100', () => {
+    const result = buildProcessorLine('70% GPU');
+    expect(result).toBe('💻 CPU: 30% | GPU: 70%');
+  });
+
+  it('returns GPU-only line when GPU is 100%', () => {
+    const result = buildProcessorLine('100% GPU');
+    expect(result).toBe('💻 GPU: 100%');
+  });
+
+  it('returns CPU-only line for "CPU" processor string', () => {
+    const result = buildProcessorLine('CPU');
+    expect(result).toBe('💻 CPU: 100%');
+  });
+
+  it('returns null for unrecognized processor string', () => {
+    expect(buildProcessorLine('NPU')).toBeNull();
+  });
+
+  it('returns null when GPU% results in 0% CPU (edge case)', () => {
+    expect(buildProcessorLine('0% GPU')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computePullChunkProgress
+// ---------------------------------------------------------------------------
+
+describe('computePullChunkProgress', () => {
+  let computePullChunkProgress: (
+    total: number,
+    completed: number,
+    tracker: { lastTotal: number; lastCompleted: number },
+    progress: { report: (v: { message?: string; increment?: number }) => void },
+  ) => void;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => makeMinimalSidebarVscodeMock());
+    ({ computePullChunkProgress } = await import('./sidebar.js'));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reports progress message with percentage and MB values', () => {
+    const tracker = { lastTotal: 0, lastCompleted: 0 };
+    const reported: { message?: string; increment?: number }[] = [];
+    const progress = { report: (v: { message?: string; increment?: number }) => reported.push(v) };
+
+    computePullChunkProgress(1024 * 1024 * 100, 1024 * 1024 * 50, tracker, progress);
+
+    expect(reported[0]?.message).toMatch(/50%/);
+    expect(reported[0]?.message).toMatch(/50\.0/);
+    expect(reported[0]?.message).toMatch(/100\.0/);
+  });
+
+  it('reports non-zero increment on subsequent calls for same total', () => {
+    const tracker = { lastTotal: 1024 * 1024 * 100, lastCompleted: 1024 * 1024 * 25 };
+    const reported: { message?: string; increment?: number }[] = [];
+    const progress = { report: (v: { message?: string; increment?: number }) => reported.push(v) };
+
+    computePullChunkProgress(1024 * 1024 * 100, 1024 * 1024 * 50, tracker, progress);
+
+    expect(reported[0]?.increment).toBeGreaterThan(0);
+  });
+
+  it('resets lastCompleted when completed decreases for the same total', () => {
+    const tracker = { lastTotal: 100, lastCompleted: 80 };
+    const reported: { message?: string; increment?: number }[] = [];
+    const progress = { report: (v: { message?: string; increment?: number }) => reported.push(v) };
+
+    computePullChunkProgress(100, 10, tracker, progress);
+
+    expect(tracker.lastCompleted).toBe(10);
   });
 });

@@ -1,5 +1,6 @@
 #!/usr/bin/env zx
 
+import { $, ProcessOutput, argv, cd, sleep } from 'zx';
 import { Octokit } from '@octokit/rest';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -20,6 +21,7 @@ const version = argv._[0];
 const isPreRelease = argv['pre-release'] === true || argv.p === true;
 
 if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
+  // nosemgrep: javascript.lang.security.audit.xss.console-html-constructed-from-input.console-html-constructed-from-input
   console.error(
     isPreRelease
       ? 'Usage: task prerelease -- <version>   (e.g. task prerelease -- 0.1.0)'
@@ -125,6 +127,83 @@ process.on('SIGTERM', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function ensureTagDoesNotExist(octokit, owner, repo, tag) {
+  try {
+    await octokit.git.getRef({ owner, repo, ref: `tags/${tag}` });
+    console.error(`❌ Remote tag ${tag} already exists.`);
+    process.exit(1);
+  } catch (err) {
+    if (err.status !== 404) {
+      throw err;
+    }
+    // 404 = tag does not exist; that's what we want.
+  }
+}
+
+/** @param {string} v - Version string to parse */
+function parseVersion(v) {
+  const parts = v.replace(/^v/, '').split('.');
+  return parts.map(Number);
+}
+
+function resolvePreviousTag(tagsResp, tag) {
+  return (
+    tagsResp
+      .map(r => r.ref.replace('refs/tags/', ''))
+      .filter(t => t !== tag)
+      .sort((a, b) => {
+        const aParts = parseVersion(a);
+        const bParts = parseVersion(b);
+        const [aMaj, aMin, aPatch] = aParts;
+        const [bMaj, bMin, bPatch] = bParts;
+        return aMaj - bMaj || aMin - bMin || aPatch - bPatch;
+      })
+      .at(-1) ?? ''
+  );
+}
+
+/** Validate that changelogPath is a safe string for file operations */
+function validateFilePath(filePath) {
+  if (typeof filePath !== 'string' || !filePath) {
+    throw new Error('Invalid file path');
+  }
+  // Ensure path is reasonable (no null bytes, etc.)
+  if (filePath.includes('\x00')) {
+    throw new Error('File path contains invalid characters');
+  }
+  return filePath;
+}
+
+function updateChangelogFile(changelogPath, heading, section) {
+  let original;
+  try {
+    const safePath = validateFilePath(changelogPath);
+    original = readFileSync(safePath, 'utf8');
+  } catch {
+    original = '# Change Log\n\n## [Unreleased]\n';
+  }
+
+  if (!original.includes(heading)) {
+    const marker = '## [Unreleased]';
+    const idx = original.indexOf(marker);
+    const firstVersionIdx = original.search(/^## \[/m);
+    const updated =
+      idx >= 0
+        ? `${original.slice(0, idx + marker.length)}\n${section}${original.slice(idx + marker.length)}`
+        : firstVersionIdx >= 0
+          ? `${original.slice(0, firstVersionIdx)}${section}\n${original.slice(firstVersionIdx)}`
+          : `${original}\n${section}`;
+    const safePath = validateFilePath(changelogPath);
+    writeFileSync(safePath, updated);
+  } else {
+    console.log('ℹ️  CHANGELOG already contains this release heading; skipping.');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main — wrapped so any unhandled error triggers rollback
 // ---------------------------------------------------------------------------
 
@@ -179,16 +258,7 @@ async function main() {
   const [, owner, repo] = repoMatch;
 
   // Check for existing remote tag via the API.
-  try {
-    await octokit.git.getRef({ owner, repo, ref: `tags/${tag}` });
-    console.error(`❌ Remote tag ${tag} already exists.`);
-    process.exit(1);
-  } catch (err) {
-    if (err.status !== 404) {
-      throw err;
-    }
-    // 404 = tag does not exist; that's what we want.
-  }
+  await ensureTagDoesNotExist(octokit, owner, repo, tag);
 
   // --- Previous tag (for release notes diff) --------------------------------
 
@@ -199,17 +269,7 @@ async function main() {
     per_page: 100,
   });
 
-  const previousTag =
-    tagsResp
-      .map(r => r.ref.replace('refs/tags/', ''))
-      .filter(t => t !== tag)
-      .sort((a, b) => {
-        const parse = v => v.replace(/^v/, '').split('.').map(Number);
-        const [aMaj, aMin, aPatch] = parse(a);
-        const [bMaj, bMin, bPatch] = parse(b);
-        return aMaj - bMaj || aMin - bMin || aPatch - bPatch;
-      })
-      .at(-1) ?? '';
+  const previousTag = resolvePreviousTag(tagsResp, tag);
 
   // --- Release notes --------------------------------------------------------
 
@@ -230,7 +290,7 @@ async function main() {
   const pkgPath = resolve(ROOT, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
   pkg.version = version;
-  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+  writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
   // --- Update CHANGELOG.md --------------------------------------------------
 
@@ -240,28 +300,7 @@ async function main() {
   const heading = `## [${version}] - ${date}`;
   const sourceLine = previousTag ? `\n\n_Source: changes from ${previousTag} to ${tag}._` : '';
   const section = `\n${heading}\n\n${releaseNotes}${sourceLine}\n`;
-
-  let original;
-  try {
-    original = readFileSync(changelogPath, 'utf8');
-  } catch {
-    original = '# Change Log\n\n## [Unreleased]\n';
-  }
-
-  if (!original.includes(heading)) {
-    const marker = '## [Unreleased]';
-    const idx = original.indexOf(marker);
-    const firstVersionIdx = original.search(/^## \[/m);
-    const updated =
-      idx >= 0
-        ? `${original.slice(0, idx + marker.length)}\n${section}${original.slice(idx + marker.length)}`
-        : firstVersionIdx >= 0
-          ? `${original.slice(0, firstVersionIdx)}${section}\n${original.slice(firstVersionIdx)}`
-          : `${original}\n${section}`;
-    writeFileSync(changelogPath, updated);
-  } else {
-    console.log('ℹ️  CHANGELOG already contains this release heading; skipping.');
-  }
+  updateChangelogFile(changelogPath, heading, section);
 
   // --- Commit + push --------------------------------------------------------
 

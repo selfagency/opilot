@@ -14,13 +14,13 @@ Thank you for contributing to **Opilot**!
 
 All work happens on feature branches:
 
-```
+```text
 <type>/<issue-number>-<short-description>
 ```
 
 **Examples:**
 
-```
+```text
 feat/42-vision-support
 fix/87-connection-timeout
 docs/50-api-reference
@@ -59,10 +59,15 @@ git commit -m "feat: add my feature"
 
 ## Key Dependencies
 
-| Package                                                                | Purpose                                                                                          |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [`@selfagency/llm-stream-parser`](https://llmstreamparser.self.agency) | LLM stream parsing: thinking blocks, XML tool calls, context tag extraction, response formatting |
-| [`ollama`](https://github.com/ollama/ollama-js)                        | Official Ollama JS SDK                                                                           |
+| Package                                                                    | Purpose                                                             |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [`@agentsy/vscode`](https://www.npmjs.com/package/@agentsy/vscode)         | VS Code chat renderer and extension-focused integration helpers     |
+| [`@agentsy/context`](https://www.npmjs.com/package/@agentsy/context)       | XML context block splitting/deduplication                           |
+| [`@agentsy/formatting`](https://www.npmjs.com/package/@agentsy/formatting) | Display-safe formatting and markdown helpers (`appendToBlockquote`) |
+| [`@agentsy/thinking`](https://www.npmjs.com/package/@agentsy/thinking)     | Thinking-tag parsing                                                |
+| [`@agentsy/tool-calls`](https://www.npmjs.com/package/@agentsy/tool-calls) | XML/native tool call helpers                                        |
+| [`@agentsy/xml-filter`](https://www.npmjs.com/package/@agentsy/xml-filter) | Streaming XML/privacy filtering                                     |
+| [`ollama`](https://github.com/ollama/ollama-js)                            | Official Ollama JS SDK                                              |
 
 ## Code Style
 
@@ -102,7 +107,7 @@ See [Testing](./testing) for full details.
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 <type>(<scope>): <description>
 
 [optional body]
@@ -112,7 +117,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 **Examples:**
 
-```
+```text
 feat(completions): add FIM prompt format support
 fix(sidebar): normalize Content-Type header before parsing
 test(provider): add tool invocation error recovery tests

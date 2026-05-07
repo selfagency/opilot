@@ -1,5 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import { buildXmlToolSystemPrompt, extractXmlToolCalls } from './toolUtils.js';
+import {
+  buildXmlToolSystemPrompt,
+  buildNativeToolsArray,
+  extractXmlToolCalls,
+  normalizeToolParameters,
+} from './toolUtils.js';
+
+describe('normalizeToolParameters', () => {
+  it('injects additionalProperties:false into an object schema', () => {
+    const schema = { type: 'object', properties: { q: { type: 'string' } } };
+    const result = normalizeToolParameters(schema);
+    expect(result).toEqual({ type: 'object', properties: { q: { type: 'string' } }, additionalProperties: false });
+  });
+
+  it('preserves an explicit additionalProperties value', () => {
+    const schema = { type: 'object', properties: {}, additionalProperties: true };
+    const result = normalizeToolParameters(schema);
+    expect((result as Record<string, unknown>).additionalProperties).toBe(true);
+  });
+
+  it('does not inject additionalProperties for non-object type schemas', () => {
+    const schema = { type: 'string' };
+    const result = normalizeToolParameters(schema);
+    expect(result).toEqual({ type: 'string' });
+  });
+
+  it('returns a safe default with additionalProperties:false for non-object input', () => {
+    expect(normalizeToolParameters(null)).toEqual({ type: 'object', properties: {}, additionalProperties: false });
+    expect(normalizeToolParameters('string')).toEqual({
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(normalizeToolParameters([1, 2])).toEqual({ type: 'object', properties: {}, additionalProperties: false });
+  });
+});
 
 describe('buildXmlToolSystemPrompt', () => {
   it('returns empty string for empty tools array', () => {
@@ -44,6 +79,75 @@ describe('buildXmlToolSystemPrompt', () => {
     const result = buildXmlToolSystemPrompt([{ name: 'simple_tool' }]);
     expect(result).toContain('<simple_tool>');
     expect(result).toContain('</simple_tool>');
+  });
+
+  it('generates Hermes format prompt when format: "hermes" is specified', () => {
+    const result = buildXmlToolSystemPrompt(
+      [
+        {
+          name: 'search_files',
+          description: 'Search for files',
+          inputSchema: {
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
+        },
+      ],
+      { format: 'hermes' },
+    );
+    // Hermes format uses different tag structure than XML format
+    expect(result).toBeDefined();
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('defaults to XML format when format option is not specified', () => {
+    const result = buildXmlToolSystemPrompt([{ name: 'test_tool', description: 'Test tool' }]);
+    expect(result).toContain('<test_tool>');
+  });
+});
+
+describe('buildNativeToolsArray', () => {
+  it('is exported and callable', () => {
+    expect(buildNativeToolsArray).toBeDefined();
+    expect(typeof buildNativeToolsArray).toBe('function');
+  });
+
+  it('converts tool info array to native tool format', () => {
+    const tools = [
+      {
+        name: 'search_files',
+        description: 'Search files',
+        inputSchema: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      },
+    ];
+    const result = buildNativeToolsArray(tools);
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('function');
+    expect(result[0].function.name).toBe('search_files');
+    expect(result[0].function.description).toBe('Search files');
+    expect(result[0].function.parameters).toBeDefined();
+  });
+
+  it('handles multiple tools', () => {
+    const tools = [
+      { name: 'tool_a', description: 'Tool A' },
+      { name: 'tool_b', description: 'Tool B' },
+    ];
+    const result = buildNativeToolsArray(tools);
+    expect(result).toHaveLength(2);
+    expect(result[0].function.name).toBe('tool_a');
+    expect(result[1].function.name).toBe('tool_b');
+  });
+
+  it('handles tools without description', () => {
+    const tools = [{ name: 'no_desc_tool' }];
+    const result = buildNativeToolsArray(tools);
+    // buildNativeToolsArray leaves description undefined when not provided
+    expect(result[0].function.description).toBeUndefined();
   });
 });
 

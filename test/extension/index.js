@@ -1,7 +1,7 @@
 /**
  * Extension test runner entry point for vscode-test
  */
-const path = require('path');
+const path = require('node:path');
 const { runTests } = require('@vscode/test-electron');
 
 async function main() {

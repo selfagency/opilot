@@ -23,6 +23,17 @@ The participant is **sticky** — once invoked in a conversation thread, it cont
 | Default model | Most recently selected      | `ollama.completionModel` or first available |
 | Tool calling  | Yes                         | Yes                                         |
 
+## Disambiguation & Routing
+
+Opilot integrates with VS Code's model picker and the `@ollama` chat participant. A few routing behaviors to be aware of:
+
+- Non-tool models (models without tool-calling capability) are surfaced under the "Ask" category in the model picker. Use these for straightforward Q&A and conversational prompts.
+- Tool-capable models (models that support function/tool calling) are available in all picker modes (Agent, Edit, Ask) so they can be selected for agentic workflows.
+- Typing `@ollama` in a Copilot Chat input explicitly routes that thread to the Opilot Ollama participant — this is useful when you want to ensure the Ollama participant is used regardless of the global picker selection.
+- The extension attempts to auto-detect and label models with capabilities (thinking, tools, vision) and exposes those labels as badges in the sidebar and the model picker to help disambiguation.
+
+If you have questions about how a particular model will be routed for a prompt, check the model's capability badges in the sidebar or use `opilot_get_model_info` (if tools are enabled) to programmatically inspect capabilities.
+
 ## Context and History
 
 The `@ollama` participant passes the full conversation history from Copilot Chat to Ollama in each request, so it maintains context across turns:

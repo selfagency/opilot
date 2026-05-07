@@ -148,9 +148,7 @@ describe('package contributes integrity', () => {
     ];
 
     for (const key of legacyKeys) {
-      if (Object.hasOwn(properties, key)) {
-        expect(properties[key]).toBeUndefined();
-      }
+      expect(Object.hasOwn(properties, key)).toBe(false);
     }
   });
 

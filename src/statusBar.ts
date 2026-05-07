@@ -119,6 +119,30 @@ function buildOnlineTooltip(result: HealthCheckResult): vscode.MarkdownString {
   return md;
 }
 
+export interface HealthDebounceState {
+  consecutiveFailures: number;
+  lastApplied: HealthCheckResult | undefined;
+}
+
+export function applyHealthResult(
+  result: HealthCheckResult,
+  state: HealthDebounceState,
+  item: vscode.StatusBarItem,
+): void {
+  if (!result.online) {
+    state.consecutiveFailures++;
+  } else {
+    state.consecutiveFailures = 0;
+  }
+
+  if (result.online || state.consecutiveFailures >= DEBOUNCE_FAILURE_COUNT) {
+    state.lastApplied = result;
+    applyState(item, result);
+  } else if (state.lastApplied !== undefined) {
+    applyState(item, state.lastApplied);
+  }
+}
+
 function applyState(item: vscode.StatusBarItem, result: HealthCheckResult): void {
   if (result.online) {
     item.text = result.runningCount > 0 ? `$(pulse) Ollama (${result.runningCount})` : `$(pulse) Ollama`;
@@ -151,18 +175,16 @@ export function registerStatusBarHeartbeat(
   host: string,
   diagnostics: DiagnosticsLogger,
 ): StatusBarHeartbeatRegistration {
-  const item = vscode.window.createStatusBarItem('opilot.status', vscode.StatusBarAlignment.Right, 100);
+  const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   item.command = 'opilot.checkServerHealth';
   item.text = `$(loading~spin) Ollama…`;
   item.tooltip = 'Checking Ollama server…';
   item.show();
 
-  let consecutiveFailures = 0;
+  const debounce: HealthDebounceState = { consecutiveFailures: 0, lastApplied: undefined };
   let intervalHandle: ReturnType<typeof setInterval> | undefined;
   /** Monotonically increasing ID; only the latest check's result is applied. */
   let currentRequestId = 0;
-  /** The last result that was applied to the status bar. */
-  let lastApplied: HealthCheckResult | undefined;
 
   const runCheck = async () => {
     const requestId = ++currentRequestId;
@@ -175,21 +197,7 @@ export function registerStatusBarHeartbeat(
       `[statusBar] health check: ${result.online ? `online, ${result.runningCount} running` : 'offline'}`,
     );
 
-    if (!result.online) {
-      consecutiveFailures++;
-    } else {
-      consecutiveFailures = 0;
-    }
-
-    // Only flip to offline display after DEBOUNCE_FAILURE_COUNT consecutive failures
-    // to avoid flicker on transient network errors.
-    if (result.online || consecutiveFailures >= DEBOUNCE_FAILURE_COUNT) {
-      lastApplied = result;
-      applyState(item, result);
-    } else if (lastApplied !== undefined) {
-      // Re-apply last known state so the loading spinner doesn't stay visible.
-      applyState(item, lastApplied);
-    }
+    applyHealthResult(result, debounce, item);
   };
 
   const scheduleInterval = () => {

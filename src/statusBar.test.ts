@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as vscode from 'vscode';
 
 // ── vscode mock ──────────────────────────────────────────────────────────────
 
@@ -42,7 +43,8 @@ vi.mock('vscode', () => ({
 // ── tests ────────────────────────────────────────────────────────────────────
 
 import type { Ollama } from 'ollama';
-import { checkOllamaHealth, registerStatusBarHeartbeat } from './statusBar.js';
+import { checkOllamaHealth, registerStatusBarHeartbeat, applyHealthResult } from './statusBar.js';
+import type { HealthDebounceState } from './statusBar.js';
 
 /** Flush the microtask queue so async chains (like await client.ps()) complete.
  * Each `await Promise.resolve()` processes one tick — 5 ticks covers a 3-level deep chain.
@@ -285,5 +287,77 @@ describe('registerStatusBarHeartbeat', () => {
     vi.advanceTimersByTime(60_000);
     await flushPromises();
     expect((client.ps as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyHealthResult
+// ---------------------------------------------------------------------------
+
+describe('applyHealthResult', () => {
+  let item: vscode.StatusBarItem;
+  let state: HealthDebounceState;
+
+  beforeEach(() => {
+    item = {
+      text: '',
+      tooltip: undefined as unknown,
+      backgroundColor: undefined as unknown,
+      color: undefined as unknown,
+      command: undefined as unknown,
+      show: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as vscode.StatusBarItem;
+    state = { consecutiveFailures: 0, lastApplied: undefined };
+  });
+
+  const onlineResult = {
+    online: true as const,
+    host: 'http://localhost:11434',
+    runningCount: 2,
+    runningModels: [],
+    checkedAt: new Date(),
+  };
+
+  const offlineResult = {
+    online: false as const,
+    host: 'http://localhost:11434',
+    runningCount: 0,
+    runningModels: [],
+    checkedAt: new Date(),
+  };
+
+  it('applies online result immediately and resets failure count', () => {
+    state.consecutiveFailures = 3;
+    applyHealthResult(onlineResult, state, item);
+    expect(state.consecutiveFailures).toBe(0);
+    expect(state.lastApplied).toBe(onlineResult);
+    expect(item.text).toContain('pulse');
+  });
+
+  it('increments consecutiveFailures on offline result', () => {
+    applyHealthResult(offlineResult, state, item);
+    expect(state.consecutiveFailures).toBe(1);
+  });
+
+  it('does not apply offline result until DEBOUNCE_FAILURE_COUNT is reached when no prior state', () => {
+    applyHealthResult(offlineResult, state, item);
+    expect(state.lastApplied).toBeUndefined();
+    expect(item.text).toBe('');
+  });
+
+  it('applies offline result after consecutive failures reach threshold', () => {
+    state.consecutiveFailures = 2;
+    applyHealthResult(offlineResult, state, item);
+    expect(state.lastApplied).toBe(offlineResult);
+    expect(item.text).toContain('warning');
+  });
+
+  it('shows last-applied online state while debouncing failures', () => {
+    applyHealthResult(onlineResult, state, item);
+    expect(item.text).toContain('pulse');
+
+    applyHealthResult(offlineResult, state, item);
+    expect(item.text).toContain('pulse');
   });
 });

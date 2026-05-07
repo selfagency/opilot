@@ -7,7 +7,7 @@
  * - provide consistent error/exception formatting across modules
  */
 
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { getSetting } from './settings.js';
 
 export type DiagnosticsLogLevel = 'debug' | 'info' | 'warn' | 'error';

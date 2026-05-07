@@ -61,16 +61,16 @@ Run tasks with `task <name>`:
 
 ## Directory Structure
 
-```
+```text
 src/
   extension.ts         # Activation, chat participant, log streaming
   provider.ts          # VS Code LM API provider implementation
   sidebar.ts           # Tree views, model lifecycle commands
   modelfiles.ts        # Modelfile parsing and tree provider
   completions.ts       # Inline code completion provider
-  formatting.ts        # Re-exports stream parsing from @selfagency/llm-stream-parser
-  thinkingParser.ts    # Re-exports ThinkingParser from @selfagency/llm-stream-parser
-  toolUtils.ts         # Re-exports XML tool utilities + Ollama-specific helpers
+  formatting.ts        # Re-exports context/format/xml-filter utilities from focused @agentsy packages
+  thinkingParser.ts    # Re-exports ThinkingParser from @agentsy/thinking
+  toolUtils.ts         # Re-exports XML tool utilities from @agentsy/tool-calls + Ollama-specific helpers
   diagnostics.ts       # Centralized logging abstraction
   client.ts            # Ollama HTTP client wrapper
   test/

@@ -63,6 +63,9 @@ const PARAMETER_DOCS: Record<string, string> = {
   mirostat_eta: '`mirostat_eta` — Mirostat learning rate. Default: 0.1',
 };
 
+const KEYWORD_DOCS_MAP = new Map(Object.entries(KEYWORD_DOCS));
+const PARAMETER_DOCS_MAP = new Map(Object.entries(PARAMETER_DOCS));
+
 // ---------------------------------------------------------------------------
 // Modelfile parser — extracts structured fields for the Ollama create API
 // ---------------------------------------------------------------------------
@@ -94,11 +97,122 @@ interface ParsedModelfile {
  *   key names (not the values) are used for hover documentation. No user-supplied
  *   parameter value reaches any context where injection is possible.
  */
+
+type ModelfileParseState = {
+  result: ParsedModelfile;
+  parameters: Map<string, unknown>;
+  adapters: Map<string, string>;
+  messages: Message[];
+  licenses: string[];
+};
+
+const RESERVED_PARAMETER_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+export function parseMultiLineTripleQuoted(
+  lines: string[],
+  startIdx: number,
+  afterOpen: string,
+): { value: string; endIdx: number } {
+  const parts = [afterOpen];
+  let i = startIdx + 1;
+  while (i < lines.length) {
+    const nextLine = lines[i];
+    if (nextLine.trim() === '"""' || nextLine.trimEnd().endsWith('"""')) {
+      const closing = nextLine.trimEnd();
+      if (closing !== '"""') {
+        parts.push(closing.substring(0, closing.length - 3));
+      }
+      break;
+    }
+    parts.push(nextLine);
+    i++;
+  }
+  return { value: parts.join('\n'), endIdx: i };
+}
+
+export function resolveLineValue(value: string, lines: string[], lineIdx: number): { value: string; newIdx: number } {
+  if (value.startsWith('"""')) {
+    const afterOpen = value.substring(3);
+    if (afterOpen.endsWith('"""') && afterOpen.length > 3) {
+      return { value: afterOpen.substring(0, afterOpen.length - 3), newIdx: lineIdx };
+    }
+    const { value: multiValue, endIdx } = parseMultiLineTripleQuoted(lines, lineIdx, afterOpen);
+    return { value: multiValue, newIdx: endIdx };
+  }
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+    return { value: value.substring(1, value.length - 1), newIdx: lineIdx };
+  }
+  return { value, newIdx: lineIdx };
+}
+
+function applyParameterEntry(value: string, state: ModelfileParseState): void {
+  const paramSpaceIdx = value.indexOf(' ');
+  if (paramSpaceIdx === -1) {
+    return;
+  }
+
+  const paramName = value.substring(0, paramSpaceIdx).trim();
+  if (paramName.length === 0 || RESERVED_PARAMETER_KEYS.has(paramName)) {
+    return;
+  }
+
+  const rawValue = value.substring(paramSpaceIdx + 1).trim();
+  const numericValue = Number(rawValue);
+  const parsedValue = Number.isFinite(numericValue) ? numericValue : rawValue;
+  state.parameters.set(paramName, parsedValue);
+}
+
+function applyMessageEntry(value: string, state: ModelfileParseState): void {
+  const msgMatch = /^(system|user|assistant)\s+(.+)$/s.exec(value);
+  if (msgMatch) {
+    let msgContent = msgMatch[2];
+    if (msgContent.startsWith('"') && msgContent.endsWith('"')) {
+      msgContent = msgContent.substring(1, msgContent.length - 1);
+    }
+    state.messages.push({ role: msgMatch[1] as 'system' | 'user' | 'assistant', content: msgContent });
+  }
+}
+
+const keywordHandlers: Record<string, (value: string, state: ModelfileParseState) => void> = {
+  FROM: (value, state) => {
+    state.result.from = value;
+  },
+  SYSTEM: (value, state) => {
+    state.result.system = value;
+  },
+  TEMPLATE: (value, state) => {
+    state.result.template = value;
+  },
+  LICENSE: (value, state) => {
+    state.licenses.push(value);
+  },
+  ADAPTER: (value, state) => {
+    state.adapters.set(value, value);
+  },
+  PARAMETER: (value, state) => {
+    applyParameterEntry(value, state);
+  },
+  MESSAGE: (value, state) => {
+    applyMessageEntry(value, state);
+  },
+};
+
+function applyKeyword(keyword: string, value: string, state: ModelfileParseState): void {
+  const handler = keywordHandlers[keyword];
+  if (handler) {
+    handler(value, state);
+  }
+}
+
 export function parseModelfile(content: string): ParsedModelfile {
-  const result: ParsedModelfile = {};
-  const parameters: Record<string, unknown> = {};
-  const messages: Message[] = [];
-  const licenses: string[] = [];
+  const state: ModelfileParseState = {
+    result: {},
+    parameters: new Map<string, unknown>(),
+    adapters: new Map<string, string>(),
+    messages: [],
+    licenses: [],
+  };
+  const { result, parameters, adapters, messages, licenses } = state;
   const lines = content.split('\n');
 
   let i = 0;
@@ -119,82 +233,15 @@ export function parseModelfile(content: string): ParsedModelfile {
     }
 
     const keyword = trimmed.substring(0, spaceIdx).toUpperCase();
-    let value = trimmed.substring(spaceIdx + 1).trim();
-
-    // Handle multi-line triple-quoted values
-    if (value.startsWith('"""')) {
-      const afterOpen = value.substring(3);
-      if (afterOpen.endsWith('"""') && afterOpen.length > 3) {
-        // Single-line triple-quoted: """content"""
-        value = afterOpen.substring(0, afterOpen.length - 3);
-      } else {
-        // Multi-line: collect until closing """
-        const parts = [afterOpen];
-        i++;
-        while (i < lines.length) {
-          const nextLine = lines[i];
-          if (nextLine.trim() === '"""' || nextLine.trimEnd().endsWith('"""')) {
-            const closing = nextLine.trimEnd();
-            if (closing !== '"""') {
-              parts.push(closing.substring(0, closing.length - 3));
-            }
-            break;
-          }
-          parts.push(nextLine);
-          i++;
-        }
-        value = parts.join('\n');
-      }
-    } else if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-      value = value.substring(1, value.length - 1);
-    }
-
-    switch (keyword) {
-      case 'FROM':
-        result.from = value;
-        break;
-      case 'SYSTEM':
-        result.system = value;
-        break;
-      case 'TEMPLATE':
-        result.template = value;
-        break;
-      case 'LICENSE':
-        licenses.push(value);
-        break;
-      case 'ADAPTER': {
-        if (!result.adapters) result.adapters = {};
-        result.adapters[value] = value;
-        break;
-      }
-      case 'PARAMETER': {
-        const paramSpaceIdx = value.indexOf(' ');
-        if (paramSpaceIdx !== -1) {
-          const paramName = value.substring(0, paramSpaceIdx);
-          const paramValue = value.substring(paramSpaceIdx + 1).trim();
-          // Try to parse as number or preserve as string
-          const numVal = Number(paramValue);
-          parameters[paramName] = Number.isFinite(numVal) ? numVal : paramValue;
-        }
-        break;
-      }
-      case 'MESSAGE': {
-        // MESSAGE role "content" or MESSAGE role content
-        const msgMatch = /^(system|user|assistant)\s+(.+)$/s.exec(value);
-        if (msgMatch) {
-          let msgContent = msgMatch[2];
-          if (msgContent.startsWith('"') && msgContent.endsWith('"')) {
-            msgContent = msgContent.substring(1, msgContent.length - 1);
-          }
-          messages.push({ role: msgMatch[1] as 'system' | 'user' | 'assistant', content: msgContent });
-        }
-        break;
-      }
-    }
+    const rawValue = trimmed.substring(spaceIdx + 1).trim();
+    const { value, newIdx } = resolveLineValue(rawValue, lines, i);
+    i = newIdx;
+    applyKeyword(keyword, value, state);
     i++;
   }
 
-  if (Object.keys(parameters).length > 0) result.parameters = parameters;
+  if (parameters.size > 0) result.parameters = Object.fromEntries(parameters.entries());
+  if (adapters.size > 0) result.adapters = Object.fromEntries(adapters.entries());
   if (messages.length > 0) result.messages = messages;
   if (licenses.length === 1) result.license = licenses[0];
   else if (licenses.length > 1) result.license = licenses;
@@ -468,7 +515,7 @@ export function createHoverProvider(): vscode.HoverProvider {
       if (!wordRange) return null;
 
       const word = document.getText(wordRange);
-      const doc = KEYWORD_DOCS[word] ?? PARAMETER_DOCS[word];
+      const doc = KEYWORD_DOCS_MAP.get(word) ?? PARAMETER_DOCS_MAP.get(word);
       if (!doc) return null;
 
       return new vscode.Hover(new vscode.MarkdownString(doc), wordRange);

@@ -8,7 +8,10 @@
  * - detect repetition loops in streamed output buffers
  */
 
+import { OutputMode, Raw, renderPrompt, type ITokenizer } from '@vscode/prompt-tsx';
 import type { Message } from 'ollama';
+import type { ResolvedReference } from './prompts/OllamaPrompt.js';
+import { OllamaPrompt } from './prompts/OllamaPrompt.js';
 
 /**
  * Base system prompt injected into every @ollama and LM API request.
@@ -87,7 +90,7 @@ export function truncateMessages(messages: Message[], maxInputTokens: number): M
     effectiveSystemMsgs = systemMsgs.map(m => {
       const content = typeof m.content === 'string' ? m.content : '';
       if (content.length <= charLimit) return m;
-      return { ...m, content: content.slice(0, charLimit) + '\n[context truncated for model context window]' };
+      return { ...m, content: `${content.slice(0, charLimit)}\n[context truncated for model context window]` };
     });
   }
 
@@ -107,6 +110,12 @@ export function truncateMessages(messages: Message[], maxInputTokens: number): M
 
   return [...effectiveSystemMsgs, ...keptHistory, ...lastMsg];
 }
+
+// DEFERRED: Replacing `truncateMessages` with @vscode/prompt-tsx is tracked
+// in bean opilot-yqdn--040. This would provide priority-based prompt composition
+// and accurate token-budget pruning but requires significant refactoring.
+// Status: Deferred pending Phase 3+ completion.
+// See: .beans/opilot-yqdn--040-evaluate-adopting-prompt-tsx-for-prompt-compos.md
 
 /**
  * Detect whether streaming output has entered a repetition loop.
@@ -186,4 +195,105 @@ export function resolveContextLimit(modelReported: number, modelOptNumCtx?: numb
   if (modelReported > 0) return modelReported;
   if (settingMax && settingMax > 0) return settingMax;
   return DEFAULT_CONTEXT_TOKENS;
+}
+
+/**
+ * Render a prompt using @vscode/prompt-tsx for priority-based context pruning.
+ *
+ * Messages are decomposed into system content, conversation history, and the
+ * current user turn, passed through the OllamaPrompt TSX component, then
+ * converted back to Ollama Message objects. Falls back to the synchronous
+ * truncateMessages approach when the message list cannot be decomposed (e.g.,
+ * contains tool turns) or on any render error.
+ */
+export async function renderOllamaPrompt(
+  messages: Message[],
+  maxInputTokens: number,
+  tokenCountFn?: (text: string) => number,
+  references?: ReadonlyArray<ResolvedReference>,
+): Promise<Message[]> {
+  if (maxInputTokens <= 0 || messages.length === 0) return messages;
+
+  const countFn = tokenCountFn ?? ((text: string) => Math.ceil(text.length / CHARS_PER_TOKEN));
+
+  // Decompose the flat message list into structured parts.
+  const systemMsgs = messages.filter(m => m.role === 'system');
+  const nonSystem = messages.filter(m => m.role !== 'system');
+
+  // Require a final user turn and only user/assistant turns in history.
+  const lastMsg = nonSystem.at(-1);
+  const historyMsgs = nonSystem.slice(0, -1);
+  const hasToolTurns = historyMsgs.some(m => m.role !== 'user' && m.role !== 'assistant');
+  if (!lastMsg || hasToolTurns) {
+    return truncateMessages(messages, maxInputTokens);
+  }
+
+  const systemContent = systemMsgs.map(m => (typeof m.content === 'string' ? m.content : '')).join('\n\n');
+  const history = historyMsgs
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: typeof m.content === 'string' ? m.content : '',
+    }));
+  const userContent = typeof lastMsg.content === 'string' ? lastMsg.content : '';
+
+  const tokenizer: ITokenizer<OutputMode.Raw> = {
+    mode: OutputMode.Raw,
+    tokenLength(part: Raw.ChatCompletionContentPart): number {
+      if (part.type === Raw.ChatCompletionContentPartKind.Text) {
+        return countFn((part as Raw.ChatCompletionContentPartText).text);
+      }
+      return 1;
+    },
+    countMessageTokens(message: Raw.ChatMessage): number {
+      let total = 4; // role overhead
+      for (const part of message.content) {
+        const len = this.tokenLength(part);
+        total += typeof len === 'number' ? len : 1;
+      }
+      return total;
+    },
+  };
+
+  try {
+    const endpoint = { modelMaxPromptTokens: maxInputTokens - OUTPUT_TOKEN_RESERVE };
+    const result = await renderPrompt(
+      OllamaPrompt,
+      { systemContent, history, userContent, references },
+      endpoint,
+      tokenizer,
+    );
+
+    const hasNonTextParts = result.messages.some((message: Raw.ChatMessage) =>
+      message.content.some(
+        (part: Raw.ChatCompletionContentPart) => part.type !== Raw.ChatCompletionContentPartKind.Text,
+      ),
+    );
+    if (hasNonTextParts) {
+      return truncateMessages(messages, maxInputTokens);
+    }
+
+    return result.messages.map((m: Raw.ChatMessage) => ({
+      role: chatRoleToString(m.role),
+      content: m.content
+        .filter((p: Raw.ChatCompletionContentPart) => p.type === Raw.ChatCompletionContentPartKind.Text)
+        .map((p: Raw.ChatCompletionContentPart) => (p as Raw.ChatCompletionContentPartText).text)
+        .join(''),
+    }));
+  } catch {
+    return truncateMessages(messages, maxInputTokens);
+  }
+}
+
+function chatRoleToString(role: Raw.ChatRole): string {
+  switch (role) {
+    case Raw.ChatRole.System:
+      return 'system';
+    case Raw.ChatRole.User:
+      return 'user';
+    case Raw.ChatRole.Assistant:
+      return 'assistant';
+    case Raw.ChatRole.Tool:
+      return 'tool';
+  }
 }

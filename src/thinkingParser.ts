@@ -1,1 +1,1 @@
-export { ThinkingParser } from '@selfagency/llm-stream-parser/thinking';
+export { ThinkingParser } from '@agentsy/thinking';

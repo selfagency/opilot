@@ -1,3 +1,4 @@
+/* eslint-env node */
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { server } from '../mocks/node.js';
 

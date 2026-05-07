@@ -1339,3 +1339,94 @@ describe('handleOpenModelfilesFolder error path', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// parseMultiLineTripleQuoted
+// ---------------------------------------------------------------------------
+
+describe('parseMultiLineTripleQuoted', () => {
+  let parseMultiLineTripleQuoted: (
+    lines: string[],
+    startIdx: number,
+    afterOpen: string,
+  ) => { value: string; endIdx: number };
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => minimalVscodeMock());
+    vi.doMock('ollama', () => ({ Ollama: function MockOllama() {} }));
+    ({ parseMultiLineTripleQuoted } = await import('./modelfiles.js'));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('should export parseMultiLineTripleQuoted', () => {
+    expect(typeof parseMultiLineTripleQuoted).toBe('function');
+  });
+
+  it('captures content spanning multiple lines until closing triple-quotes', () => {
+    const lines = ['SYSTEM """', 'line one', 'line two', '"""'];
+    const result = parseMultiLineTripleQuoted(lines, 0, '');
+    expect(result.value).toContain('line one');
+    expect(result.value).toContain('line two');
+    expect(result.endIdx).toBe(3);
+  });
+
+  it('handles closing triple-quotes on the same line as the last content', () => {
+    const lines = ['SYSTEM """', 'hello"""'];
+    const result = parseMultiLineTripleQuoted(lines, 0, '');
+    expect(result.value).toContain('hello');
+    expect(result.endIdx).toBe(1);
+  });
+
+  it('returns everything consumed if closing triple-quotes are never found', () => {
+    const lines = ['SYSTEM """', 'no closing quote', 'still open'];
+    const result = parseMultiLineTripleQuoted(lines, 0, '');
+    expect(result.value).toContain('no closing quote');
+    expect(result.endIdx).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveLineValue
+// ---------------------------------------------------------------------------
+
+describe('resolveLineValue', () => {
+  let resolveLineValue: (value: string, lines: string[], lineIdx: number) => { value: string; newIdx: number };
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => minimalVscodeMock());
+    vi.doMock('ollama', () => ({ Ollama: function MockOllama() {} }));
+    ({ resolveLineValue } = await import('./modelfiles.js'));
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('should export resolveLineValue', () => {
+    expect(typeof resolveLineValue).toBe('function');
+  });
+
+  it('strips surrounding double-quotes from a single-line quoted value', () => {
+    const result = resolveLineValue('"hello world"', [], 0);
+    expect(result.value).toBe('hello world');
+    expect(result.newIdx).toBe(0);
+  });
+
+  it('returns the raw value when not quoted', () => {
+    const result = resolveLineValue('rawvalue', [], 0);
+    expect(result.value).toBe('rawvalue');
+  });
+
+  it('handles inline triple-quoted value that opens and closes on the same token', () => {
+    const result = resolveLineValue('"""hello"""', [], 0);
+    expect(result.value).toBe('hello');
+  });
+
+  it('handles multi-line triple-quoted value spanning subsequent lines', () => {
+    const lines = ['SYSTEM """', 'line a', '"""'];
+    const result = resolveLineValue('"""', lines, 0);
+    expect(result.value).toContain('line a');
+    expect(result.newIdx).toBeGreaterThan(0);
+  });
+});
