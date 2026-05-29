@@ -67,7 +67,7 @@ export function addCustomFixture(
   mock: LLMock,
   fixture: { match?: Record<string, unknown>; response?: Record<string, unknown>; status?: number }
 ): void {
-  mock.addFixture(fixture as never);
+  mock.addFixture(fixture);
 }
 
 export function createChatFixture(

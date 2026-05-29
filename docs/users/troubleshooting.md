@@ -54,9 +54,11 @@ The auth token is stored in [VS Code's encrypted secret store](https://code.visu
 ### Local Models panel is empty
 
 1. Make sure at least one model is installed:
+
    ```bash
    ollama pull llama3.2:3b
    ```
+
 2. Click the **Refresh** button in the Local Models panel
 3. Check the **Opilot** output channel for error messages
 

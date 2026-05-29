@@ -76,9 +76,9 @@ The Opilot extension is a mature, well-engineered project with strong fundamenta
 
 The most impactful finding is the duplication of six chat utility functions across extension.ts and provider.ts, which creates a maintenance burden and increases the risk of behavioral divergence during future updates. Secondary concerns include silent error swallowing in OpenAI-compatibility fallback paths, the absence of timeouts on connection testing, unsafe file-write operations without locking, and several opportunities to better leverage the VS Code AI extension APIs as documented in the official guides. The remediation plan prioritizes these findings into three phases: an immediate stabilization sprint addressing the high-impact items, a consolidation phase for architectural improvements, and a maturity phase for long-term quality enhancements.
 
-# **2\. Background & Objectives**
+## **2\. Background & Objectives**
 
-## **2.1 Project Overview**
+### **2.1 Project Overview**
 
 Opilot is an open-source VS Code extension (MIT license) developed by Self Agency that bridges the Ollama local LLM platform with GitHub Copilot Chat. It serves a dual purpose: first, as a Language Model Chat Provider that registers Ollama-hosted models (such as Llama 3, Mistral, Codestral, and others) as available language models within VS Code's model picker; and second, as a Chat Participant (@ollama) that provides conversational AI capabilities through Copilot Chat with tool-calling support for file operations, terminal commands, and workspace context retrieval.
 
@@ -86,9 +86,9 @@ The extension architecture comprises 18 TypeScript source files organized into f
 
 The review was initiated to ensure that the Opilot extension fully conforms to the latest VS Code AI extension APIs and best practices documented across six official Microsoft guides covering Language Model Tools, Chat Participants, Language Model Chat Providers, the Language Model consumer API, Prompt TSX, and MCP (Model Context Protocol). Additionally, the review validates correct usage of the Ollama JavaScript SDK (ollama-js) and REST API. The objective is to produce a gap analysis and a prioritized remediation roadmap that the maintainers can execute to bring the extension to full compliance with documented best practices.
 
-# **3\. Scope & Methodology**
+## **3\. Scope & Methodology**
 
-## **3.1 Review Methodology**
+### **3.1 Review Methodology**
 
 The review was conducted using a multi-layered methodology. First, all six VS Code AI extension documentation pages were retrieved and analyzed to extract API surface contracts, recommended patterns, naming conventions, error handling expectations, security considerations, and version requirements. Second, the Ollama JavaScript SDK (ollama-js) repository and the Ollama REST API documentation were reviewed to identify correct SDK usage patterns, streaming protocols, error code semantics, authentication flows, and model management operations. Third, the complete Opilot source tree was fetched and every TypeScript source file was examined for code quality issues, API misuse, security vulnerabilities, missing error handling, type safety concerns, performance problems, and architectural deficiencies.
 
@@ -96,7 +96,7 @@ Cross-referencing was performed by mapping each finding against the relevant doc
 
 The review scope covers the complete source tree at version 1.5.0, including 18 TypeScript source files, package.json configuration, tsconfig.json, and tsup.config.mjs. The review does not cover the compiled output, marketplace listing content, CI/CD pipeline configuration, or third-party dependencies beyond their declared versions. Test files were examined for coverage gaps but were not themselves reviewed for correctness.
 
-# **4\. Review Findings Summary**
+## **4\. Review Findings Summary**
 
 The comprehensive review identified a total of 42 distinct issues distributed across 13 categories. The distribution reveals a healthy project with no critical vulnerabilities but several areas requiring focused attention. The single high-severity finding relates to architectural code duplication that poses the greatest maintenance risk. Seven medium-severity issues span error handling, robustness, security, type safety, and configuration management, representing meaningful gaps that should be addressed in the near term. The remaining 34 low-severity items cover code quality, performance optimization, documentation completeness, dependency management, and minor VS Code API modernization opportunities.
 
@@ -119,11 +119,11 @@ The comprehensive review identified a total of 42 distinct issues distributed ac
 
 The cross-reference gaps category (10 low-severity items) represents areas where the Opilot implementation does not fully leverage features or patterns recommended in the VS Code AI extension documentation. These are not bugs or defects, but rather missed opportunities to improve the extension's integration quality, user experience, and alignment with the evolving VS Code AI platform. Examples include the absence of @vscode/prompt-tsx for prompt management, missing disambiguation configuration for chat participant auto-routing, and the potential to expose Ollama capabilities as MCP tools for broader ecosystem integration.
 
-# **5\. Detailed Issue Analysis**
+## **5\. Detailed Issue Analysis**
 
-## **5.1 Architecture & Code Duplication**
+### **5.1 Architecture & Code Duplication**
 
-## **1.1 Massive Code Duplication Between extension.ts and provider.ts**
+### **1.1 Massive Code Duplication Between extension.ts and provider.ts**
 
 **Severity:** High | Files: src/extension.ts (lines 53-295), src/provider.ts (lines 504-728)
 
@@ -133,7 +133,7 @@ This duplication creates a serious maintenance burden: any bug fix or behavioral
 
 **Remediation:** Extract all six duplicated functions into a new shared module (e.g., src/chatUtils.ts). Both extension.ts and provider.ts should import from this module. This is a straightforward refactor with no behavioral change. The shared module should include comprehensive unit tests to guard against regression. Additionally, the buildSdkOptions() function and formatBytes() utility (duplicated three times across extension.ts, statusBar.ts, and sidebar.ts) should be consolidated.
 
-## **1.2 formatBytes() Utility Duplicated Three Times**
+### **1.2 formatBytes() Utility Duplicated Three Times**
 
 **Severity:** Medium | Files: src/extension.ts:401-406, src/statusBar.ts:42-47, src/sidebar.ts:139-149
 
@@ -141,7 +141,7 @@ Three separate implementations of byte formatting exist across the codebase, eac
 
 **Remediation:** Create a single src/formatUtils.ts module exporting a unified formatBytes() function with configurable precision and suffix style. All three call sites should import from this module. Add unit tests covering edge cases (0 bytes, negative values, very large values exceeding TB).
 
-## **1.3 extension.ts Exceeds Maintainable Size**
+### **1.3 extension.ts Exceeds Maintainable Size**
 
 **Severity:** Low | File: src/extension.ts (1220+ lines)
 
@@ -149,9 +149,9 @@ The main extension file handles chat participant setup, chat request handling wi
 
 **Remediation:** Split extension.ts into focused modules. Suggested extraction targets include: src/chatParticipant.ts (chat participant registration and request handling), src/connectionManager.ts (connection testing, health monitoring), src/logStreamer.ts (journalctl and server.log tail management), src/conflictResolver.ts (built-in Ollama conflict detection and resolution), and src/performanceSnapshot.ts. The activate() function in extension.ts should remain as the orchestrator that imports and wires these modules together.
 
-## **5.2 Security**
+### **5.2 Security**
 
-## **2.1 Shell Command Construction via String Interpolation**
+### **2.1 Shell Command Construction via String Interpolation**
 
 **Severity:** Medium | File: src/sidebar.ts:1118-1131 (forceKillProcess)
 
@@ -159,7 +159,7 @@ The forceKillProcess() function constructs shell commands using template literal
 
 **Remediation:** Replace execAsync(command) with execFileSync() using an array of arguments (e.g., execFileSync('kill', \['-9', String(pid)\])). This eliminates the string interpolation entirely and ensures that the PID is passed as a separate argument that cannot be interpreted as shell syntax. Apply the same pattern to any other shell command invocations found in the codebase.
 
-## **2.2 Unsafe File Write Without Locking**
+### **2.2 Unsafe File Write Without Locking**
 
 **Severity:** Medium | File: src/extension.ts:352-373 (removeBuiltInOllamaFromChatLanguageModels)
 
@@ -167,9 +167,9 @@ This function directly reads, modifies, and writes VS Code's chatLanguageModels.
 
 **Remediation:** Wrap the read-modify-write cycle in a retry loop with JSON comparison: read the file, parse it, compute the modified version, re-read the file to check if it changed since the initial read, and only write if it hasn't. If it has changed, retry the operation (up to a reasonable limit). Alternatively, use VS Code's workspace configuration API where possible instead of direct file manipulation.
 
-## **5.3 Error Handling**
+### **5.3 Error Handling**
 
-## **3.1 Silent Catch Blocks Masking Errors**
+### **3.1 Silent Catch Blocks Masking Errors**
 
 **Severity:** Medium | Files: src/extension.ts (lines 166, 226, 810), src/client.ts (lines 86-87), src/openaiCompat.ts (line 212), src/sidebar.ts (line 862)
 
@@ -177,7 +177,7 @@ Several catch blocks throughout the codebase swallow errors without logging any 
 
 **Remediation:** Add outputChannel.appendLine() or console.warn() calls to all catch blocks that currently swallow errors silently. At minimum, log the error message and stack trace at warning level. For the OpenAI-compat fallback paths, include a message indicating which fallback path was taken and why, so users can diagnose configuration issues. For testConnection(), differentiate between connection refused (server not running), timeout (server unreachable), and authentication errors (API key issues).
 
-## **3.2 Missing Error Handling on Stream Iteration**
+### **3.2 Missing Error Handling on Stream Iteration**
 
 **Severity:** Medium | Files: src/extension.ts:1005 (handleChatRequest), src/provider.ts:903 (provideLanguageModelChatResponse)
 
@@ -185,7 +185,7 @@ The for-await-of loops that iterate over streaming responses from Ollama do not 
 
 **Remediation:** Wrap the for-await-of loop in a try-catch block that catches streaming errors and reports them through VS Code's appropriate error reporting mechanism. For the chat participant, use stream.markdown() to inform the user that the response was interrupted. For the language model provider, throw a LanguageModelError with appropriate error codes. In both cases, ensure that partial response content is properly flushed before reporting the error.
 
-## **5.4 Cross-Reference Gaps: VS Code AI Documentation**
+### **5.4 Cross-Reference Gaps: VS Code AI Documentation**
 
 The following cross-reference gaps were identified by comparing the Opilot implementation against the official VS Code AI extension documentation and Ollama SDK documentation. These represent opportunities to improve integration quality, leverage new platform features, and align with evolving best practices.
 
@@ -202,11 +202,11 @@ The following cross-reference gaps were identified by comparing the Opilot imple
 | 9     | Ollama SDK           | Abort semantics: ollama.abort() kills ALL streams on a client instance. The extension should use per-request client instances for isolation, or implement a per-stream abort mechanism.                                                                  | Low          |
 | 10    | Ollama API           | Error response parsing: Mid-stream errors are returned as NDJSON objects with an error property. The OpenAI-compat layer should detect and surface these mid-stream errors to the user.                                                                  | Low          |
 
-# **6\. Remediation Plan**
+## **6\. Remediation Plan**
 
 The remediation plan is organized into three phases, ordered by urgency and dependency. Phase 1 addresses immediate stability and maintainability concerns. Phase 2 focuses on architectural consolidation and API compliance. Phase 3 targets long-term quality improvements and platform alignment. Each action item includes an estimated effort, dependencies, and expected outcome.
 
-## **Phase 1: Immediate Stabilization (Sprint 1-2)**
+### **Phase 1: Immediate Stabilization (Sprint 1-2)**
 
 Phase 1 targets the highest-impact issues that can be resolved quickly with minimal risk. These items address the code duplication problem, the most dangerous error handling gaps, and the security hardening opportunities. The estimated total effort for Phase 1 is 3-5 developer days.
 
@@ -219,7 +219,7 @@ Phase 1 targets the highest-impact issues that can be resolved quickly with mini
 | Consolidate formatBytes() into src/formatUtils.ts                 | Medium       | 0.5 day    | extension.ts, statusBar.ts, sidebar.ts               |
 | Remove dead saxophone.d.ts type declaration                       | Low          | 0.1 day    | saxophone.d.ts                                       |
 
-## **Phase 2: Architectural Consolidation (Sprint 3-5)**
+### **Phase 2: Architectural Consolidation (Sprint 3-5)**
 
 Phase 2 addresses the structural improvements that require more careful planning and testing. These changes improve the extension's maintainability, alignment with VS Code AI best practices, and robustness under edge conditions. The estimated total effort for Phase 2 is 5-8 developer days.
 
@@ -233,7 +233,7 @@ Phase 2 addresses the structural improvements that require more careful planning
 | Improve tool modelDescription and userDescription quality        | Low          | 1 day      | package.json, toolUtils.ts |
 | Implement per-request Ollama client isolation for abort safety   | Low          | 1 day      | provider.ts, client.ts     |
 
-## **Phase 3: Platform Maturity (Sprint 6-10)**
+### **Phase 3: Platform Maturity (Sprint 6-10)**
 
 Phase 3 encompasses the longer-term improvements that align the extension with the full breadth of VS Code AI capabilities and Ollama SDK features. These items require significant design consideration and may involve user-facing changes. The estimated total effort for Phase 3 is 8-12 developer days.
 
@@ -247,7 +247,7 @@ Phase 3 encompasses the longer-term improvements that align the extension with t
 | Improve mid-stream error detection in OpenAI-compat layer       | Low          | 1 day      | openaiCompat.ts                               |
 | Split extension.ts into focused modules                         | Low          | 3-5 days   | extension.ts -> multiple modules              |
 
-# **7\. Implementation Roadmap**
+## **7\. Implementation Roadmap**
 
 The implementation roadmap provides a visual timeline for executing the remediation plan across three phases. The timeline assumes a single developer working part-time on remediation alongside normal feature development. If a dedicated sprint is allocated, the timeline can be compressed accordingly.
 
@@ -262,7 +262,7 @@ The implementation roadmap provides a visual timeline for executing the remediat
 
 Each sprint should conclude with a full test run (unit tests, integration tests, and CodeQL analysis) to verify that no regressions have been introduced. The exit criteria for each sprint are defined above and should be treated as hard gates before proceeding to the next sprint.
 
-# **8\. Risk Assessment**
+## **8\. Risk Assessment**
 
 The following risk assessment identifies potential obstacles to successful remediation and proposes mitigation strategies for each.
 
@@ -275,9 +275,9 @@ The following risk assessment identifies potential obstacles to successful remed
 | Splitting extension.ts breaks activation timing           | Medium         | High       | Preserve the activate() function as the single entry point. Only extract internal logic, not activation orchestration.    |
 | Legacy settings cleanup affects existing users            | Medium         | Medium     | Add a settings version counter. Only clean up after confirming the user has successfully migrated (not on first install). |
 
-# **9\. Appendices**
+## **9\. Appendices**
 
-## **A. Reviewed Documentation Sources**
+### **A. Reviewed Documentation Sources**
 
 | **Source**          | **URL**                                                                    | **Key Topics**                                   |
 | ------------------- | -------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -291,7 +291,7 @@ The following risk assessment identifies potential obstacles to successful remed
 | Ollama REST API     | docs.ollama.com/api/introduction                                           | Endpoints, streaming, errors, OpenAI compat      |
 | Opilot Repository   | github.com/selfagency/opilot                                               | 18 source files, v1.5.0                          |
 
-## **B. Complete Issue Inventory**
+### **B. Complete Issue Inventory**
 
 The table below provides the complete inventory of all 42 issues identified during the review, organized by severity and category. Each issue is cross-referenced to the relevant documentation source where applicable.
 

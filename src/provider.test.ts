@@ -161,7 +161,7 @@ describe('OllamaChatModelProvider caching', () => {
     const client = new Ollama() as Ollama & { show: typeof vi.fn };
     const listSpy = vi.spyOn(client, 'list').mockResolvedValue({ models: [makeModel('starcoder2')] });
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
-    client.show = show as never;
+    client.show = show;
 
     const provider = new OllamaChatModelProvider(makeContext(), client, makeLogger());
 
@@ -178,7 +178,7 @@ describe('OllamaChatModelProvider caching', () => {
       .spyOn(client, 'list')
       .mockResolvedValue({ models: [makeModel('gpt-4'), makeModel('starcoder2')] });
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
-    client.show = show as never;
+    client.show = show;
 
     const provider = new OllamaChatModelProvider(makeContext(), client, makeLogger());
 
@@ -198,7 +198,7 @@ describe('OllamaChatModelProvider caching', () => {
     const client = new Ollama() as Ollama & { show: typeof vi.fn };
     const listSpy = vi.spyOn(client, 'list').mockResolvedValue({ models: [makeModel('starcoder2')] });
     const show = vi.fn().mockResolvedValue({ template: '', details: { families: [] } });
-    client.show = show as never;
+    client.show = show;
 
     const provider = new OllamaChatModelProvider(makeContext(), client, makeLogger());
 

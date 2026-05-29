@@ -309,56 +309,56 @@ describe('buildHtml (via resolveWebviewView)', () => {
   it('sets HTML on the webview', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain('Ollama Model Settings');
   });
 
   it('enables scripts on the webview', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect((view.webview.options as { enableScripts?: boolean }).enableScripts).toBe(true);
   });
 
   it('uses a nonced script tag', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toMatch(/script nonce="[A-Za-z0-9]{32}"/);
   });
 
   it('includes Content-Security-Policy with script-src nonce', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain("script-src 'nonce-");
   });
 
   it('includes the spinner element', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain('id="spinner"');
   });
 
   it('includes think-row id for thinking checkbox section', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain('id="think-row"');
   });
 
   it('includes think-budget-field id for thinking budget section', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain('id="think-budget-field"');
   });
 
   it('includes title attributes on field labels', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     // All field labels should have title attributes
     expect(view.webview.html).toContain('title="Controls output randomness');
     expect(view.webview.html).toContain('title="Nucleus sampling cutoff');
@@ -374,28 +374,28 @@ describe('buildHtml (via resolveWebviewView)', () => {
   it('includes disabled-section CSS class definition', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain('.disabled-section');
   });
 
   it('includes client-side thinking model pattern check', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain('THINKING_MODEL_PATTERN.test');
   });
 
   it('includes disabled-section toggle logic in renderFields', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain("classList.toggle('disabled-section'");
   });
 
   it('includes input disabled logic for thinking inputs', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     expect(view.webview.html).toContain('thinkEl.disabled = !isThinking');
   });
 });
@@ -410,7 +410,7 @@ describe('ModelSettingsViewProvider message handling', () => {
   it('posts hydrate message on ready', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     await view.fire({ type: 'ready' });
     expect(view.webview.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'hydrate' }));
   });
@@ -422,7 +422,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     };
     const provider = makeProvider({ getAvailableModels, initialStore });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     await view.fire({ type: 'ready' });
 
     const call = (view.webview.postMessage as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
@@ -438,7 +438,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     const getAvailableModels = vi.fn().mockResolvedValue(['zephyr:latest', 'llama3.2:latest', 'aya:8b']);
     const provider = makeProvider({ getAvailableModels });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     await view.fire({ type: 'ready' });
 
     const call = (view.webview.postMessage as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
@@ -451,7 +451,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     const getAvailableModels = vi.fn().mockResolvedValue(['zephyr:latest', 'aya:8b']);
     const provider = makeProvider({ getAvailableModels });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
     await view.fire({ type: 'ready' });
 
     const call = (view.webview.postMessage as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
@@ -464,7 +464,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     const onStoreChanged = vi.fn().mockResolvedValue(undefined);
     const provider = makeProvider({ onStoreChanged });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await view.fire({
       type: 'setModelSettings',
@@ -483,7 +483,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     const onStoreChanged = vi.fn().mockResolvedValue(undefined);
     const provider = makeProvider({ onStoreChanged });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await view.fire({
       type: 'setModelSettings',
@@ -502,7 +502,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     };
     const provider = makeProvider({ onStoreChanged, initialStore });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await view.fire({ type: 'resetModelSettings', modelId: 'llama3.2:latest' });
 
@@ -512,7 +512,7 @@ describe('ModelSettingsViewProvider message handling', () => {
   it('resetModelSettings also pushes a fresh hydrate', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await view.fire({ type: 'resetModelSettings', modelId: 'llama3.2:latest' });
 
@@ -523,7 +523,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     const onStoreChanged = vi.fn().mockResolvedValue(undefined);
     const provider = makeProvider({ onStoreChanged });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await view.fire({ type: 'setModelSettings', patch: { temperature: 0.3 } });
 
@@ -534,7 +534,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     const onStoreChanged = vi.fn().mockResolvedValue(undefined);
     const provider = makeProvider({ onStoreChanged });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await view.fire({
       type: 'setModelSettings',
@@ -549,7 +549,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     const onStoreChanged = vi.fn().mockResolvedValue(undefined);
     const provider = makeProvider({ onStoreChanged });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await view.fire({ type: 'unknownType' });
 
@@ -560,7 +560,7 @@ describe('ModelSettingsViewProvider message handling', () => {
     const onStoreChanged = vi.fn().mockResolvedValue(undefined);
     const provider = makeProvider({ onStoreChanged });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await view.fire(null);
 
@@ -570,7 +570,7 @@ describe('ModelSettingsViewProvider message handling', () => {
   it('does not push hydrate after webview is disposed', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     view.triggerDispose();
     await view.fire({ type: 'ready' });
@@ -590,7 +590,7 @@ describe('ModelSettingsViewProvider.updateStore', () => {
     const getAvailableModels = vi.fn().mockResolvedValue(['llama3.2:latest']);
     const provider = makeProvider({ getAvailableModels });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     const newStore: ModelSettingsStore = {
       'llama3.2:latest': { temperature: 0.3 }
@@ -621,7 +621,7 @@ describe('ModelSettingsViewProvider.open', () => {
   it('shows the webview when it is already resolved', async () => {
     const provider = makeProvider();
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await provider.open();
 
@@ -632,7 +632,7 @@ describe('ModelSettingsViewProvider.open', () => {
     const getAvailableModels = vi.fn().mockResolvedValue(['llama3.2:latest', 'qwen3:0.6b']);
     const provider = makeProvider({ getAvailableModels });
     const view = makeWebviewView();
-    await provider.resolveWebviewView(view as never);
+    await provider.resolveWebviewView(view);
 
     await provider.open('qwen3:0.6b');
 

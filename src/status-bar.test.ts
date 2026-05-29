@@ -103,7 +103,7 @@ describe('checkOllamaHealth', () => {
     expect(result.runningCount).toBe(0);
     expect(result.runningModels).toHaveLength(0);
     // list() must NOT have been called — network error means server is unreachable
-    expect((client.list as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+    expect(vi.mocked(client.list).mock.calls.length).toBe(0);
   });
 
   it('returns online=true when ps() fails with HTTP 4xx but list() succeeds (cloud API fallback)', async () => {
@@ -297,9 +297,9 @@ describe('registerStatusBarHeartbeat', () => {
     expect(mockStatusBarItem.dispose).toHaveBeenCalled();
 
     // No more ps() calls after dispose
-    const callsBefore = (client.ps as ReturnType<typeof vi.fn>).mock.calls.length;
+    const callsBefore = vi.mocked(client.ps).mock.calls.length;
     vi.advanceTimersByTime(60_000);
     await flushPromises();
-    expect((client.ps as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore);
+    expect(vi.mocked(client.ps).mock.calls.length).toBe(callsBefore);
   });
 });
