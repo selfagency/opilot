@@ -4,7 +4,7 @@ import { basename, isAbsolute, join, resolve } from 'node:path';
 import type { CreateRequest, Message, Ollama } from 'ollama';
 import * as vscode from 'vscode';
 import type { DiagnosticsLogger } from './diagnostics.js';
-import { reportError } from './errorHandler.js';
+import { reportError } from './error-handler.js';
 import { affectsSetting, getSetting } from './settings.js';
 
 // ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ export const KEYWORD_DOCS: Record<string, string> = {
   LICENSE: '**LICENSE** — Legal license text for the model.\n\n```\nLICENSE """\nMIT License...\n"""\n```',
   MESSAGE:
     '**MESSAGE** — Adds a message to the conversation history to guide the model.\n\nRoles: `system`, `user`, `assistant`.\n\n```\nMESSAGE user "Hello"\nMESSAGE assistant "Hi there!"\n```',
-  REQUIRES: '**REQUIRES** — Minimum Ollama version required by this Modelfile.\n\n```\nREQUIRES 0.14.0\n```',
+  REQUIRES: '**REQUIRES** — Minimum Ollama version required by this Modelfile.\n\n```\nREQUIRES 0.14.0\n```'
 };
 
 /**
@@ -60,7 +60,7 @@ const PARAMETER_DOCS: Record<string, string> = {
   frequency_penalty: '`frequency_penalty` — Penalizes tokens based on frequency. Default: 0.0',
   mirostat: '`mirostat` — Mirostat sampling (0=disabled, 1=v1, 2=v2). Default: 0',
   mirostat_tau: '`mirostat_tau` — Mirostat target entropy. Default: 5.0',
-  mirostat_eta: '`mirostat_eta` — Mirostat learning rate. Default: 0.1',
+  mirostat_eta: '`mirostat_eta` — Mirostat learning rate. Default: 0.1'
 };
 
 // ---------------------------------------------------------------------------
@@ -68,13 +68,13 @@ const PARAMETER_DOCS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 interface ParsedModelfile {
+  adapters?: Record<string, string>;
   from?: string;
+  license?: string | string[];
+  messages?: Message[];
+  parameters?: Record<string, unknown>;
   system?: string;
   template?: string;
-  license?: string | string[];
-  parameters?: Record<string, unknown>;
-  messages?: Message[];
-  adapters?: Record<string, string>;
 }
 
 /**
@@ -94,60 +94,84 @@ interface ParsedModelfile {
  *   key names (not the values) are used for hover documentation. No user-supplied
  *   parameter value reaches any context where injection is possible.
  */
+function parseQuotedValue(value: string, lines: string[], lineIndex: { i: number }): string {
+  if (value.startsWith('"""')) {
+    const afterOpen = value.slice(3);
+    if (afterOpen.endsWith('"""') && afterOpen.length > 3) {
+      return afterOpen.slice(0, afterOpen.length - 3);
+    }
+    const parts = [afterOpen];
+    lineIndex.i++;
+    while (lineIndex.i < lines.length) {
+      const nextLine = lines[lineIndex.i];
+      if (nextLine.trim() === '"""' || nextLine.trimEnd().endsWith('"""')) {
+        const closing = nextLine.trimEnd();
+        if (closing !== '"""') {
+          parts.push(closing.slice(0, closing.length - 3));
+        }
+        break;
+      }
+      parts.push(nextLine);
+      lineIndex.i++;
+    }
+    return parts.join('\n');
+  }
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+    return value.slice(1, value.length - 1);
+  }
+  return value;
+}
+
+function parseParameter(value: string, parameters: Record<string, unknown>): void {
+  const spaceIdx = value.indexOf(' ');
+  if (spaceIdx !== -1) {
+    const paramName = value.slice(0, spaceIdx);
+    const paramValue = value.slice(spaceIdx + 1).trim();
+    const numVal = Number(paramValue);
+    parameters[paramName] = Number.isFinite(numVal) ? numVal : paramValue;
+  }
+}
+
+function parseMessage(value: string, messages: Message[]): void {
+  const msgMatch = /^(system|user|assistant)\s+(.+)$/s.exec(value);
+  if (msgMatch) {
+    let msgContent = msgMatch[2];
+    if (msgContent.startsWith('"') && msgContent.endsWith('"')) {
+      msgContent = msgContent.slice(1, msgContent.length - 1);
+    }
+    messages.push({
+      role: msgMatch[1] as 'system' | 'user' | 'assistant',
+      content: msgContent
+    });
+  }
+}
+
 export function parseModelfile(content: string): ParsedModelfile {
   const result: ParsedModelfile = {};
   const parameters: Record<string, unknown> = {};
   const messages: Message[] = [];
   const licenses: string[] = [];
   const lines = content.split('\n');
+  const lineIndex = { i: 0 };
 
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
+  while (lineIndex.i < lines.length) {
+    const line = lines[lineIndex.i];
     const trimmed = line.trim();
 
-    // Skip blank lines and comments
     if (!trimmed || trimmed.startsWith('#')) {
-      i++;
+      lineIndex.i++;
       continue;
     }
 
     const spaceIdx = trimmed.indexOf(' ');
     if (spaceIdx === -1) {
-      i++;
+      lineIndex.i++;
       continue;
     }
 
-    const keyword = trimmed.substring(0, spaceIdx).toUpperCase();
-    let value = trimmed.substring(spaceIdx + 1).trim();
-
-    // Handle multi-line triple-quoted values
-    if (value.startsWith('"""')) {
-      const afterOpen = value.substring(3);
-      if (afterOpen.endsWith('"""') && afterOpen.length > 3) {
-        // Single-line triple-quoted: """content"""
-        value = afterOpen.substring(0, afterOpen.length - 3);
-      } else {
-        // Multi-line: collect until closing """
-        const parts = [afterOpen];
-        i++;
-        while (i < lines.length) {
-          const nextLine = lines[i];
-          if (nextLine.trim() === '"""' || nextLine.trimEnd().endsWith('"""')) {
-            const closing = nextLine.trimEnd();
-            if (closing !== '"""') {
-              parts.push(closing.substring(0, closing.length - 3));
-            }
-            break;
-          }
-          parts.push(nextLine);
-          i++;
-        }
-        value = parts.join('\n');
-      }
-    } else if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-      value = value.substring(1, value.length - 1);
-    }
+    const keyword = trimmed.slice(0, spaceIdx).toUpperCase();
+    let value = trimmed.slice(spaceIdx + 1).trim();
+    value = parseQuotedValue(value, lines, lineIndex);
 
     switch (keyword) {
       case 'FROM':
@@ -162,42 +186,35 @@ export function parseModelfile(content: string): ParsedModelfile {
       case 'LICENSE':
         licenses.push(value);
         break;
-      case 'ADAPTER': {
-        if (!result.adapters) result.adapters = {};
+      case 'ADAPTER':
+        if (!result.adapters) {
+          result.adapters = {};
+        }
         result.adapters[value] = value;
         break;
-      }
-      case 'PARAMETER': {
-        const paramSpaceIdx = value.indexOf(' ');
-        if (paramSpaceIdx !== -1) {
-          const paramName = value.substring(0, paramSpaceIdx);
-          const paramValue = value.substring(paramSpaceIdx + 1).trim();
-          // Try to parse as number or preserve as string
-          const numVal = Number(paramValue);
-          parameters[paramName] = Number.isFinite(numVal) ? numVal : paramValue;
-        }
+      case 'PARAMETER':
+        parseParameter(value, parameters);
         break;
-      }
-      case 'MESSAGE': {
-        // MESSAGE role "content" or MESSAGE role content
-        const msgMatch = /^(system|user|assistant)\s+(.+)$/s.exec(value);
-        if (msgMatch) {
-          let msgContent = msgMatch[2];
-          if (msgContent.startsWith('"') && msgContent.endsWith('"')) {
-            msgContent = msgContent.substring(1, msgContent.length - 1);
-          }
-          messages.push({ role: msgMatch[1] as 'system' | 'user' | 'assistant', content: msgContent });
-        }
+      case 'MESSAGE':
+        parseMessage(value, messages);
         break;
-      }
+      default:
+        break;
     }
-    i++;
+    lineIndex.i++;
   }
 
-  if (Object.keys(parameters).length > 0) result.parameters = parameters;
-  if (messages.length > 0) result.messages = messages;
-  if (licenses.length === 1) result.license = licenses[0];
-  else if (licenses.length > 1) result.license = licenses;
+  if (Object.keys(parameters).length > 0) {
+    result.parameters = parameters;
+  }
+  if (messages.length > 0) {
+    result.messages = messages;
+  }
+  if (licenses.length === 1) {
+    result.license = licenses[0];
+  } else if (licenses.length > 1) {
+    result.license = licenses;
+  }
 
   return result;
 }
@@ -209,7 +226,7 @@ export function parseModelfile(content: string): ParsedModelfile {
 export function getModelfilesFolder(
   config: Pick<vscode.WorkspaceConfiguration, 'get'>,
   home: string,
-  workspaceFolderPath?: string,
+  workspaceFolderPath?: string
 ): string {
   const configuredPath = (config.get<string>('modelfilesPath') || '').trim();
   if (!configuredPath) {
@@ -240,13 +257,18 @@ export async function ensureModelfilesFolder(folderPath: string): Promise<void> 
 // ---------------------------------------------------------------------------
 
 function createThemeIcon(id: string): vscode.ThemeIcon {
-  const ThemeIconCtor = vscode.ThemeIcon as unknown as { new (iconId: string): vscode.ThemeIcon };
+  const ThemeIconCtor = vscode.ThemeIcon as unknown as {
+    new (iconId: string): vscode.ThemeIcon;
+  };
   return new ThemeIconCtor(id);
 }
 
 export class ModelfileItem extends vscode.TreeItem {
-  constructor(public readonly uri: vscode.Uri) {
+  readonly uri: vscode.Uri;
+
+  constructor(uri: vscode.Uri) {
     super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.None);
+    this.uri = uri;
     this.contextValue = 'modelfile';
     this.iconPath = createThemeIcon('file-code');
     this.tooltip = uri.fsPath;
@@ -258,25 +280,24 @@ export class ModelfileItem extends vscode.TreeItem {
 // ---------------------------------------------------------------------------
 
 export class ModelfilesProvider implements vscode.TreeDataProvider<ModelfileItem> {
-  private treeChangeEmitter = new vscode.EventEmitter<ModelfileItem | null>();
+  private readonly treeChangeEmitter = new vscode.EventEmitter<ModelfileItem | null>();
   readonly onDidChangeTreeData: vscode.Event<ModelfileItem | null> = this.treeChangeEmitter.event;
 
   private folderPath: string;
+  private readonly log?: DiagnosticsLogger;
 
-  constructor(
-    context: vscode.ExtensionContext,
-    private readonly log?: DiagnosticsLogger,
-  ) {
+  constructor(context: vscode.ExtensionContext, log?: DiagnosticsLogger) {
+    this.log = log;
     this.folderPath = getModelfilesFolder(
       {
-        get: <T>(_key: string) => getSetting<T>('modelfilesPath') as T,
+        get: <T>(_key: string) => getSetting<T>('modelfilesPath') as T
       },
       homedir(),
-      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
     );
 
     const watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(this.folderPath, '{*.modelfile,Modelfile}'),
+      new vscode.RelativePattern(this.folderPath, '{*.modelfile,Modelfile}')
     );
     watcher.onDidCreate(() => this.refresh());
     watcher.onDidDelete(() => this.refresh());
@@ -288,14 +309,14 @@ export class ModelfilesProvider implements vscode.TreeDataProvider<ModelfileItem
         if (affectsSetting(e, 'modelfilesPath')) {
           this.folderPath = getModelfilesFolder(
             {
-              get: <T>(_key: string) => getSetting<T>('modelfilesPath') as T,
+              get: <T>(_key: string) => getSetting<T>('modelfilesPath') as T
             },
             homedir(),
-            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
           );
           this.refresh();
         }
-      }),
+      })
     );
   }
 
@@ -320,7 +341,9 @@ export class ModelfilesProvider implements vscode.TreeDataProvider<ModelfileItem
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(e => new ModelfileItem(vscode.Uri.file(join(this.folderPath, e.name))));
     } catch (error) {
-      reportError(this.log, 'Failed to read modelfiles folder', error, { showToUser: false });
+      reportError(this.log, 'Failed to read modelfiles folder', error, {
+        showToUser: false
+      });
       return [];
     }
   }
@@ -335,12 +358,18 @@ export async function handleNewModelfile(folderPath: string, client: Ollama): Pr
     prompt: 'Modelfile name (without extension)',
     placeHolder: 'e.g. pirate-bot',
     validateInput: v => {
-      if (!v) return 'Name is required';
-      if (/[/\\]/.test(v)) return 'Name cannot contain path separators';
+      if (!v) {
+        return 'Name is required';
+      }
+      if (/[/\\]/.test(v)) {
+        return 'Name cannot contain path separators';
+      }
       return null;
-    },
+    }
   });
-  if (!name) return;
+  if (!name) {
+    return;
+  }
 
   // Fetch available local models for the quick pick
   let modelItems: vscode.QuickPickItem[] = [];
@@ -356,17 +385,21 @@ export async function handleNewModelfile(folderPath: string, client: Ollama): Pr
     modelItems.length > 0 ? modelItems : [{ label: 'llama3.2:3b', description: 'default' }],
     {
       placeHolder: 'Select a base model',
-      title: 'New Modelfile — choose base model',
-    },
+      title: 'New Modelfile — choose base model'
+    }
   );
-  if (!selectedModel) return;
+  if (!selectedModel) {
+    return;
+  }
 
   const systemPrompt = await vscode.window.showInputBox({
     prompt: 'System prompt (describes the AI persona or task)',
     placeHolder: 'e.g. You are a helpful pirate assistant. Arr!',
-    value: 'You are a helpful assistant.',
+    value: 'You are a helpful assistant.'
   });
-  if (systemPrompt === undefined) return;
+  if (systemPrompt === undefined) {
+    return;
+  }
 
   const fileName = name.endsWith('.modelfile') ? name : `${name}.modelfile`;
   const uri = vscode.Uri.file(join(folderPath, fileName));
@@ -379,7 +412,7 @@ export async function handleNewModelfile(folderPath: string, client: Ollama): Pr
     '',
     'PARAMETER temperature 0.7',
     'PARAMETER num_ctx 4096',
-    '',
+    ''
   ].join('\n');
 
   await vscode.workspace.fs.writeFile(uri, Buffer.from(content));
@@ -387,59 +420,75 @@ export async function handleNewModelfile(folderPath: string, client: Ollama): Pr
   await vscode.window.showTextDocument(doc);
 }
 
+async function buildModelfileStream(
+  item: ModelfileItem,
+  modelName: string,
+  client: Ollama,
+  progress: vscode.Progress<{ message?: string }>,
+  log?: DiagnosticsLogger
+): Promise<void> {
+  const content = await readFile(item.uri.fsPath, 'utf8');
+  const parsed = parseModelfile(content);
+
+  if (!parsed.from) {
+    vscode.window.showErrorMessage('Modelfile is missing the required FROM directive.');
+    return;
+  }
+
+  const createRequest: CreateRequest & { stream: true } = {
+    model: modelName,
+    from: parsed.from,
+    stream: true,
+    ...(parsed.system ? { system: parsed.system } : {}),
+    ...(parsed.template ? { template: parsed.template } : {}),
+    ...(parsed.license ? { license: parsed.license } : {}),
+    ...(parsed.parameters ? { parameters: parsed.parameters } : {}),
+    ...(parsed.messages ? { messages: parsed.messages } : {}),
+    ...(parsed.adapters ? { adapters: parsed.adapters } : {})
+  };
+
+  const stream = await client.create(createRequest);
+
+  for await (const chunk of stream) {
+    if (chunk.status) {
+      progress.report({ message: chunk.status });
+    }
+  }
+
+  log?.info(`[client] model built: ${modelName}`);
+  await vscode.commands.executeCommand('opilot.refreshLocalModels');
+  vscode.window.showInformationMessage(`Model "${modelName}" built successfully`);
+}
+
 export async function handleBuildModelfile(
   item: ModelfileItem,
   client: Ollama,
-  log?: DiagnosticsLogger,
+  log?: DiagnosticsLogger
 ): Promise<void> {
   const defaultName = basename(item.uri.fsPath, '.modelfile');
 
   const modelName = await vscode.window.showInputBox({
     prompt: 'Model name to create',
     value: defaultName,
-    validateInput: v => (!v ? 'Model name is required' : null),
+    validateInput: v => (v ? null : 'Model name is required')
   });
-  if (!modelName) return;
+  if (!modelName) {
+    return;
+  }
 
   await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: `Building ${modelName}`, cancellable: false },
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Building ${modelName}`,
+      cancellable: false
+    },
     async progress => {
       try {
-        const content = await readFile(item.uri.fsPath, 'utf8');
-        const parsed = parseModelfile(content);
-
-        if (!parsed.from) {
-          vscode.window.showErrorMessage('Modelfile is missing the required FROM directive.');
-          return;
-        }
-
-        const createRequest: CreateRequest & { stream: true } = {
-          model: modelName,
-          from: parsed.from,
-          stream: true,
-          ...(parsed.system ? { system: parsed.system } : {}),
-          ...(parsed.template ? { template: parsed.template } : {}),
-          ...(parsed.license ? { license: parsed.license } : {}),
-          ...(parsed.parameters ? { parameters: parsed.parameters } : {}),
-          ...(parsed.messages ? { messages: parsed.messages } : {}),
-          ...(parsed.adapters ? { adapters: parsed.adapters } : {}),
-        };
-
-        const stream = await client.create(createRequest);
-
-        for await (const chunk of stream) {
-          if (chunk.status) {
-            progress.report({ message: chunk.status });
-          }
-        }
-
-        log?.info(`[client] model built: ${modelName}`);
-        await vscode.commands.executeCommand('opilot.refreshLocalModels');
-        vscode.window.showInformationMessage(`Model "${modelName}" built successfully`);
+        await buildModelfileStream(item, modelName, client, progress, log);
       } catch (error) {
         reportError(log, 'Failed to build model', error, { showToUser: true });
       }
-    },
+    }
   );
 }
 
@@ -453,7 +502,9 @@ export async function handleOpenModelfilesFolder(folderPath: string, log?: Diagn
       await vscode.commands.executeCommand('revealFileInOS', folderUri);
     }
   } catch (error) {
-    reportError(log, 'Failed to open Modelfiles folder', error, { showToUser: true });
+    reportError(log, 'Failed to open Modelfiles folder', error, {
+      showToUser: true
+    });
   }
 }
 
@@ -465,38 +516,74 @@ export function createHoverProvider(): vscode.HoverProvider {
   return {
     provideHover(document, position) {
       const wordRange = document.getWordRangeAtPosition(position, /[A-Z_a-z][A-Z_a-z0-9]*/);
-      if (!wordRange) return null;
+      if (!wordRange) {
+        return null;
+      }
 
       const word = document.getText(wordRange);
       const doc = KEYWORD_DOCS[word] ?? PARAMETER_DOCS[word];
-      if (!doc) return null;
+      if (!doc) {
+        return null;
+      }
 
       return new vscode.Hover(new vscode.MarkdownString(doc), wordRange);
-    },
+    }
   };
 }
 
 export function createCompletionProvider(): vscode.CompletionItemProvider {
   const keywords = [
-    { label: 'FROM', detail: 'Base model (required)', snippet: 'FROM ${1:llama3.2:3b}' },
-    { label: 'SYSTEM', detail: 'System message', snippet: 'SYSTEM """${1:You are a helpful assistant.}"""' },
-    { label: 'PARAMETER', detail: 'Runtime parameter', snippet: 'PARAMETER ${1:temperature} ${2:0.7}' },
-    { label: 'TEMPLATE', detail: 'Full prompt template', snippet: 'TEMPLATE """${1:{{ .Prompt }}}"""' },
-    { label: 'ADAPTER', detail: 'LoRA adapter path', snippet: 'ADAPTER ${1:./adapter.gguf}' },
-    { label: 'LICENSE', detail: 'Model license', snippet: 'LICENSE """${1:MIT}"""' },
-    { label: 'MESSAGE', detail: 'Conversation history', snippet: 'MESSAGE ${1|user,assistant,system|} "${2}"' },
-    { label: 'REQUIRES', detail: 'Minimum Ollama version', snippet: 'REQUIRES ${1:0.14.0}' },
+    {
+      label: 'FROM',
+      detail: 'Base model (required)',
+      snippet: 'FROM ${1:llama3.2:3b}'
+    },
+    {
+      label: 'SYSTEM',
+      detail: 'System message',
+      snippet: 'SYSTEM """${1:You are a helpful assistant.}"""'
+    },
+    {
+      label: 'PARAMETER',
+      detail: 'Runtime parameter',
+      snippet: 'PARAMETER ${1:temperature} ${2:0.7}'
+    },
+    {
+      label: 'TEMPLATE',
+      detail: 'Full prompt template',
+      snippet: 'TEMPLATE """${1:{{ .Prompt }}}"""'
+    },
+    {
+      label: 'ADAPTER',
+      detail: 'LoRA adapter path',
+      snippet: 'ADAPTER ${1:./adapter.gguf}'
+    },
+    {
+      label: 'LICENSE',
+      detail: 'Model license',
+      snippet: 'LICENSE """${1:MIT}"""'
+    },
+    {
+      label: 'MESSAGE',
+      detail: 'Conversation history',
+      snippet: 'MESSAGE ${1|user,assistant,system|} "${2}"'
+    },
+    {
+      label: 'REQUIRES',
+      detail: 'Minimum Ollama version',
+      snippet: 'REQUIRES ${1:0.14.0}'
+    }
   ];
 
   const params = Object.entries(PARAMETER_DOCS).map(([name, detail]) => ({
     label: name,
     detail,
-    kind: vscode.CompletionItemKind.Property,
+    kind: vscode.CompletionItemKind.Property
   }));
 
   return {
     provideCompletionItems(document, position) {
-      const lineText = document.lineAt(position).text.substring(0, position.character);
+      const lineText = document.lineAt(position).text.slice(0, position.character);
       const isParameterLine = /^PARAMETER\s+\w*$/.test(lineText);
 
       if (isParameterLine) {
@@ -518,7 +605,7 @@ export function createCompletionProvider(): vscode.CompletionItemProvider {
       }
 
       return [];
-    },
+    }
   };
 }
 
@@ -529,7 +616,7 @@ export function createCompletionProvider(): vscode.CompletionItemProvider {
 export function registerModelfileManager(
   context: vscode.ExtensionContext,
   client: Ollama,
-  log?: DiagnosticsLogger,
+  log?: DiagnosticsLogger
 ): void {
   const provider = new ModelfilesProvider(context, log);
 
@@ -538,15 +625,15 @@ export function registerModelfileManager(
     vscode.commands.registerCommand('opilot.refreshModelfiles', () => provider.refresh()),
     vscode.commands.registerCommand('opilot.newModelfile', () => handleNewModelfile(provider.getFolderPath(), client)),
     vscode.commands.registerCommand('opilot.editModelfile', (item: ModelfileItem) =>
-      vscode.commands.executeCommand('vscode.open', item.uri),
+      vscode.commands.executeCommand('vscode.open', item.uri)
     ),
     vscode.commands.registerCommand('opilot.buildModelfile', (item: ModelfileItem) =>
-      handleBuildModelfile(item, client, log),
+      handleBuildModelfile(item, client, log)
     ),
     vscode.commands.registerCommand('opilot.openModelfilesFolder', async () =>
-      handleOpenModelfilesFolder(provider.getFolderPath(), log),
+      handleOpenModelfilesFolder(provider.getFolderPath(), log)
     ),
     vscode.languages.registerHoverProvider({ language: 'modelfile' }, createHoverProvider()),
-    vscode.languages.registerCompletionItemProvider({ language: 'modelfile' }, createCompletionProvider(), ' '),
+    vscode.languages.registerCompletionItemProvider({ language: 'modelfile' }, createCompletionProvider(), ' ')
   );
 }

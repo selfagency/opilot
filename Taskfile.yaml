@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://taskfile.dev/schema.json
 
-version: '3'
+version: "3"
 
 tasks:
   check-types:
@@ -9,22 +9,40 @@ tasks:
       - ./node_modules/.bin/tsc --noEmit
     silent: false
 
+  check:
+    desc: Run linter check
+    cmds:
+      - ./node_modules/.bin/ultracite check
+    silent: false
+
   lint:
     desc: Run linter
     cmds:
-      - ./node_modules/.bin/oxlint .
+      - ./node_modules/.bin/ultracite check
     silent: false
 
   lint-fix:
     desc: Run linter with auto-fix
     cmds:
-      - ./node_modules/.bin/oxlint . --fix
+      - ./node_modules/.bin/ultracite fix
     silent: false
 
-  check-formatting:
-    desc: Check formatting
+  docs-build:
+    desc: Build documentation
     cmds:
-      - ./node_modules/.bin/oxfmt . --check
+      - ./node_modules/.bin/vitepress build
+    silent: false
+
+  docs-dev:
+    desc: Start documentation dev server
+    cmds:
+      - ./node_modules/.bin/vitepress dev
+    silent: false
+
+  docs-preview:
+    desc: Preview built documentation
+    cmds:
+      - ./node_modules/.bin/vitepress preview
     silent: false
 
   check-all:
@@ -32,7 +50,6 @@ tasks:
     cmds:
       - task: check-types
       - task: lint
-      - task: check-formatting
     silent: false
 
   compile:
@@ -41,12 +58,6 @@ tasks:
       NODE_ENV: production
     cmds:
       - ./node_modules/.bin/tsup
-    silent: false
-
-  format:
-    desc: Format code
-    cmds:
-      - ./node_modules/.bin/oxfmt . --write
     silent: false
 
   unit-tests:
@@ -64,7 +75,7 @@ tasks:
   extension-tests:
     desc: Run extension tests
     cmds:
-      - node test/extension/index.js {{.CLI_ARGS}}
+      - node test/extension/index.mjs {{.CLI_ARGS}}
     silent: false
 
   pull-models:
@@ -87,7 +98,6 @@ tasks:
     deps: [check-types]
     cmds:
       - task: lint-fix
-      - task: format
     silent: false
 
   prerelease:

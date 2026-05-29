@@ -8,11 +8,11 @@ export default defineConfig({
   format: ['cjs'],
   platform: 'node',
   external: ['vscode'],
-  noExternal: ['ollama', /^@selfagency\/llm-stream-parser/],
+  noExternal: ['ollama', /^@agentsy\/core/],
   sourcemap: !production,
   minify: production,
   clean: true,
   esbuildOptions(options) {
     options.sourcesContent = false;
-  },
+  }
 });

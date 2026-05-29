@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "command": "pnpm fix --skip=correctness/noUnusedImports",
+        "type": "command"
+      }
+    ]
+  }
+}

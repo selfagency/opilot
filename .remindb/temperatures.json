@@ -1,0 +1,8 @@
+{
+  "README.md": 0.8,
+  "AGENTS.md": 0.8,
+  ".github/copilot-instructions.md": 0.7,
+  "docs/developers/architecture.md": 0.7,
+  "docs/**": 0.5,
+  "CHANGELOG.md": 0.3
+}

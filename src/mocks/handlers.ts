@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw';
+import { HttpResponse, http } from 'msw';
 
 const OLLAMA_BASE = 'http://localhost:11434';
 
@@ -15,7 +15,7 @@ function sseStream(...payloads: string[]): ReadableStream<Uint8Array> {
       }
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
       controller.close();
-    },
+    }
   });
 }
 
@@ -53,17 +53,23 @@ export function libraryPageHtml(models: string[]): string {
 export const DEFAULT_CHAT_CHUNK = JSON.stringify({
   id: 'chatcmpl-test',
   model: 'llama3.2',
-  choices: [{ index: 0, delta: { role: 'assistant', content: 'Hello!' } }],
+  choices: [{ index: 0, delta: { role: 'assistant', content: 'Hello!' } }]
 });
 
 export const DEFAULT_CHAT_RESPONSE = {
   id: 'chatcmpl-test',
   model: 'llama3.2',
-  choices: [{ index: 0, message: { role: 'assistant', content: 'Hello!' }, finish_reason: 'stop' }],
+  choices: [
+    {
+      index: 0,
+      message: { role: 'assistant', content: 'Hello!' },
+      finish_reason: 'stop'
+    }
+  ]
 };
 
 export const DEFAULT_OLLAMA_API_TAGS = {
-  models: [{ name: 'devstral:cloud' }, { name: 'llama4:cloud' }],
+  models: [{ name: 'devstral:cloud' }, { name: 'llama4:cloud' }]
 };
 
 export const DEFAULT_LIBRARY_MODELS = ['llama3.2', 'mistral', 'phi4'];
@@ -82,39 +88,41 @@ export const ollamaLocalHandlers = [
       return HttpResponse.json(DEFAULT_CHAT_RESPONSE);
     }
     return new HttpResponse(sseStream(DEFAULT_CHAT_CHUNK), {
-      headers: { 'Content-Type': 'text/event-stream' },
+      headers: { 'Content-Type': 'text/event-stream' }
     });
-  }),
+  })
 ];
 
 /** Handlers for the ollama.com public API */
 export const ollamaComHandlers = [
   // Main library listing page
-  http.get('https://ollama.com/library', () => {
-    return new HttpResponse(libraryPageHtml(DEFAULT_LIBRARY_MODELS), {
-      headers: { 'Content-Type': 'text/html' },
-    });
-  }),
+  http.get(
+    'https://ollama.com/library',
+    () =>
+      new HttpResponse(libraryPageHtml(DEFAULT_LIBRARY_MODELS), {
+        headers: { 'Content-Type': 'text/html' }
+      })
+  ),
 
   // Model detail page (used by fetchModelPagePreview + fetchModelVariants)
   http.get('https://ollama.com/library/:model', ({ params }) => {
-    const name = params['model'] as string;
+    const name = params.model as string;
     return new HttpResponse(modelPageHtml({ name }), {
-      headers: { 'Content-Type': 'text/html' },
+      headers: { 'Content-Type': 'text/html' }
     });
   }),
 
   // Cloud search / model HTML listing
-  http.get('https://ollama.com/search', () => {
-    return new HttpResponse(libraryPageHtml(DEFAULT_CLOUD_MODELS), {
-      headers: { 'Content-Type': 'text/html' },
-    });
-  }),
+  http.get(
+    'https://ollama.com/search',
+    () =>
+      new HttpResponse(libraryPageHtml(DEFAULT_CLOUD_MODELS), {
+        headers: { 'Content-Type': 'text/html' }
+      })
+  ),
 
   // Cloud model tags (JSON used by CloudModelsProvider)
-  http.get('https://ollama.com/api/tags', () => {
-    return HttpResponse.json(DEFAULT_OLLAMA_API_TAGS);
-  }),
+  http.get('https://ollama.com/api/tags', () => HttpResponse.json(DEFAULT_OLLAMA_API_TAGS))
 ];
 
 /** All default handlers combined. Import this in `src/mocks/node.ts`. */

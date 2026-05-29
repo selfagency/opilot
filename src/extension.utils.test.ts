@@ -7,7 +7,7 @@ beforeEach(() => {
     workspace: {
       getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      openTextDocument: vi.fn(),
+      openTextDocument: vi.fn()
     },
     window: {
       createOutputChannel: vi.fn(() => ({
@@ -16,39 +16,42 @@ beforeEach(() => {
         error: vi.fn(),
         debug: vi.fn(),
         log: vi.fn(),
-        show: vi.fn(),
+        show: vi.fn()
       })),
       showErrorMessage: vi.fn(),
       showWarningMessage: vi.fn(),
       showInformationMessage: vi.fn(),
-      showTextDocument: vi.fn(),
+      showTextDocument: vi.fn()
     },
     commands: {
       executeCommand: vi.fn(),
-      registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+      registerCommand: vi.fn(() => ({ dispose: vi.fn() }))
     },
     lm: {
       selectChatModels: vi.fn().mockResolvedValue([]),
       registerLanguageModelChatProvider: vi.fn(() => ({ dispose: vi.fn() })),
       tools: [],
-      invokeTool: vi.fn(),
+      invokeTool: vi.fn()
     },
     languages: {
-      registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      registerInlineCompletionItemProvider: vi.fn(() => ({ dispose: vi.fn() }))
     },
     chat: {
-      createChatParticipant: vi.fn(() => ({ iconPath: undefined, dispose: vi.fn() })),
+      createChatParticipant: vi.fn(() => ({
+        iconPath: undefined,
+        dispose: vi.fn()
+      }))
     },
     Uri: {
       file: vi.fn((path: string) => ({ fsPath: path })),
-      joinPath: vi.fn((_base: unknown, p: string) => ({ fsPath: p })),
+      joinPath: vi.fn((_base: unknown, p: string) => ({ fsPath: p }))
     },
     LanguageModelTextPart: class {
       constructor(public value: string) {}
     },
     LanguageModelChatMessage: {
       User: vi.fn((content: string) => ({ role: 'user', content })),
-      Assistant: vi.fn((content: string) => ({ role: 'assistant', content })),
+      Assistant: vi.fn((content: string) => ({ role: 'assistant', content }))
     },
     LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
     ChatRequestTurn: class {},
@@ -57,7 +60,7 @@ beforeEach(() => {
     InlineCompletionItem: class {
       constructor(public readonly insertText: string) {}
     },
-    ConfigurationTarget: { Global: 1 },
+    ConfigurationTarget: { Global: 1 }
   }));
 
   vi.doMock('./client.js', () => ({
@@ -66,7 +69,7 @@ beforeEach(() => {
     getOllamaAuthToken: vi.fn(),
     getOllamaHost: vi.fn(() => 'http://localhost:11434'),
     testConnection: vi.fn(),
-    redactUrlCredentials: vi.fn((value: string) => value),
+    redactUrlCredentials: vi.fn((value: string) => value)
   }));
 
   vi.doMock('./diagnostics.js', () => ({
@@ -75,16 +78,16 @@ beforeEach(() => {
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
-      exception: vi.fn(),
+      exception: vi.fn()
     })),
-    getConfiguredLogLevel: vi.fn(() => 'info'),
+    getConfiguredLogLevel: vi.fn(() => 'info')
   }));
 
   vi.doMock('./provider.js', () => ({
     OllamaChatModelProvider: class {
       setAuthToken = vi.fn();
     },
-    isThinkingModelId: vi.fn(() => false),
+    isThinkingModelId: vi.fn(() => false)
   }));
 
   vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
@@ -104,12 +107,12 @@ describe('extension utility helpers', () => {
     const mapped = mapOpenAiToolCallsToOllamaLike([
       { id: 'c1', function: { name: 'search', arguments: '{"q":"abc"}' } },
       { id: 'c2', function: { name: 'broken', arguments: '{bad json' } },
-      null,
+      null
     ]);
 
     expect(mapped).toEqual([
       { id: 'c1', function: { name: 'search', arguments: { q: 'abc' } } },
-      { id: 'c2', function: { name: 'broken', arguments: {} } },
+      { id: 'c2', function: { name: 'broken', arguments: {} } }
     ]);
 
     expect(mapOpenAiToolCallsToOllamaLike([])).toBeUndefined();
@@ -166,18 +169,18 @@ describe('extension utility helpers', () => {
       warn: vi.fn(),
       error: vi.fn(),
       debug: vi.fn(),
-      exception: vi.fn(),
+      exception: vi.fn()
     };
     const onLogLevelChange = vi.fn();
     const onAutoStartChange = vi.fn();
 
     handleConfigurationChange(
       {
-        affectsConfiguration: (key: string) => key === 'ollama.diagnostics.logLevel' || key === 'ollama.streamLogs',
+        affectsConfiguration: (key: string) => key === 'ollama.diagnostics.logLevel' || key === 'ollama.streamLogs'
       } as any,
       diagnostics as any,
       onLogLevelChange,
-      onAutoStartChange,
+      onAutoStartChange
     );
 
     expect(onLogLevelChange).toHaveBeenCalledTimes(1);
@@ -189,7 +192,7 @@ describe('extension utility helpers', () => {
 
     const { handleConnectionTestFailure } = await import('./extension.js');
     await handleConnectionTestFailure('http://localhost:11434', {
-      showErrorMessage,
+      showErrorMessage
     } as any);
 
     // Confirms the Open Logs path was reached.

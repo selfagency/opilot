@@ -1,5 +1,5 @@
 /* eslint-disable jest/expect-expect */
-'use strict';
+
 const assert = require('assert');
 const vscode = require('vscode');
 
@@ -64,7 +64,7 @@ exports.run = async () => {
     'opilot.editModelfile',
     'opilot.buildModelfile',
     'opilot.openModelfilesFolder',
-    'opilot.refreshModelfiles',
+    'opilot.refreshModelfiles'
   ];
 
   for (const cmd of expectedCommands) {
@@ -126,7 +126,7 @@ exports.run = async () => {
   const validLevels = ['debug', 'info', 'warn', 'error'];
   assert.ok(
     validLevels.includes(logLevel) || logLevel === undefined,
-    `logLevel should be one of ${validLevels.join(', ')}`,
+    `logLevel should be one of ${validLevels.join(', ')}`
   );
   console.log('✓ ollama.diagnostics.logLevel setting accessible');
 

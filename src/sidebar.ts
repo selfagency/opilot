@@ -3,26 +3,26 @@ import { readFile } from 'node:fs/promises';
 import { homedir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { Ollama } from 'ollama';
+import type { Ollama } from 'ollama';
 import {
   commands,
-  Disposable,
-  env,
-  Event,
+  type Disposable,
+  type Event,
   EventEmitter,
-  ExtensionContext,
+  type ExtensionContext,
+  env,
   ProgressLocation,
   ThemeIcon,
-  TreeDataProvider,
+  type TreeDataProvider,
   TreeItem,
   TreeItemCollapsibleState,
   Uri,
   window,
-  workspace,
+  workspace
 } from 'vscode';
 import { fetchModelCapabilities, getCloudOllamaClient, type ModelCapabilities } from './client.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
-import { reportError } from './errorHandler.js';
+import { reportError } from './error-handler.js';
 import { isThinkingModelId } from './provider.js';
 import { affectsSetting, getSetting } from './settings.js';
 
@@ -30,7 +30,7 @@ const execFileAsync = promisify(execFile);
 
 export async function readLinuxJournalctlLogs(
   runCommand: (file: string, args: string[]) => Promise<{ stdout: string }> = (file, args) =>
-    execFileAsync(file, args) as Promise<{ stdout: string }>,
+    execFileAsync(file, args) as Promise<{ stdout: string }>
 ): Promise<string | null> {
   try {
     const { stdout } = await runCommand('journalctl', ['-u', 'ollama', '-n', '1000', '--no-pager', '--output=cat']);
@@ -46,7 +46,7 @@ export async function readLinuxJournalctlLogs(
 
 export function getForceKillCommand(
   pid: number,
-  platform: NodeJS.Platform = process.platform,
+  platform: NodeJS.Platform = process.platform
 ): { file: string; args: string[] } {
   const normalizedPid = Math.max(0, Math.trunc(pid));
   if (platform === 'win32') {
@@ -73,7 +73,7 @@ function getAvailableMemoryGb(): number {
 export function extractParamsBillions(modelName: string): number | null {
   // Match a size token like ":3b", "-7b", "_72b", ".6b" anywhere in the name.
   const m = /(?:[:\-_.])(\d+(?:\.\d+)?)b\b/i.exec(modelName);
-  return m ? parseFloat(m[1]) : null;
+  return m ? Number.parseFloat(m[1]) : null;
 }
 
 /**
@@ -95,7 +95,9 @@ export function extractParamsBillions(modelName: string): number | null {
  */
 export function isRecommendedForHardware(modelName: string): boolean {
   const params = extractParamsBillions(modelName);
-  if (params === null) return true; // Unknown size — show rather than hide
+  if (params === null) {
+    return true; // Unknown size — show rather than hide
+  }
   const memGb = params * 2 * 0.5; // INT4 quant: ~1 GB per billion params
   return memGb <= getAvailableMemoryGb() * 0.6;
 }
@@ -132,7 +134,7 @@ export class ModelTreeItem extends TreeItem {
       | 'cloud-stopped'
       | 'status',
     public readonly size?: number,
-    public readonly durationMs?: number,
+    public readonly durationMs?: number
   ) {
     super(label);
     this.contextValue = type;
@@ -164,27 +166,37 @@ export class ModelTreeItem extends TreeItem {
   }
 
   private formatSize(bytes?: number): string {
-    if (!bytes) return '';
+    if (!bytes) {
+      return '';
+    }
     if (bytes < 1024 ** 2) {
-      return Math.round(bytes / 1024) + ' KB';
+      return `${Math.round(bytes / 1024)} KB`;
     }
     if (bytes < 1024 ** 3) {
-      return Math.round(bytes / 1024 ** 2) + ' MB';
+      return `${Math.round(bytes / 1024 ** 2)} MB`;
     }
     const gb = bytes / 1024 ** 3;
-    return gb.toFixed(1) + ' GB';
+    return `${gb.toFixed(1)} GB`;
   }
 
   private formatDuration(ms?: number): string {
-    if (!ms) return '';
+    if (!ms) {
+      return '';
+    }
     const secs = Math.floor(ms / 1000);
     const mins = Math.floor(secs / 60);
     const hours = Math.floor(mins / 60);
     const days = Math.floor(hours / 24);
 
-    if (days > 0) return `${days}d ${hours % 24}h`;
-    if (hours > 0) return `${hours}h ${mins % 60}m`;
-    if (mins > 0) return `${mins}m ${secs % 60}s`;
+    if (days > 0) {
+      return `${days}d ${hours % 24}h`;
+    }
+    if (hours > 0) {
+      return `${hours}h ${mins % 60}m`;
+    }
+    if (mins > 0) {
+      return `${mins}m ${secs % 60}s`;
+    }
     return `${secs}s`;
   }
 }
@@ -192,16 +204,18 @@ export class ModelTreeItem extends TreeItem {
 function createThemeIcon(id: string): ThemeIcon {
   // The bundled `vscode` typings in this repo mark the constructor private,
   // but VS Code runtime supports codicon IDs for TreeItem ThemeIcon values.
-  const ThemeIconCtor = ThemeIcon as unknown as { new (iconId: string): ThemeIcon };
+  const ThemeIconCtor = ThemeIcon as unknown as {
+    new (iconId: string): ThemeIcon;
+  };
   return new ThemeIconCtor(id);
 }
 
 function getNumberField(record: unknown, key: string): number | undefined {
   if (!record || typeof record !== 'object') {
-    return undefined;
+    return;
   }
   if (!Object.hasOwn(record, key)) {
-    return undefined;
+    return;
   }
   const value = (record as Record<string, unknown>)[key];
   return typeof value === 'number' ? value : undefined;
@@ -209,10 +223,10 @@ function getNumberField(record: unknown, key: string): number | undefined {
 
 function getStringField(record: unknown, key: string): string | undefined {
   if (!record || typeof record !== 'object') {
-    return undefined;
+    return;
   }
   if (!Object.hasOwn(record, key)) {
-    return undefined;
+    return;
   }
   const value = (record as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : undefined;
@@ -288,7 +302,7 @@ export function groupModelsByFamily(models: ModelTreeItem[]): Map<string, ModelT
     if (!groups.has(family)) {
       groups.set(family, []);
     }
-    groups.get(family)!.push(model);
+    groups.get(family)?.push(model);
   }
 
   return groups;
@@ -303,14 +317,27 @@ export function aggregateFamilyCapabilities(familyModels: ModelTreeItem[]): {
   vision: boolean;
   embedding: boolean;
 } {
-  const caps = { thinking: false, tools: false, vision: false, embedding: false };
+  const caps = {
+    thinking: false,
+    tools: false,
+    vision: false,
+    embedding: false
+  };
 
   for (const model of familyModels) {
     const desc = (model.description ?? '').toString();
-    if (desc.includes('🧠')) caps.thinking = true;
-    if (desc.includes('🛠️')) caps.tools = true;
-    if (desc.includes('👁️')) caps.vision = true;
-    if (desc.includes('🧩')) caps.embedding = true;
+    if (desc.includes('🧠')) {
+      caps.thinking = true;
+    }
+    if (desc.includes('🛠️')) {
+      caps.tools = true;
+    }
+    if (desc.includes('👁️')) {
+      caps.vision = true;
+    }
+    if (desc.includes('🧩')) {
+      caps.embedding = true;
+    }
   }
 
   return caps;
@@ -324,18 +351,18 @@ function makeStatusActionItem(label: string, commandId: string, title?: string):
   const item = new ModelTreeItem(label, 'status');
   item.command = {
     command: commandId,
-    title: title ?? label,
+    title: title ?? label
   };
   return item;
 }
 
-type RunningProcessInfo = {
-  id?: string;
+interface RunningProcessInfo {
   durationMs?: number;
+  id?: string;
   processor?: string;
   size?: number;
   sizeVram?: number;
-};
+}
 
 export function formatRelativeFromNow(ms?: number): string {
   if (typeof ms !== 'number') {
@@ -374,7 +401,12 @@ export function buildLocalModelTooltip(
   size?: number,
   running?: RunningProcessInfo,
   description?: string,
-  capabilities?: { thinking?: boolean; toolCalling?: boolean; imageInput?: boolean; embedding?: boolean },
+  capabilities?: {
+    thinking?: boolean;
+    toolCalling?: boolean;
+    imageInput?: boolean;
+    embedding?: boolean;
+  }
 ): string {
   const id = running?.id ?? '—';
   const until = formatRelativeFromNow(running?.durationMs);
@@ -401,19 +433,19 @@ export function buildLocalModelTooltip(
     if (running.processor) {
       const procMatch = running.processor.match(/(\d+)% GPU/);
       if (procMatch) {
-        const gpuPct = parseInt(procMatch[1], 10);
+        const gpuPct = Number.parseInt(procMatch[1], 10);
         const cpuPct = 100 - gpuPct;
         if (cpuPct > 0 && gpuPct > 0) {
           lines.push(`💻 CPU: ${cpuPct}% | GPU: ${gpuPct}%`);
         } else if (gpuPct === 100) {
-          lines.push(`💻 GPU: 100%`);
+          lines.push('💻 GPU: 100%');
         }
       } else if (running.processor === 'CPU') {
-        lines.push(`💻 CPU: 100%`);
+        lines.push('💻 CPU: 100%');
       }
     }
   } else {
-    lines.push(`⚙️ Not running`);
+    lines.push('⚙️ Not running');
   }
 
   lines.push(`⏱️ ${until}`);
@@ -423,13 +455,15 @@ export function buildLocalModelTooltip(
       thinking: capabilities.thinking,
       tools: capabilities.toolCalling,
       vision: capabilities.imageInput,
-      embedding: capabilities.embedding,
+      embedding: capabilities.embedding
     });
     if (capLine) {
       lines.push(capLine);
     }
   }
-  if (description) lines.push(description);
+  if (description) {
+    lines.push(description);
+  }
   return lines.join('\n');
 }
 
@@ -440,10 +474,18 @@ export function buildCapabilityLines(caps: {
   embedding?: boolean;
 }): string {
   const badges: string[] = [];
-  if (caps.thinking) badges.push('🧠 Thinking');
-  if (caps.tools) badges.push('🛠️ Tools');
-  if (caps.vision) badges.push('👁️ Vision');
-  if (caps.embedding) badges.push('🧩 Embedding');
+  if (caps.thinking) {
+    badges.push('🧠 Thinking');
+  }
+  if (caps.tools) {
+    badges.push('🛠️ Tools');
+  }
+  if (caps.vision) {
+    badges.push('👁️ Vision');
+  }
+  if (caps.embedding) {
+    badges.push('🧩 Embedding');
+  }
   return badges.join(' | ');
 }
 
@@ -472,11 +514,16 @@ export function getLibraryModelUrl(modelName: string): string {
 
 async function fetchModelPagePreview(
   modelName: string,
-  timeoutMs = 8000,
+  timeoutMs = 8000
 ): Promise<{
   title: string;
   description: string;
-  capabilities: { thinking: boolean; tools: boolean; vision: boolean; embedding: boolean };
+  capabilities: {
+    thinking: boolean;
+    tools: boolean;
+    vision: boolean;
+    embedding: boolean;
+  };
 }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -485,7 +532,7 @@ async function fetchModelPagePreview(
   try {
     const response = await fetch(url, {
       method: 'GET',
-      signal: controller.signal,
+      signal: controller.signal
     });
 
     if (!response.ok) {
@@ -513,7 +560,7 @@ async function fetchModelPagePreview(
       thinking: /\bThinking\b/i.test(capabilitiesHtml) || isThinkingModelId(modelName),
       tools: /\bTools\b/i.test(capabilitiesHtml),
       vision: /\bVision\b/i.test(capabilitiesHtml),
-      embedding: /\bEmbedding\b/i.test(capabilitiesHtml),
+      embedding: /\bEmbedding\b/i.test(capabilitiesHtml)
     };
 
     return { title, description, capabilities };
@@ -546,10 +593,13 @@ function hydrateModelPreviewCacheFromStorage(context: ExtensionContext): void {
 
   const now = Date.now();
   for (const entry of stored.entries) {
-    if (!entry?.key || !entry.value || typeof entry.expiresAt !== 'number' || entry.expiresAt <= now) {
+    if (!(entry?.key && entry.value) || typeof entry.expiresAt !== 'number' || entry.expiresAt <= now) {
       continue;
     }
-    modelPreviewCache.set(entry.key, { value: entry.value, expiresAt: entry.expiresAt });
+    modelPreviewCache.set(entry.key, {
+      value: entry.value,
+      expiresAt: entry.expiresAt
+    });
   }
   pruneModelPreviewCache(now);
 }
@@ -567,26 +617,26 @@ function schedulePersistModelPreviewCache(): void {
     const entries = [...modelPreviewCache.entries()].map(([key, entry]) => ({
       key,
       value: entry.value,
-      expiresAt: entry.expiresAt,
+      expiresAt: entry.expiresAt
     }));
     void modelPreviewCacheContext?.globalState.update(MODEL_PREVIEW_CACHE_STORAGE_KEY, { entries });
     modelPreviewCachePersistTimer = null;
   }, 250);
 }
 
-export type ModelPreviewCacheSnapshot = {
+export interface ModelPreviewCacheSnapshot {
   entries: number;
   inFlight: number;
   maxEntries: number;
   ttlMs: number;
-};
+}
 
 export function getModelPreviewCacheSnapshot(): ModelPreviewCacheSnapshot {
   return {
     entries: modelPreviewCache.size,
     inFlight: modelPreviewInFlight.size,
     maxEntries: MODEL_PREVIEW_CACHE_MAX_ENTRIES,
-    ttlMs: MODEL_PREVIEW_CACHE_TTL_MS,
+    ttlMs: MODEL_PREVIEW_CACHE_TTL_MS
   };
 }
 
@@ -630,7 +680,7 @@ async function getCachedModelPagePreview(modelName: string, timeoutMs = 8000): P
       const updatedNow = Date.now();
       modelPreviewCache.set(cacheKey, {
         value: preview,
-        expiresAt: updatedNow + MODEL_PREVIEW_CACHE_TTL_MS,
+        expiresAt: updatedNow + MODEL_PREVIEW_CACHE_TTL_MS
       });
       pruneModelPreviewCache(updatedNow);
       schedulePersistModelPreviewCache();
@@ -648,7 +698,7 @@ async function getCachedModelPagePreview(modelName: string, timeoutMs = 8000): P
  * Local models view provider (installed + running state)
  */
 export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Disposable {
-  private treeChangeEmitter = new EventEmitter<ModelTreeItem | null>();
+  private readonly treeChangeEmitter = new EventEmitter<ModelTreeItem | null>();
   readonly onDidChangeTreeData: Event<ModelTreeItem | null> = this.treeChangeEmitter.event;
 
   filterText = '';
@@ -657,18 +707,18 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   capabilityFilters: Set<string> = new Set();
 
   private refreshIntervals: NodeJS.Timeout[] = [];
-  private configListenerDisposable?: Disposable;
-  private localModelCapabilitiesCache = new Map<string, ModelCapabilities>();
-  private localModelCapabilitiesInFlight = new Set<string>();
+  private readonly configListenerDisposable?: Disposable;
+  private readonly localModelCapabilitiesCache = new Map<string, ModelCapabilities>();
+  private readonly localModelCapabilitiesInFlight = new Set<string>();
   private refreshDebounceTimer: NodeJS.Timeout | undefined;
   private cachedLocalModelNames = new Set<string>();
   private static readonly LOCAL_CAPABILITIES_STORAGE_KEY = 'ollama.localModelCapabilities.v1';
 
   constructor(
-    private client: Ollama,
-    private context?: ExtensionContext,
-    private logChannel?: DiagnosticsLogger,
-    private onLocalModelsChanged?: () => void,
+    private readonly client: Ollama,
+    private readonly context?: ExtensionContext,
+    private readonly logChannel?: DiagnosticsLogger,
+    private readonly onLocalModelsChanged?: () => void
   ) {
     this.hydrateLocalCapabilitiesFromStorage();
     this.startAutoRefresh();
@@ -689,7 +739,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     }
 
     const stored = this.context.globalState.get<Record<string, ModelCapabilities>>(
-      LocalModelsProvider.LOCAL_CAPABILITIES_STORAGE_KEY,
+      LocalModelsProvider.LOCAL_CAPABILITIES_STORAGE_KEY
     );
     if (!stored) {
       return;
@@ -739,7 +789,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
                 m.label.toLowerCase().includes(filterLower) ||
                 (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))) &&
               this.modelMatchesCapabilityFilters(m.label) &&
-              (!this.recommendedOnly || isRecommendedForHardware(m.label)),
+              (!this.recommendedOnly || isRecommendedForHardware(m.label))
           )
           .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
       }
@@ -757,11 +807,11 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
               familyModels.some(
                 m =>
                   m.label.toLowerCase().includes(filterLower) ||
-                  (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+                  (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))
               )) &&
             (this.capabilityFilters.size === 0 ||
               familyModels.some(m => this.modelMatchesCapabilityFilters(m.label))) &&
-            (!this.recommendedOnly || familyModels.some(m => isRecommendedForHardware(m.label))),
+            (!this.recommendedOnly || familyModels.some(m => isRecommendedForHardware(m.label)))
         )
         .sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -774,20 +824,30 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           thinking: familyCaps.thinking,
           tools: familyCaps.tools,
           vision: familyCaps.vision,
-          embedding: familyCaps.embedding,
+          embedding: familyCaps.embedding
         });
 
         const badges: string[] = [];
-        if (familyCaps.thinking) badges.push('🧠');
-        if (familyCaps.tools) badges.push('🛠️');
-        if (familyCaps.vision) badges.push('👁️');
-        if (familyCaps.embedding) badges.push('🧩');
+        if (familyCaps.thinking) {
+          badges.push('🧠');
+        }
+        if (familyCaps.tools) {
+          badges.push('🛠️');
+        }
+        if (familyCaps.vision) {
+          badges.push('👁️');
+        }
+        if (familyCaps.embedding) {
+          badges.push('🧩');
+        }
         if (badges.length > 0) {
           groupItem.description = badges.join(' ');
         }
 
         const tooltipLines = [`${familyName} family (${familyModels.length} models)`];
-        if (capLine) tooltipLines.push(capLine);
+        if (capLine) {
+          tooltipLines.push(capLine);
+        }
         groupItem.tooltip = tooltipLines.join('\n');
         result.push(groupItem);
       }
@@ -833,7 +893,13 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           processor = gpuPct > 0 ? `${gpuPct}% GPU` : 'CPU';
         }
 
-        runningMap.set(model.name, { durationMs, id, processor, size, sizeVram });
+        runningMap.set(model.name, {
+          durationMs,
+          id,
+          processor,
+          size,
+          sizeVram
+        });
       }
 
       const visibleLocalModels = listResponse.models.filter(model => !this.isCloudTaggedModel(model.name));
@@ -845,12 +911,12 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
             model.name,
             running ? 'local-running' : 'local-stopped',
             model.size,
-            running?.durationMs,
+            running?.durationMs
           );
           item.command = {
             command: 'opilot.openModelSettingsForModel',
             title: 'Open Model Settings',
-            arguments: [model.name],
+            arguments: [model.name]
           };
           // Set initial tooltip
           item.tooltip = buildLocalModelTooltip(model.name, model.size, running);
@@ -862,15 +928,23 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
             },
             () => {
               // Keep initial tooltip on error
-            },
+            }
           );
 
           const appendBadges = (caps: ModelCapabilities) => {
             const badges: string[] = [];
-            if (caps.thinking || isThinkingModelId(model.name)) badges.push('🧠');
-            if (caps.toolCalling) badges.push('🛠️');
-            if (caps.imageInput) badges.push('👁️');
-            if (caps.embedding) badges.push('🧩');
+            if (caps.thinking || isThinkingModelId(model.name)) {
+              badges.push('🧠');
+            }
+            if (caps.toolCalling) {
+              badges.push('🛠️');
+            }
+            if (caps.imageInput) {
+              badges.push('👁️');
+            }
+            if (caps.embedding) {
+              badges.push('🧩');
+            }
             if (badges.length === 0) {
               return;
             }
@@ -893,14 +967,14 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
                   model.size,
                   running,
                   preview.description,
-                  cachedCaps,
+                  cachedCaps
                 );
                 updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
               },
               () => {
                 const nextTooltip = buildLocalModelTooltip(model.name, model.size, running, undefined, cachedCaps);
                 updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
-              },
+              }
             );
           } else if (!this.localModelCapabilitiesInFlight.has(model.name)) {
             this.localModelCapabilitiesInFlight.add(model.name);
@@ -918,14 +992,14 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
                       model.size,
                       running,
                       preview.description,
-                      caps,
+                      caps
                     );
                     updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
                   },
                   () => {
                     const nextTooltip = buildLocalModelTooltip(model.name, model.size, running, undefined, caps);
                     updateItemTooltip(item, nextTooltip, this.treeChangeEmitter);
-                  },
+                  }
                 );
               })
               .catch(() => {
@@ -938,18 +1012,18 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
 
           return item;
         })
-        .sort((a, b) => {
-          return a.label.localeCompare(b.label);
-        });
+        .sort((a, b) => a.label.localeCompare(b.label));
 
       this.logChannel?.info(
-        `[client] local models loaded: ${items.length} total, ${items.filter(m => m.type === 'local-running').length} running`,
+        `[client] local models loaded: ${items.length} total, ${items.filter(m => m.type === 'local-running').length} running`
       );
 
       this.cachedLocalModelNames = new Set(visibleLocalModels.map(m => m.name));
       return items.length > 0 ? items : [makeStatusItem('No local models found')];
     } catch (error) {
-      reportError(this.logChannel, 'Failed to load local models', error, { showToUser: false });
+      reportError(this.logChannel, 'Failed to load local models', error, {
+        showToUser: false
+      });
       return [makeStatusItem('Failed to load local models')];
     }
   }
@@ -963,23 +1037,41 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   }
 
   private modelMatchesCapabilityFilters(modelName: string): boolean {
-    if (this.capabilityFilters.size === 0) return true;
+    if (this.capabilityFilters.size === 0) {
+      return true;
+    }
 
     const caps = this.localModelCapabilitiesCache.get(modelName);
 
     for (const filter of this.capabilityFilters) {
       switch (filter) {
         case 'thinking':
-          if (caps !== undefined ? !caps.thinking : !isThinkingModelId(modelName)) return false;
+          if (caps === undefined ? !isThinkingModelId(modelName) : !caps.thinking) {
+            return false;
+          }
           break;
         case 'tools':
-          if (caps !== undefined && !caps.toolCalling) return false;
+          if (caps !== undefined && !caps.toolCalling) {
+            return false;
+          }
           break;
         case 'vision':
-          if (caps !== undefined && !caps.imageInput) return false;
+          if (caps !== undefined && !caps.imageInput) {
+            return false;
+          }
           break;
         case 'embedding':
-          if (caps !== undefined && !caps.embedding) return false;
+          if (caps !== undefined && !caps.embedding) {
+            return false;
+          }
+          break;
+        case 'downloaded':
+          // All local models are by definition downloaded; this filter always passes
+          break;
+        case 'cloud':
+          // Local models are never cloud; this filter always fails
+          return false;
+        default:
           break;
       }
     }
@@ -1020,7 +1112,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     return {
       capabilityCacheEntries: this.localModelCapabilitiesCache.size,
       capabilityInFlight: this.localModelCapabilitiesInFlight.size,
-      cachedLocalNames: this.cachedLocalModelNames.size,
+      cachedLocalNames: this.cachedLocalModelNames.size
     };
   }
 
@@ -1093,7 +1185,12 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           this.logChannel?.info(`[client] pulling cloud model before start: ${modelName}`);
           await activeClient.pull({ model: modelName, stream: false });
         }
-        await activeClient.generate({ model: modelName, prompt: '', stream: false, keep_alive: '10m' });
+        await activeClient.generate({
+          model: modelName,
+          prompt: '',
+          stream: false,
+          keep_alive: '10m'
+        });
 
         let running = false;
         try {
@@ -1116,7 +1213,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           window.showInformationMessage(`Model ${modelName} started`);
         } else if (isCloudModel) {
           window.showInformationMessage(
-            `Model ${modelName} is ready. Cloud models may not appear as running until actively used.`,
+            `Model ${modelName} is ready. Cloud models may not appear as running until actively used.`
           );
         } else {
           window.showWarningMessage(`Model ${modelName} warmed up, but is not shown as running.`);
@@ -1146,7 +1243,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         const logPath = join(homedir(), '.ollama', 'logs', 'server.log');
         logContent = await readFile(logPath, 'utf-8');
       } else if (platform === 'win32') {
-        const logPath = join(process.env['LOCALAPPDATA'] ?? '', 'Ollama', 'server.log');
+        const logPath = join(process.env.LOCALAPPDATA ?? '', 'Ollama', 'server.log');
         logContent = await readFile(logPath, 'utf-8');
       } else if (platform === 'linux') {
         // On Linux, use journalctl to get recent logs when available.
@@ -1213,10 +1310,19 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       let modelStillRunning = false;
 
       await window.withProgress(
-        { location: ProgressLocation.Notification, title: `Stopping ${modelName}…`, cancellable: false },
+        {
+          location: ProgressLocation.Notification,
+          title: `Stopping ${modelName}…`,
+          cancellable: false
+        },
         async () => {
           const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.client;
-          await activeClient.generate({ model: modelName, prompt: '', stream: false, keep_alive: 0 });
+          await activeClient.generate({
+            model: modelName,
+            prompt: '',
+            stream: false,
+            keep_alive: 0
+          });
           // Poll until the model disappears from the running process list (max 30 s)
           for (let i = 0; i < 30; i++) {
             await new Promise<void>(resolve => setTimeout(resolve, 1000));
@@ -1231,7 +1337,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           }
           // If we reach here, model is still running after 30s
           modelStillRunning = true;
-        },
+        }
       );
 
       // Check if model is still running after timeout
@@ -1241,12 +1347,17 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         // Try to extract the PID from logs
         const pid = await this.extractModelPidFromLogs(modelName);
 
-        if (pid !== null) {
+        if (pid === null) {
+          // No PID found, show generic message
+          window.showWarningMessage(
+            `Model ${modelName} did not stop after 30 seconds. Try restarting the Ollama server.`
+          );
+        } else {
           // Offer to force-kill the process
           const answer = await window.showWarningMessage(
             `Model ${modelName} did not stop after 30 seconds. Force kill the process (PID ${pid})?`,
             'Force Kill',
-            'Cancel',
+            'Cancel'
           );
 
           if (answer === 'Force Kill') {
@@ -1274,11 +1385,6 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
               window.showErrorMessage(`Failed to kill process ${pid}. Try restarting Ollama or kill manually.`);
             }
           }
-        } else {
-          // No PID found, show generic message
-          window.showWarningMessage(
-            `Model ${modelName} did not stop after 30 seconds. Try restarting the Ollama server.`,
-          );
         }
         return;
       }
@@ -1295,13 +1401,16 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
 }
 
 /** Raw scraped metadata for a single library model variant. */
-type VariantRaw = { name: string; size?: number };
+interface VariantRaw {
+  name: string;
+  size?: number;
+}
 
 /**
  * Remote library models view provider
  */
 export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, Disposable {
-  private treeChangeEmitter = new EventEmitter<ModelTreeItem | null>();
+  private readonly treeChangeEmitter = new EventEmitter<ModelTreeItem | null>();
   readonly onDidChangeTreeData: Event<ModelTreeItem | null> = this.treeChangeEmitter.event;
 
   filterText = '';
@@ -1312,11 +1421,11 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
   private cache: string[] = [];
   private cacheTimeMs = 0;
   private cacheGeneration = 0;
-  private refreshTimeout: NodeJS.Timeout | null = null;
+  private readonly refreshTimeout: NodeJS.Timeout | null = null;
   private refreshIntervals: NodeJS.Timeout[] = [];
   private loadPromise: Promise<string[]> | null = null;
   /** Caches raw variant metadata (names + sizes) only — not materialized tree items. */
-  private variantsCache = new Map<string, VariantRaw[]>();
+  private readonly variantsCache = new Map<string, VariantRaw[]>();
   /** Base model names that are available in Ollama Cloud catalog. */
   private cloudCatalogNames = new Set<string>();
   private localProvider?: LocalModelsProvider;
@@ -1326,7 +1435,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
 
   private static readonly CACHE_VERSION = 1;
 
-  constructor(private logChannel?: DiagnosticsLogger) {
+  constructor(private readonly logChannel?: DiagnosticsLogger) {
     this.startAutoRefresh();
   }
 
@@ -1440,7 +1549,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         ) {
           model.collapsibleState = TreeItemCollapsibleState.None;
           const isInstalled = Array.from(localNames).some(
-            local => local === model.label || local.startsWith(`${model.label}:`),
+            local => local === model.label || local.startsWith(`${model.label}:`)
           );
           if (isInstalled) {
             model.iconPath = createThemeIcon('check');
@@ -1458,7 +1567,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
               v =>
                 !filterLower ||
                 v.label.toLowerCase().includes(filterLower) ||
-                (typeof v.tooltip === 'string' && v.tooltip.toLowerCase().includes(filterLower)),
+                (typeof v.tooltip === 'string' && v.tooltip.toLowerCase().includes(filterLower))
             );
             allItems.push(...filteredVariants);
           } else {
@@ -1472,7 +1581,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
               },
               () => {
                 // Silently skip on error
-              },
+              }
             );
           }
         }
@@ -1480,11 +1589,15 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
 
       const filteredItems = this.recommendedOnly
         ? allItems.filter(item => {
-            if (item.type === 'status') return true;
+            if (item.type === 'status') {
+              return true;
+            }
             // Use cached variant names (e.g. "llama3.2:3b") for an accurate
             // size check.  Fall back to showing the model when not yet cached.
             const cached = this.variantsCache.get(item.label);
-            if (!cached) return true;
+            if (!cached) {
+              return true;
+            }
             return cached.some(v => isRecommendedForHardware(v.name));
           })
         : allItems;
@@ -1506,18 +1619,20 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
             familyModels.some(
               m =>
                 m.label.toLowerCase().includes(filterLower) ||
-                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+                (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))
             )) &&
           (!this.recommendedOnly ||
             // Use cached variant names when available (they carry size tags like
             // ":7b"), falling back to showing the family when no cache exists yet.
             familyModels.some(m => {
               const cached = this.variantsCache.get(m.label);
-              if (!cached) return true; // No cache yet — show optimistically
+              if (!cached) {
+                return true; // No cache yet — show optimistically
+              }
               return cached.some(v => isRecommendedForHardware(v.name));
             })) &&
           (this.capabilityFilters.size === 0 ||
-            familyModels.some(m => this.modelMatchesCapabilityFilters(m.label, localNames))),
+            familyModels.some(m => this.modelMatchesCapabilityFilters(m.label, localNames)))
       )
       .sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -1534,20 +1649,30 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           thinking: familyCaps.thinking,
           tools: familyCaps.tools,
           vision: familyCaps.vision,
-          embedding: familyCaps.embedding,
+          embedding: familyCaps.embedding
         });
 
         const badges: string[] = [];
-        if (familyCaps.thinking) badges.push('🧠');
-        if (familyCaps.tools) badges.push('🛠️');
-        if (familyCaps.vision) badges.push('👁️');
-        if (familyCaps.embedding) badges.push('🧩');
+        if (familyCaps.thinking) {
+          badges.push('🧠');
+        }
+        if (familyCaps.tools) {
+          badges.push('🛠️');
+        }
+        if (familyCaps.vision) {
+          badges.push('👁️');
+        }
+        if (familyCaps.embedding) {
+          badges.push('🧩');
+        }
         if (badges.length > 0) {
           groupItem.description = badges.join(' ');
         }
 
         const tooltipLines = [`${familyName} family (${familyModels.length} models)`];
-        if (capLine) tooltipLines.push(capLine);
+        if (capLine) {
+          tooltipLines.push(capLine);
+        }
         groupItem.tooltip = tooltipLines.join('\n');
         result.push(groupItem);
       }
@@ -1594,7 +1719,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       modelCacheEntries: this.cache.length,
       variantCacheFamilies: this.variantsCache.size,
       cloudCatalogNames: this.cloudCatalogNames.size,
-      hasLoadPromise: this.loadPromise !== null,
+      hasLoadPromise: this.loadPromise !== null
     };
   }
 
@@ -1605,7 +1730,9 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
    * Downloaded and Cloud, which are determined from local state directly).
    */
   private modelMatchesCapabilityFilters(modelName: string, localNames: Set<string>): boolean {
-    if (this.capabilityFilters.size === 0) return true;
+    if (this.capabilityFilters.size === 0) {
+      return true;
+    }
 
     const cacheKey = modelName.toLowerCase();
     const cached = modelPreviewCache.get(cacheKey);
@@ -1617,22 +1744,36 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       switch (filter) {
         case 'thinking':
           // Regex fallback when preview hasn't been fetched yet
-          if (caps !== undefined ? !caps.thinking : !isThinkingModelId(modelName)) return false;
+          if (caps === undefined ? !isThinkingModelId(modelName) : !caps.thinking) {
+            return false;
+          }
           break;
         case 'tools':
-          if (caps !== undefined && !caps.tools) return false;
+          if (caps !== undefined && !caps.tools) {
+            return false;
+          }
           break;
         case 'vision':
-          if (caps !== undefined && !caps.vision) return false;
+          if (caps !== undefined && !caps.vision) {
+            return false;
+          }
           break;
         case 'embedding':
-          if (caps !== undefined && !caps.embedding) return false;
+          if (caps !== undefined && !caps.embedding) {
+            return false;
+          }
           break;
         case 'downloaded':
-          if (!isDownloaded) return false;
+          if (!isDownloaded) {
+            return false;
+          }
           break;
         case 'cloud':
-          if (!isCloudModel) return false;
+          if (!isCloudModel) {
+            return false;
+          }
+          break;
+        default:
           break;
       }
     }
@@ -1641,7 +1782,9 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
 
   /** When recommendedOnly is active, keep only variants that fit the hardware. */
   private filterVariantsByRecommended(variants: ModelTreeItem[]): ModelTreeItem[] {
-    if (!this.recommendedOnly) return variants;
+    if (!this.recommendedOnly) {
+      return variants;
+    }
     const filtered = variants.filter(v => isRecommendedForHardware(v.label));
     return filtered.length > 0 ? filtered : [makeStatusItem('No recommended variants for your hardware')];
   }
@@ -1652,7 +1795,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       const item = new ModelTreeItem(
         name,
         isDownloaded ? 'library-model-downloaded-variant' : 'library-model-variant',
-        size,
+        size
       );
       const tag = name.split(':')[1] ?? '';
       const isCloudVariant = tag === 'cloud' || tag.endsWith('-cloud');
@@ -1667,11 +1810,21 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       void getCachedModelPagePreview(name).then(
         preview => {
           const badges: string[] = [];
-          if (isCloudVariant) badges.push('☁️');
-          if (preview.capabilities.thinking || isThinkingModelId(name)) badges.push('🧠');
-          if (preview.capabilities.tools) badges.push('🛠️');
-          if (preview.capabilities.vision) badges.push('👁️');
-          if (preview.capabilities.embedding) badges.push('🧩');
+          if (isCloudVariant) {
+            badges.push('☁️');
+          }
+          if (preview.capabilities.thinking || isThinkingModelId(name)) {
+            badges.push('🧠');
+          }
+          if (preview.capabilities.tools) {
+            badges.push('🛠️');
+          }
+          if (preview.capabilities.vision) {
+            badges.push('👁️');
+          }
+          if (preview.capabilities.embedding) {
+            badges.push('🧩');
+          }
 
           const isRecommended = isRecommendedForHardware(name);
           if (isRecommended) {
@@ -1694,14 +1847,18 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           if (capLine) {
             tooltipLines.push(capLine);
           }
-          if (isRecommended) tooltipLines.push('👍 Recommended for your hardware');
-          if (preview.description) tooltipLines.push(preview.description);
+          if (isRecommended) {
+            tooltipLines.push('👍 Recommended for your hardware');
+          }
+          if (preview.description) {
+            tooltipLines.push(preview.description);
+          }
 
           updateItemTooltip(item, tooltipLines.join('\n'), this.treeChangeEmitter);
         },
         () => {
           // Keep initial tooltip.
-        },
+        }
       );
 
       return item;
@@ -1732,7 +1889,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     }
 
     const gen = this.cacheGeneration;
-    this.loadPromise = this.fetchLibraryModelNames(12000)
+    this.loadPromise = this.fetchLibraryModelNames(12_000)
       .then(names => {
         if (this.cacheGeneration === gen) {
           this.cache = names;
@@ -1742,7 +1899,9 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         return names;
       })
       .catch(error => {
-        reportError(this.logChannel, 'Library fetch failed', error, { showToUser: false });
+        reportError(this.logChannel, 'Library fetch failed', error, {
+          showToUser: false
+        });
         return [];
       })
       .finally(() => {
@@ -1787,7 +1946,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       version: LibraryModelsProvider.CACHE_VERSION,
       names: this.cache,
       cloudNames: [...this.cloudCatalogNames],
-      cachedAtMs: this.cacheTimeMs,
+      cachedAtMs: this.cacheTimeMs
     });
   }
 
@@ -1801,7 +1960,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     try {
       const response = await fetch(url, {
         method: 'GET',
-        signal: controller.signal,
+        signal: controller.signal
       });
 
       if (!response.ok) {
@@ -1814,7 +1973,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       try {
         const cloudResponse = await fetch('https://ollama.com/search?c=cloud', {
           method: 'GET',
-          signal: controller.signal,
+          signal: controller.signal
         });
         if (cloudResponse.ok) {
           cloudHtml = await cloudResponse.text();
@@ -1828,8 +1987,8 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         ...new Set(
           matches
             .map(match => (typeof match[1] === 'string' ? decodeURIComponent(match[1]).trim() : ''))
-            .filter(Boolean),
-        ),
+            .filter(Boolean)
+        )
       ];
 
       const cloudMatches = [...cloudHtml.matchAll(/href="\/library\/([^"?#:]+)"/gi)];
@@ -1837,8 +1996,8 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         ...new Set(
           cloudMatches
             .map(match => (typeof match[1] === 'string' ? decodeURIComponent(match[1]).trim() : ''))
-            .filter(Boolean),
-        ),
+            .filter(Boolean)
+        )
       ];
       this.cloudCatalogNames = new Set(cloudNames.map(name => name.toLowerCase()));
 
@@ -1887,14 +2046,26 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
           if (capLine) {
             tooltipLines.push(capLine);
           }
-          if (preview.description) tooltipLines.push(preview.description);
+          if (preview.description) {
+            tooltipLines.push(preview.description);
+          }
 
           const badges: string[] = [];
-          if (isCloudCatalogModel) badges.push('☁️');
-          if (preview.capabilities.thinking || isThinkingModelId(name)) badges.push('🧠');
-          if (preview.capabilities.tools) badges.push('🛠️');
-          if (preview.capabilities.vision) badges.push('👁️');
-          if (preview.capabilities.embedding) badges.push('🧩');
+          if (isCloudCatalogModel) {
+            badges.push('☁️');
+          }
+          if (preview.capabilities.thinking || isThinkingModelId(name)) {
+            badges.push('🧠');
+          }
+          if (preview.capabilities.tools) {
+            badges.push('🛠️');
+          }
+          if (preview.capabilities.vision) {
+            badges.push('👁️');
+          }
+          if (preview.capabilities.embedding) {
+            badges.push('🧩');
+          }
           // No 👍 badge here: base model names have no size tag so we
           // cannot determine fit.  The badge appears on individual variants.
           if (badges.length > 0) {
@@ -1905,7 +2076,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
         },
         () => {
           item.tooltip = `Library model: ${name}`;
-        },
+        }
       );
       return item;
     });
@@ -1923,7 +2094,10 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
     const url = getLibraryModelUrl(modelName);
 
     try {
-      const response = await fetch(url, { method: 'GET', signal: controller.signal });
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: controller.signal
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -1937,29 +2111,35 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
       const sizeMap = new Map<string, number>();
       const blockPattern = new RegExp(
         `href="/library/(${escapedName}:[^"?#]+)"[^>]*class="[^"]*sm:hidden[^"]*"[^>]*>([\\s\\S]*?)</a>`,
-        'g',
+        'g'
       );
       for (const m of html.matchAll(blockPattern)) {
         const name = typeof m[1] === 'string' ? decodeURIComponent(m[1]).trim() : '';
         const sizeMatch = /(\d+(?:\.\d+)?)\s*(GB|MB|KB)/i.exec(m[2] ?? '');
         if (name && sizeMatch) {
-          const value = parseFloat(sizeMatch[1]);
+          const value = Number.parseFloat(sizeMatch[1]);
           const unit = sizeMatch[2].toUpperCase();
-          if (unit === 'GB') sizeMap.set(name, Math.round(value * 1024 ** 3));
-          else if (unit === 'MB') sizeMap.set(name, Math.round(value * 1024 ** 2));
-          else sizeMap.set(name, Math.round(value * 1024));
+          if (unit === 'GB') {
+            sizeMap.set(name, Math.round(value * 1024 ** 3));
+          } else if (unit === 'MB') {
+            sizeMap.set(name, Math.round(value * 1024 ** 2));
+          } else {
+            sizeMap.set(name, Math.round(value * 1024));
+          }
         }
       }
 
       const variantPattern = new RegExp(`href="/library/(${escapedName}:[^"?#]+)"`, 'g');
       const matches = [...html.matchAll(variantPattern)];
       const variantNames = [
-        ...new Set(matches.map(m => (typeof m[1] === 'string' ? decodeURIComponent(m[1]).trim() : '')).filter(Boolean)),
+        ...new Set(matches.map(m => (typeof m[1] === 'string' ? decodeURIComponent(m[1]).trim() : '')).filter(Boolean))
       ];
 
       return variantNames.map(name => ({ name, size: sizeMap.get(name) }));
     } catch (error) {
-      reportError(this.logChannel, 'Failed to fetch model variants', error, { showToUser: false });
+      reportError(this.logChannel, 'Failed to fetch model variants', error, {
+        showToUser: false
+      });
       return null;
     } finally {
       clearTimeout(timeout);
@@ -1977,7 +2157,7 @@ export class LibraryModelsProvider implements TreeDataProvider<ModelTreeItem>, D
  * Cloud models view provider (login-first via `ollama login`)
  */
 export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Disposable {
-  private treeChangeEmitter = new EventEmitter<ModelTreeItem | null>();
+  private readonly treeChangeEmitter = new EventEmitter<ModelTreeItem | null>();
   readonly onDidChangeTreeData: Event<ModelTreeItem | null> = this.treeChangeEmitter.event;
 
   filterText = '';
@@ -1989,8 +2169,8 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   private loadPromise: Promise<ModelTreeItem[]> | null = null;
   private refreshIntervals: NodeJS.Timeout[] = [];
   private cachedNames = new Set<string>();
-  private warmedModelNames = new Set<string>();
-  private warmedModelResolvedNames = new Map<string, string>();
+  private readonly warmedModelNames = new Set<string>();
+  private readonly warmedModelResolvedNames = new Map<string, string>();
   private catalogModelNames: string[] = [];
   private cloudCapabilitiesByBase = new Map<string, Set<string>>();
 
@@ -1998,8 +2178,8 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   private static readonly CLOUD_CATALOG_CACHE_VERSION = 1;
 
   constructor(
-    private context: ExtensionContext,
-    private logChannel?: DiagnosticsLogger,
+    private readonly context: ExtensionContext,
+    private readonly logChannel?: DiagnosticsLogger
   ) {
     this.hydrateCloudCatalogFromStorage();
     this.startAutoRefresh();
@@ -2033,7 +2213,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
               (!filterLower ||
                 m.label.toLowerCase().includes(filterLower) ||
                 (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))) &&
-              this.modelMatchesCapabilityFilters(m.label),
+              this.modelMatchesCapabilityFilters(m.label)
           )
           .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
       }
@@ -2051,9 +2231,9 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
               familyModels.some(
                 m =>
                   m.label.toLowerCase().includes(filterLower) ||
-                  (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower)),
+                  (typeof m.tooltip === 'string' && m.tooltip.toLowerCase().includes(filterLower))
               )) &&
-            (this.capabilityFilters.size === 0 || familyModels.some(m => this.modelMatchesCapabilityFilters(m.label))),
+            (this.capabilityFilters.size === 0 || familyModels.some(m => this.modelMatchesCapabilityFilters(m.label)))
         )
         .sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -2066,20 +2246,30 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           thinking: familyCaps.thinking,
           tools: familyCaps.tools,
           vision: familyCaps.vision,
-          embedding: familyCaps.embedding,
+          embedding: familyCaps.embedding
         });
 
         const badges: string[] = [];
-        if (familyCaps.thinking) badges.push('🧠');
-        if (familyCaps.tools) badges.push('🛠️');
-        if (familyCaps.vision) badges.push('👁️');
-        if (familyCaps.embedding) badges.push('🧩');
+        if (familyCaps.thinking) {
+          badges.push('🧠');
+        }
+        if (familyCaps.tools) {
+          badges.push('🛠️');
+        }
+        if (familyCaps.vision) {
+          badges.push('👁️');
+        }
+        if (familyCaps.embedding) {
+          badges.push('🧩');
+        }
         if (badges.length > 0) {
           groupItem.description = badges.join(' ');
         }
 
         const tooltipLines = [`${familyName} family (${familyModels.length} models)`];
-        if (capLine) tooltipLines.push(capLine);
+        if (capLine) {
+          tooltipLines.push(capLine);
+        }
         groupItem.tooltip = tooltipLines.join('\n');
         result.push(groupItem);
       }
@@ -2116,7 +2306,9 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   }
 
   private modelMatchesCapabilityFilters(modelName: string): boolean {
-    if (this.capabilityFilters.size === 0) return true;
+    if (this.capabilityFilters.size === 0) {
+      return true;
+    }
 
     const baseName = modelName.split(':')[0];
     const caps = this.cloudCapabilitiesByBase.get(baseName.toLowerCase());
@@ -2124,16 +2316,26 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     for (const filter of this.capabilityFilters) {
       switch (filter) {
         case 'thinking':
-          if (caps !== undefined ? !caps.has('thinking') : !isThinkingModelId(modelName)) return false;
+          if (caps === undefined ? !isThinkingModelId(modelName) : !caps.has('thinking')) {
+            return false;
+          }
           break;
         case 'tools':
-          if (caps !== undefined && !caps.has('tools')) return false;
+          if (caps !== undefined && !caps.has('tools')) {
+            return false;
+          }
           break;
         case 'vision':
-          if (caps !== undefined && !caps.has('vision')) return false;
+          if (caps !== undefined && !caps.has('vision')) {
+            return false;
+          }
           break;
         case 'embedding':
-          if (caps !== undefined && !caps.has('embedding')) return false;
+          if (caps !== undefined && !caps.has('embedding')) {
+            return false;
+          }
+          break;
+        default:
           break;
       }
     }
@@ -2158,7 +2360,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       warmedModels: this.warmedModelNames.size,
       catalogModelNames: this.catalogModelNames.length,
       capabilitiesByBase: this.cloudCapabilitiesByBase.size,
-      hasLoadPromise: this.loadPromise !== null,
+      hasLoadPromise: this.loadPromise !== null
     };
   }
 
@@ -2223,7 +2425,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     try {
       const response = await fetch(getLibraryModelUrl(modelName), {
         method: 'GET',
-        signal: controller.signal,
+        signal: controller.signal
       });
 
       if (response.ok) {
@@ -2234,14 +2436,14 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         }
         const html = await response.text();
         const tagMatches = [
-          ...html.matchAll(new RegExp(`href="/library/(${escapedName}:(?:cloud|[^"?#]*-cloud))"`, 'gi')),
+          ...html.matchAll(new RegExp(`href="/library/(${escapedName}:(?:cloud|[^"?#]*-cloud))"`, 'gi'))
         ];
         const tagNames = [
           ...new Set(
             tagMatches
               .map(match => (typeof match[1] === 'string' ? decodeURIComponent(match[1]).trim() : ''))
-              .filter(Boolean),
-          ),
+              .filter(Boolean)
+          )
         ];
 
         const preferredCloud = tagNames.find(name => name.endsWith(':cloud'));
@@ -2288,7 +2490,9 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         return items;
       })
       .catch(error => {
-        reportError(this.logChannel, 'Cloud models fetch failed', error, { showToUser: false });
+        reportError(this.logChannel, 'Cloud models fetch failed', error, {
+          showToUser: false
+        });
         return [makeStatusActionItem('Login to Ollama Cloud', 'opilot.loginCloud')];
       })
       .finally(() => {
@@ -2307,7 +2511,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     }
 
     if (this.catalogModelNames.length === 0) {
-      await this.loadCloudCatalogFromNetwork(12000);
+      await this.loadCloudCatalogFromNetwork(12_000);
     }
 
     if (this.catalogModelNames.length === 0) {
@@ -2316,13 +2520,13 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
 
     const items = this.buildCloudItemsFromCatalog(runningModels);
     this.logChannel?.info(
-      `[client] cloud models loaded: ${items.length} total, ${items.filter(m => m.type === 'cloud-running').length} running`,
+      `[client] cloud models loaded: ${items.length} total, ${items.filter(m => m.type === 'cloud-running').length} running`
     );
     return items.length > 0 ? items : [makeStatusItem('No cloud models found')];
   }
 
   private async fetchCloudRunningModels(
-    timeoutMs: number,
+    timeoutMs: number
   ): Promise<Map<string, { durationMs?: number; size?: number }>> {
     const cloudClient = await getCloudOllamaClient(this.context);
     const psResponse = await cloudClient.ps();
@@ -2353,17 +2557,19 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       const [tagsResponse, libraryResponse] = await Promise.all([
         fetch('https://ollama.com/api/tags', {
           method: 'GET',
-          signal: controller.signal,
+          signal: controller.signal
         }),
         fetch('https://ollama.com/search?c=cloud', {
           method: 'GET',
-          signal: controller.signal,
-        }),
+          signal: controller.signal
+        })
       ]);
 
       const cloudModelNames: string[] = [];
       if (tagsResponse.ok && typeof tagsResponse.json === 'function') {
-        const payload = (await tagsResponse.json()) as { models?: Array<{ name?: string }> };
+        const payload = (await tagsResponse.json()) as {
+          models?: Array<{ name?: string }>;
+        };
         for (const model of payload.models ?? []) {
           if (typeof model.name === 'string' && model.name.trim()) {
             cloudModelNames.push(model.name.trim());
@@ -2377,15 +2583,25 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         const capBlockRe = /href="\/library\/([^"?#:]+)"[\s\S]*?(?=href="\/library\/|$)/gi;
         for (const block of html.matchAll(capBlockRe)) {
           const name = typeof block[1] === 'string' ? decodeURIComponent(block[1]).trim() : '';
-          if (!name) continue;
+          if (!name) {
+            continue;
+          }
 
           const key = name.toLowerCase();
           const caps = new Set<string>();
           const blockText = block[0];
-          if (/\bTools\b/i.test(blockText)) caps.add('tools');
-          if (/\bVision\b/i.test(blockText)) caps.add('vision');
-          if (/\bThinking\b/i.test(blockText)) caps.add('thinking');
-          if (/\bEmbedding\b/i.test(blockText)) caps.add('embedding');
+          if (/\bTools\b/i.test(blockText)) {
+            caps.add('tools');
+          }
+          if (/\bVision\b/i.test(blockText)) {
+            caps.add('vision');
+          }
+          if (/\bThinking\b/i.test(blockText)) {
+            caps.add('thinking');
+          }
+          if (/\bEmbedding\b/i.test(blockText)) {
+            caps.add('embedding');
+          }
           cloudCapabilities.set(key, caps);
 
           if (cloudModelNames.length === 0) {
@@ -2404,7 +2620,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   }
 
   private buildCloudItemsFromCatalog(
-    runningModels: Map<string, { durationMs?: number; size?: number }>,
+    runningModels: Map<string, { durationMs?: number; size?: number }>
   ): ModelTreeItem[] {
     return this.catalogModelNames
       .map(fullName => {
@@ -2417,12 +2633,12 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           fullName,
           isRunning ? 'cloud-running' : 'cloud-stopped',
           runningInfo?.size,
-          runningInfo?.durationMs,
+          runningInfo?.durationMs
         );
         item.command = {
           command: 'opilot.openModelSettingsForModel',
           title: 'Open Model Settings',
-          arguments: [fullName],
+          arguments: [fullName]
         };
 
         const caps = this.cloudCapabilitiesByBase.get(baseName.toLowerCase());
@@ -2432,10 +2648,18 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         const hasEmbedding = caps?.has('embedding') ?? false;
 
         const badges: string[] = [];
-        if (isThinking) badges.push('🧠');
-        if (hasTools) badges.push('🛠️');
-        if (hasVision) badges.push('👁️');
-        if (hasEmbedding) badges.push('🧩');
+        if (isThinking) {
+          badges.push('🧠');
+        }
+        if (hasTools) {
+          badges.push('🛠️');
+        }
+        if (hasVision) {
+          badges.push('👁️');
+        }
+        if (hasEmbedding) {
+          badges.push('🧩');
+        }
         if (badges.length > 0) {
           const existing = (item.description ?? '').toString();
           const badgeStr = badges.join(' ');
@@ -2452,7 +2676,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           thinking: isThinking,
           tools: hasTools,
           vision: hasVision,
-          embedding: hasEmbedding,
+          embedding: hasEmbedding
         });
         if (capLine) {
           tooltipLines.push(capLine);
@@ -2471,7 +2695,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           },
           () => {
             /* keep existing tooltip */
-          },
+          }
         );
 
         return item;
@@ -2508,7 +2732,7 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     void this.context.globalState?.update(CloudModelsProvider.CLOUD_CATALOG_STORAGE_KEY, {
       version: CloudModelsProvider.CLOUD_CATALOG_CACHE_VERSION,
       names: this.catalogModelNames,
-      capabilitiesByBase,
+      capabilitiesByBase
     });
   }
 
@@ -2555,7 +2779,7 @@ export async function handleManageCloudApiKey(
   _context: ExtensionContext,
   _cloudProvider: CloudModelsProvider,
   _libraryProvider: LibraryModelsProvider,
-  _logChannel?: DiagnosticsLogger,
+  _logChannel?: DiagnosticsLogger
 ): Promise<void> {
   // Back-compat shim: old command now routes to login flow.
   handleLoginToCloud();
@@ -2627,10 +2851,14 @@ async function pullModelWithProgress(
   client: Ollama,
   modelName: string,
   localProvider: LocalModelsProvider,
-  logChannel?: DiagnosticsLogger,
+  logChannel?: DiagnosticsLogger
 ): Promise<void> {
   await window.withProgress(
-    { location: ProgressLocation.Notification, title: `Pulling ${modelName}`, cancellable: true },
+    {
+      location: ProgressLocation.Notification,
+      title: `Pulling ${modelName}`,
+      cancellable: true
+    },
     async (progress, token) => {
       token.onCancellationRequested(() => {
         client.abort();
@@ -2662,7 +2890,10 @@ async function pullModelWithProgress(
                 increment = Math.round((deltaCompleted / total) * 100);
               }
             }
-            progress.report({ message: `${pct}% (${completedMb} / ${totalMb} MB)`, increment });
+            progress.report({
+              message: `${pct}% (${completedMb} / ${totalMb} MB)`,
+              increment
+            });
             lastCompleted = completed;
             lastTotal = total;
           } else if (chunk.status) {
@@ -2682,7 +2913,7 @@ async function pullModelWithProgress(
         const msg = error instanceof Error ? error.message : String(error);
         window.showErrorMessage(`Failed to pull model: ${msg}`);
       }
-    },
+    }
   );
 }
 
@@ -2692,11 +2923,11 @@ async function pullModelWithProgress(
 export async function handlePullModel(
   client: Ollama,
   localProvider: LocalModelsProvider,
-  logChannel?: DiagnosticsLogger,
+  logChannel?: DiagnosticsLogger
 ): Promise<void> {
   const modelName = await window.showInputBox({
     prompt: 'Enter model name or identifier (e.g., llama2, mistral:7b)',
-    ignoreFocusOut: false,
+    ignoreFocusOut: false
   });
   if (modelName) {
     await pullModelWithProgress(client, modelName, localProvider, logChannel);
@@ -2710,7 +2941,7 @@ export async function handlePullModelFromLibrary(
   item: ModelTreeItem,
   client: Ollama,
   localProvider: LocalModelsProvider,
-  logChannel?: DiagnosticsLogger,
+  logChannel?: DiagnosticsLogger
 ): Promise<void> {
   if (item && (item.type === 'library-model-variant' || item.type === 'library-model-downloaded-variant')) {
     await pullModelWithProgress(client, item.label, localProvider, logChannel);
@@ -2750,14 +2981,17 @@ export function handleStopModel(item: ModelTreeItem, localProvider: LocalModelsP
 export async function handleStartCloudModel(
   item: ModelTreeItem,
   localProvider: LocalModelsProvider,
-  cloudProvider?: CloudModelsProvider,
+  cloudProvider?: CloudModelsProvider
 ): Promise<void> {
   if (item && item.type === 'cloud-stopped') {
-    const resolvedModel = cloudProvider
-      ? await cloudProvider.resolveRunnableCloudModelName(item.label)
-      : item.label.includes(':')
-        ? item.label
-        : `${item.label}:cloud`;
+    let resolvedModel: string;
+    if (cloudProvider) {
+      resolvedModel = await cloudProvider.resolveRunnableCloudModelName(item.label);
+    } else if (item.label.includes(':')) {
+      resolvedModel = item.label;
+    } else {
+      resolvedModel = `${item.label}:cloud`;
+    }
     await localProvider.startModel(resolvedModel);
     cloudProvider?.markModelWarm(item.label, resolvedModel);
     cloudProvider?.refresh();
@@ -2770,7 +3004,7 @@ export async function handleStartCloudModel(
 export async function handleStopCloudModel(
   item: ModelTreeItem,
   localProvider: LocalModelsProvider,
-  cloudProvider?: CloudModelsProvider,
+  cloudProvider?: CloudModelsProvider
 ): Promise<void> {
   if (item && item.type === 'cloud-running') {
     const resolvedName = cloudProvider?.getWarmedModelName(item.label) ?? item.label;
@@ -2780,16 +3014,16 @@ export async function handleStopCloudModel(
   }
 }
 
-export type SidebarProfilingSnapshot = {
-  local: ReturnType<LocalModelsProvider['getProfilingSnapshot']>;
-  library: ReturnType<LibraryModelsProvider['getProfilingSnapshot']>;
+export interface SidebarProfilingSnapshot {
   cloud: ReturnType<CloudModelsProvider['getProfilingSnapshot']>;
+  library: ReturnType<LibraryModelsProvider['getProfilingSnapshot']>;
+  local: ReturnType<LocalModelsProvider['getProfilingSnapshot']>;
   preview: ModelPreviewCacheSnapshot;
-};
+}
 
-export type SidebarRegistration = {
+export interface SidebarRegistration {
   getProfilingSnapshot: () => SidebarProfilingSnapshot;
-};
+}
 
 const CAPABILITY_FILTER_LABEL_TO_KEY = new Map([
   ['🧠 Thinking', 'thinking'],
@@ -2797,31 +3031,35 @@ const CAPABILITY_FILTER_LABEL_TO_KEY = new Map([
   ['👁️ Vision', 'vision'],
   ['🧩 Embedding', 'embedding'],
   ['✅ Downloaded', 'downloaded'],
-  ['☁️ Cloud', 'cloud'],
+  ['☁️ Cloud', 'cloud']
 ]);
 
 const MODEL_CAPABILITY_FILTER_LABEL_TO_KEY = new Map([
   ['🧠 Thinking', 'thinking'],
   ['🛠️ Tools', 'tools'],
   ['👁️ Vision', 'vision'],
-  ['🧩 Embedding', 'embedding'],
+  ['🧩 Embedding', 'embedding']
 ]);
 
 async function openLibraryCapabilityPicker(libraryProvider: LibraryModelsProvider): Promise<void> {
   const items = [...CAPABILITY_FILTER_LABEL_TO_KEY.entries()].map(([label, key]) => ({
     label,
-    picked: libraryProvider.capabilityFilters.has(key),
+    picked: libraryProvider.capabilityFilters.has(key)
   }));
   const selected = await window.showQuickPick(items, {
     canPickMany: true,
     placeHolder: 'Filter by capability — select one or more, confirm to apply',
-    title: 'Filter Library by Capability',
+    title: 'Filter Library by Capability'
   });
-  if (selected === undefined) return;
+  if (selected === undefined) {
+    return;
+  }
   libraryProvider.capabilityFilters.clear();
   for (const item of selected) {
     const key = CAPABILITY_FILTER_LABEL_TO_KEY.get(item.label);
-    if (key) libraryProvider.capabilityFilters.add(key);
+    if (key) {
+      libraryProvider.capabilityFilters.add(key);
+    }
   }
   const hasFilters = libraryProvider.capabilityFilters.size > 0;
   void commands.executeCommand('setContext', 'ollama.libraryCapabilityFilterActive', hasFilters);
@@ -2829,20 +3067,24 @@ async function openLibraryCapabilityPicker(libraryProvider: LibraryModelsProvide
 }
 
 async function openLocalCapabilityPicker(localProvider: LocalModelsProvider): Promise<void> {
-  const items = [...MODEL_CAPABILITY_FILTER_LABEL_TO_KEY.entries()].map(([label, key]) => ({
+  const items = [...CAPABILITY_FILTER_LABEL_TO_KEY.entries()].map(([label, key]) => ({
     label,
-    picked: localProvider.capabilityFilters.has(key),
+    picked: localProvider.capabilityFilters.has(key)
   }));
   const selected = await window.showQuickPick(items, {
     canPickMany: true,
     placeHolder: 'Filter by capability — select one or more, confirm to apply',
-    title: 'Filter Local Models by Capability',
+    title: 'Filter Local Models by Capability'
   });
-  if (selected === undefined) return;
+  if (selected === undefined) {
+    return;
+  }
   localProvider.capabilityFilters.clear();
   for (const item of selected) {
-    const key = MODEL_CAPABILITY_FILTER_LABEL_TO_KEY.get(item.label);
-    if (key) localProvider.capabilityFilters.add(key);
+    const key = CAPABILITY_FILTER_LABEL_TO_KEY.get(item.label);
+    if (key) {
+      localProvider.capabilityFilters.add(key);
+    }
   }
   const hasFilters = localProvider.capabilityFilters.size > 0;
   void commands.executeCommand('setContext', 'ollama.localCapabilityFilterActive', hasFilters);
@@ -2852,18 +3094,22 @@ async function openLocalCapabilityPicker(localProvider: LocalModelsProvider): Pr
 async function openCloudCapabilityPicker(cloudProvider: CloudModelsProvider): Promise<void> {
   const items = [...MODEL_CAPABILITY_FILTER_LABEL_TO_KEY.entries()].map(([label, key]) => ({
     label,
-    picked: cloudProvider.capabilityFilters.has(key),
+    picked: cloudProvider.capabilityFilters.has(key)
   }));
   const selected = await window.showQuickPick(items, {
     canPickMany: true,
     placeHolder: 'Filter by capability — select one or more, confirm to apply',
-    title: 'Filter Cloud Models by Capability',
+    title: 'Filter Cloud Models by Capability'
   });
-  if (selected === undefined) return;
+  if (selected === undefined) {
+    return;
+  }
   cloudProvider.capabilityFilters.clear();
   for (const item of selected) {
     const key = MODEL_CAPABILITY_FILTER_LABEL_TO_KEY.get(item.label);
-    if (key) cloudProvider.capabilityFilters.add(key);
+    if (key) {
+      cloudProvider.capabilityFilters.add(key);
+    }
   }
   const hasFilters = cloudProvider.capabilityFilters.size > 0;
   void commands.executeCommand('setContext', 'ollama.cloudCapabilityFilterActive', hasFilters);
@@ -2877,7 +3123,7 @@ export function registerSidebar(
   context: ExtensionContext,
   client: Ollama,
   logChannel?: DiagnosticsLogger,
-  onLocalModelsChanged?: () => void,
+  onLocalModelsChanged?: () => void
 ): SidebarRegistration {
   hydrateModelPreviewCacheFromStorage(context);
 
@@ -2893,25 +3139,34 @@ export function registerSidebar(
 
   logChannel?.info('[client] sidebar providers initialized');
 
-  const localTreeView = window.createTreeView('ollama-local-models', { treeDataProvider: localProvider });
-  const libraryTreeView = window.createTreeView('ollama-library-models', { treeDataProvider: libraryProvider });
-  const cloudTreeView = window.createTreeView('ollama-cloud-models', { treeDataProvider: cloudProvider });
+  const localTreeView = window.createTreeView('ollama-local-models', {
+    treeDataProvider: localProvider
+  });
+  const libraryTreeView = window.createTreeView('ollama-library-models', {
+    treeDataProvider: libraryProvider
+  });
+  const cloudTreeView = window.createTreeView('ollama-cloud-models', {
+    treeDataProvider: cloudProvider
+  });
 
   context.subscriptions.push(
     localTreeView,
     libraryTreeView,
     cloudTreeView,
     commands.registerCommand('opilot.collapseLocalModels', () =>
-      commands.executeCommand('workbench.actions.treeView.ollama-local-models.collapseAll'),
+      commands.executeCommand('workbench.actions.treeView.ollama-local-models.collapseAll')
     ),
     commands.registerCommand('opilot.collapseCloudModels', () =>
-      commands.executeCommand('workbench.actions.treeView.ollama-cloud-models.collapseAll'),
+      commands.executeCommand('workbench.actions.treeView.ollama-cloud-models.collapseAll')
     ),
     commands.registerCommand('opilot.collapseLibrary', () =>
-      commands.executeCommand('workbench.actions.treeView.ollama-library-models.collapseAll'),
+      commands.executeCommand('workbench.actions.treeView.ollama-library-models.collapseAll')
     ),
     commands.registerCommand('opilot.filterLocalModels', async () => {
-      const value = await window.showInputBox({ prompt: 'Filter local models', value: localProvider.filterText });
+      const value = await window.showInputBox({
+        prompt: 'Filter local models',
+        value: localProvider.filterText
+      });
       if (value !== undefined) {
         localProvider.filterText = value;
         void commands.executeCommand('setContext', 'ollama.localFilterActive', value.length > 0);
@@ -2930,7 +3185,10 @@ export function registerSidebar(
       await openLocalCapabilityPicker(localProvider);
     }),
     commands.registerCommand('opilot.filterCloudModels', async () => {
-      const value = await window.showInputBox({ prompt: 'Filter cloud models', value: cloudProvider.filterText });
+      const value = await window.showInputBox({
+        prompt: 'Filter cloud models',
+        value: cloudProvider.filterText
+      });
       if (value !== undefined) {
         cloudProvider.filterText = value;
         void commands.executeCommand('setContext', 'ollama.cloudFilterActive', value.length > 0);
@@ -2955,7 +3213,10 @@ export function registerSidebar(
       await openLibraryCapabilityPicker(libraryProvider);
     }),
     commands.registerCommand('opilot.searchLibraryModels', async () => {
-      const value = await window.showInputBox({ prompt: 'Search library models', value: libraryProvider.filterText });
+      const value = await window.showInputBox({
+        prompt: 'Search library models',
+        value: libraryProvider.filterText
+      });
       if (value !== undefined) {
         libraryProvider.filterText = value;
         void commands.executeCommand('setContext', 'ollama.librarySearchActive', value.length > 0);
@@ -3047,27 +3308,27 @@ export function registerSidebar(
     commands.registerCommand('opilot.refreshLibrary', () => handleRefreshLibrary(libraryProvider)),
     commands.registerCommand('opilot.refreshCloudModels', () => handleRefreshCloudModels(cloudProvider)),
     commands.registerCommand('opilot.manageCloudApiKey', async () =>
-      handleManageCloudApiKey(context, cloudProvider, libraryProvider, logChannel),
+      handleManageCloudApiKey(context, cloudProvider, libraryProvider, logChannel)
     ),
     commands.registerCommand('opilot.loginCloud', () => handleLoginToCloud()),
     commands.registerCommand('opilot.openCloudModel', (item: ModelTreeItem) => handleOpenCloudModel(item)),
     commands.registerCommand('opilot.deleteModel', (item: ModelTreeItem) => handleDeleteModel(item, localProvider)),
     commands.registerCommand('opilot.pullModel', async () => handlePullModel(client, localProvider, logChannel)),
     commands.registerCommand('opilot.pullModelFromLibrary', async (item: ModelTreeItem) =>
-      handlePullModelFromLibrary(item, client, localProvider, logChannel),
+      handlePullModelFromLibrary(item, client, localProvider, logChannel)
     ),
     commands.registerCommand('opilot.openLibraryModelPage', (item: ModelTreeItem) => handleOpenLibraryModelPage(item)),
     commands.registerCommand('opilot.startModel', (item: ModelTreeItem) => handleStartModel(item, localProvider)),
     commands.registerCommand('opilot.stopModel', (item: ModelTreeItem) => handleStopModel(item, localProvider)),
     commands.registerCommand('opilot.startCloudModel', (item: ModelTreeItem) =>
-      handleStartCloudModel(item, localProvider, cloudProvider),
+      handleStartCloudModel(item, localProvider, cloudProvider)
     ),
     commands.registerCommand('opilot.stopCloudModel', (item: ModelTreeItem) =>
-      handleStopCloudModel(item, localProvider, cloudProvider),
+      handleStopCloudModel(item, localProvider, cloudProvider)
     ),
     { dispose: () => localProvider.dispose() },
     { dispose: () => libraryProvider.dispose() },
-    { dispose: () => cloudProvider.dispose() },
+    { dispose: () => cloudProvider.dispose() }
   );
 
   return {
@@ -3075,7 +3336,7 @@ export function registerSidebar(
       local: localProvider.getProfilingSnapshot(),
       library: libraryProvider.getProfilingSnapshot(),
       cloud: cloudProvider.getProfilingSnapshot(),
-      preview: getModelPreviewCacheSnapshot(),
-    }),
+      preview: getModelPreviewCacheSnapshot()
+    })
   };
 }

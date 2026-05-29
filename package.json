@@ -22,58 +22,21 @@
     "vision"
   ],
   "homepage": "https://opilot.self.agency",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/selfagency/opilot.git"
+  },
   "license": "MIT",
+  "qna": "marketplace",
   "author": {
     "name": "Daniel Sieradski",
     "email": "daniel@self.agency",
     "url": "https://self.agency"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/selfagency/opilot.git"
-  },
-  "qna": "marketplace",
   "publisher": "selfagency",
   "main": "./dist/extension.js",
   "scripts": {
-    "compile": "task compile",
-    "docs:dev": "vitepress dev",
-    "docs:build": "vitepress build",
-    "docs:preview": "vitepress preview",
-    "prepare": "husky",
-    "test": "task unit-tests",
-    "test:coverage": "task unit-test-coverage",
-    "test:extension": "task extension-tests",
-    "test:integration": "task integration-tests"
-  },
-  "dependencies": {
-    "@selfagency/llm-stream-parser": "^0.1.5",
-    "ollama": "^0.6.3",
-    "undici": "^6.25.0"
-  },
-  "devDependencies": {
-    "@go-task/cli": "^3.50.0",
-    "@octokit/rest": "^22.0.1",
-    "@types/node": "^25.6.0",
-    "@types/vscode": "^1.110.0",
-    "@vitest/coverage-v8": "^4.1.4",
-    "@vscode/dts": "^0.4.1",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
-    "assert": "^2.1.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.4.0",
-    "msw": "^2.13.3",
-    "npm-run-all": "^4.1.5",
-    "ora": "^9.3.0",
-    "oxfmt": "^0.45.0",
-    "oxlint": "^1.60.0",
-    "oxlint-tsgolint": "^0.21.0",
-    "tsup": "^8.5.1",
-    "typescript": "6.0.2",
-    "vitepress": "^1.6.4",
-    "vitest": "^4.1.4",
-    "zx": "^8.8.5"
+    "prepare": "husky"
   },
   "contributes": {
     "chatParticipants": [
@@ -809,22 +772,61 @@
     "onLanguageModelChatProvider:selfagency-opilot",
     "onStartupFinished"
   ],
-  "icon": "logo.png",
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,jsonc,css,scss}": [
+      "pnpm exec ultracite fix"
+    ],
+    "*.{md,mdx}": [
+      "pnpm exec rumdl fmt"
+    ]
+  },
+  "dependencies": {
+    "@agentsy/core": "^0.1.0",
+    "ollama": "^0.6.3",
+    "undici": "^8.3.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.15",
+    "@copilotkit/aimock": "^1.27.3",
+    "@go-task/cli": "^3.51.1",
+    "@octokit/rest": "^22.0.1",
+    "@types/node": "^25.9.1",
+    "@types/vscode": "^1.110.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "@vscode/dts": "^0.4.1",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "assert": "^2.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
+    "msw": "^2.14.6",
+    "npm-run-all": "^4.1.5",
+    "ora": "^9.4.0",
+    "oxlint-tsgolint": "^0.23.0",
+    "rumdl": "^0.2.3",
+    "tsup": "^8.5.1",
+    "typescript": "6.0.3",
+    "ultracite": "7.8.0",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.7",
+    "zx": "^8.8.5"
+  },
+  "packageManager": "pnpm@10.31.0+sha512.e3927388bfaa8078ceb79b748ffc1e8274e84d75163e67bc22e06c0d3aed43dd153151cbf11d7f8301ff4acb98c68bdc5cadf6989532801ffafe3b3e4a63c268",
   "engines": {
     "vscode": "^1.111.0"
   },
-  "packageManager": "pnpm@10.31.0+sha512.e3927388bfaa8078ceb79b748ffc1e8274e84d75163e67bc22e06c0d3aed43dd153151cbf11d7f8301ff4acb98c68bdc5cadf6989532801ffafe3b3e4a63c268",
+  "icon": "logo.png",
   "pnpm": {
-    "overrides": {
-      "minimist": "^1.2.8",
-      "minimatch": "^10.2.4",
-      "serialize-javascript": "^7.0.5",
-      "diff": "^8.0.3"
-    },
     "onlyBuiltDependencies": [
       "@go-task/cli",
       "esbuild",
       "msw"
-    ]
+    ],
+    "overrides": {
+      "diff": "^8.0.3",
+      "minimatch": "^10.2.4",
+      "minimist": "^1.2.8",
+      "serialize-javascript": "^7.0.5"
+    }
   }
 }

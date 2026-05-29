@@ -1,48 +1,47 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { promises as fsPromises } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
+import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chat-utils.js';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
-import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages } from './contextUtils.js';
-import { createDiagnosticsLogger, getConfiguredLogLevel, type DiagnosticsLogger } from './diagnostics.js';
-import { reportError } from './errorHandler.js';
+import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages } from './context-utils.js';
+import { createDiagnosticsLogger, type DiagnosticsLogger, getConfiguredLogLevel } from './diagnostics.js';
+import { reportError } from './error-handler.js';
 import {
   handleConfigurationChange,
   handleConnectionTestFailure,
   isSelectedAction,
-  redactDisplayHost,
-} from './extensionHelpers.js';
+  redactDisplayHost
+} from './extension-helpers.js';
+import { formatBytes } from './format-utils.js';
 import {
   createXmlStreamFilter,
   dedupeXmlContextBlocksByTag,
   sanitizeNonStreamingModelOutput,
-  splitLeadingXmlContextBlocks,
+  splitLeadingXmlContextBlocks
 } from './formatting';
-import { formatBytes } from './formatUtils.js';
-import { registerModelfileManager } from './modelfiles.js';
-import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chatUtils.js';
 import {
   getModelOptionsForModel,
   loadModelSettings,
-  saveModelSettings,
-  type ModelOptionOverrides,
   type ModelSettingsStore,
-} from './modelSettings.js';
+  saveModelSettings
+} from './model-settings.js';
+import { registerModelfileManager } from './modelfiles.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
-import { getSetting, migrateLegacySettings } from './settings.js';
-import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settingsWebview.js';
+import { affectsSetting, getSetting, migrateLegacySettings, SETTINGS_NAMESPACE } from './settings.js';
+import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settings-webview.js';
 import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
-import { registerStatusBarHeartbeat } from './statusBar.js';
-import { ThinkingParser } from './thinkingParser.js';
+import { registerStatusBarHeartbeat } from './status-bar.js';
+import { ThinkingParser } from './thinking-parser.js';
 import {
   buildXmlToolSystemPrompt,
   extractXmlToolCalls,
   isToolsNotSupportedError,
-  normalizeToolParameters,
-} from './toolUtils.js';
+  normalizeToolParameters
+} from './tool-utils.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
@@ -55,19 +54,17 @@ export function toRuntimeModelId(modelId: string): string {
   return modelId.startsWith(PROVIDER_MODEL_ID_PREFIX) ? modelId.slice(PROVIDER_MODEL_ID_PREFIX.length) : modelId;
 }
 
-export { mapOpenAiToolCallsToOllamaLike } from './chatUtils.js';
-export { formatBytes } from './formatUtils.js';
+export { mapOpenAiToolCallsToOllamaLike } from './chat-utils.js';
 export {
   getOllamaServerLogPath,
   handleConfigurationChange,
   handleConnectionTestFailure,
   isLocalHost,
-  isSelectedAction,
-} from './extensionHelpers.js';
+  isSelectedAction
+} from './extension-helpers.js';
+export { formatBytes } from './format-utils.js';
 
-export function getWindowsLogTailPowerShellArgs(
-  localAppData: string | undefined = process.env['LOCALAPPDATA'],
-): string[] {
+export function getWindowsLogTailPowerShellArgs(localAppData: string | undefined = process.env.LOCALAPPDATA): string[] {
   const logPath = localAppData ? join(localAppData, 'Ollama', 'server.log') : '$env:LOCALAPPDATA\\Ollama\\server.log';
   const escapedLogPath = logPath.replace(/'/g, "''");
   const script =
@@ -80,8 +77,9 @@ export function getWindowsLogTailPowerShellArgs(
 
 // normalizeToolParameters/isToolsNotSupportedError moved to src/toolUtils.ts
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: platform-specific file migration logic is intentionally centralized here.
 async function removeBuiltInOllamaFromChatLanguageModels(
-  context: Pick<vscode.ExtensionContext, 'globalStorageUri'>,
+  context: Pick<vscode.ExtensionContext, 'globalStorageUri'>
 ): Promise<boolean> {
   const candidatePaths = new Set<string>();
 
@@ -95,13 +93,13 @@ async function removeBuiltInOllamaFromChatLanguageModels(
   if (process.platform === 'darwin') {
     userDirs.push(join(homedir(), 'Library', 'Application Support', 'Code', 'User'));
   } else if (process.platform === 'win32') {
-    const appData = process.env['APPDATA'];
+    const appData = process.env.APPDATA;
     if (appData) {
       userDirs.push(join(appData, 'Code', 'User'));
     }
   } else {
     // Linux (and other POSIX)
-    const xdgConfig = process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config');
+    const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
     userDirs.push(join(xdgConfig, 'Code', 'User'));
   }
   for (const userDir of userDirs) {
@@ -112,7 +110,9 @@ async function removeBuiltInOllamaFromChatLanguageModels(
   for (const userDir of userDirs) {
     try {
       const profilesDir = join(userDir, 'profiles');
-      const entries = await fsPromises.readdir(profilesDir, { withFileTypes: true });
+      const entries = await fsPromises.readdir(profilesDir, {
+        withFileTypes: true
+      });
       for (const entry of entries) {
         if (entry.isDirectory()) {
           candidatePaths.add(join(profilesDir, entry.name, 'chatLanguageModels.json'));
@@ -136,7 +136,7 @@ async function removeBuiltInOllamaFromChatLanguageModels(
         }
 
         const filtered = parsed.filter(
-          item => !(item && typeof item === 'object' && (item as Record<string, unknown>).vendor === 'ollama'),
+          item => !(item && typeof item === 'object' && (item as Record<string, unknown>).vendor === 'ollama')
         );
 
         if (filtered.length === parsed.length) {
@@ -168,7 +168,7 @@ async function removeBuiltInOllamaFromChatLanguageModels(
 function logPerformanceSnapshot(
   diagnostics: DiagnosticsLogger,
   sidebarSnapshot?: SidebarProfilingSnapshot,
-  label = 'manual',
+  label = 'manual'
 ): void {
   const memory = process.memoryUsage();
 
@@ -186,9 +186,9 @@ function logPerformanceSnapshot(
       heapUsed: formatBytes(memory.heapUsed),
       heapTotal: formatBytes(memory.heapTotal),
       external: formatBytes(memory.external),
-      arrayBuffers: formatBytes(memory.arrayBuffers),
+      arrayBuffers: formatBytes(memory.arrayBuffers)
     },
-    sidebar: sidebarSnapshot ?? null,
+    sidebar: sidebarSnapshot ?? null
   };
 
   diagnostics.info(`[client] ${JSON.stringify(payload)}`);
@@ -199,7 +199,7 @@ function logPerformanceSnapshot(
 export function setupChatParticipant(
   context: vscode.ExtensionContext,
   participantHandler: vscode.ChatRequestHandler,
-  chatApi?: Pick<typeof vscode.chat, 'createChatParticipant'>,
+  chatApi?: Pick<typeof vscode.chat, 'createChatParticipant'>
 ): vscode.Disposable {
   const chat = chatApi || vscode.chat;
 
@@ -212,12 +212,13 @@ export function setupChatParticipant(
  * Detect and offer to disable Copilot's conflicting built-in Ollama provider.
  * Detects via LM models registered under vendor 'ollama'.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: orchestration across VS Code APIs and fallback paths is intentionally centralized.
 export async function handleBuiltInOllamaConflict(
   windowApi?: Pick<typeof vscode.window, 'showWarningMessage' | 'showInformationMessage' | 'showErrorMessage'>,
   workspaceApi?: Pick<typeof vscode.workspace, 'getConfiguration'>,
   lmApi?: Pick<typeof vscode.lm, 'selectChatModels'>,
   commandsApi?: Pick<typeof vscode.commands, 'executeCommand'>,
-  context?: Pick<vscode.ExtensionContext, 'globalStorageUri'>,
+  context?: Pick<vscode.ExtensionContext, 'globalStorageUri'>
 ): Promise<void> {
   if (builtInOllamaConflictPromptInProgress) {
     return;
@@ -229,16 +230,20 @@ export async function handleBuiltInOllamaConflict(
   const commands = commandsApi ?? vscode.commands;
 
   const conflictModels = await lm.selectChatModels({ vendor: 'ollama' });
-  if (!conflictModels.length) return;
+  if (!conflictModels.length) {
+    return;
+  }
 
   builtInOllamaConflictPromptInProgress = true;
   try {
     const selection = await win.showWarningMessage(
       "Copilot's built-in Ollama provider is active and will show duplicate models alongside this extension. Disable it?",
-      'Disable Built-in Ollama Provider',
+      'Disable Built-in Ollama Provider'
     );
 
-    if (!isSelectedAction(selection, 'Disable Built-in Ollama Provider')) return;
+    if (!isSelectedAction(selection, 'Disable Built-in Ollama Provider')) {
+      return;
+    }
 
     // Use empty string to disable the built-in provider explicitly.
     // Using undefined can fall back to a non-empty default and keep it enabled.
@@ -247,7 +252,7 @@ export async function handleBuiltInOllamaConflict(
       await (ws.getConfiguration('github.copilot.chat') as vscode.WorkspaceConfiguration).update(
         'ollama.url',
         '',
-        vscode.ConfigurationTarget.Global,
+        vscode.ConfigurationTarget.Global
       );
       disabled = true;
     } catch (error) {
@@ -271,14 +276,14 @@ export async function handleBuiltInOllamaConflict(
 
     if (!disabled) {
       await win.showErrorMessage(
-        'Built-in Ollama provider appears to still be enabled. Please disable it in Chat Language Models settings.',
+        'Built-in Ollama provider appears to still be enabled. Please disable it in Chat Language Models settings.'
       );
       return;
     }
 
     const reloadSelection = await win.showInformationMessage(
       "Copilot's built-in Ollama provider has been disabled. Reload VS Code to apply.",
-      'Reload Window',
+      'Reload Window'
     );
 
     if (isSelectedAction(reloadSelection, 'Reload Window')) {
@@ -297,6 +302,7 @@ export async function handleBuiltInOllamaConflict(
  * true per-token streaming. When `client` is omitted the function falls back to
  * the VS Code LM API path (used in tests and as a backwards-compatibility shim).
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: chat orchestration spans client, tools, streaming, and fallback paths.
 export async function handleChatRequest(
   request: vscode.ChatRequest,
   chatContext: vscode.ChatContext,
@@ -305,7 +311,7 @@ export async function handleChatRequest(
   client?: Ollama,
   outputChannel?: DiagnosticsLogger,
   extensionContext?: vscode.ExtensionContext,
-  modelSettings?: ModelSettingsStore,
+  modelSettings?: ModelSettingsStore
 ): Promise<void> {
   const messages: vscode.LanguageModelChatMessage[] = [];
 
@@ -336,7 +342,9 @@ export async function handleChatRequest(
       if (byokModels.length) {
         modelId = toRuntimeModelId(byokModels[0].id);
       } else {
-        const ourModels = await vscode.lm.selectChatModels({ vendor: LANGUAGE_MODEL_VENDOR });
+        const ourModels = await vscode.lm.selectChatModels({
+          vendor: LANGUAGE_MODEL_VENDOR
+        });
         if (!ourModels.length) {
           stream.markdown('No Ollama models available. Pull a model first using the Ollama sidebar.');
           return;
@@ -355,7 +363,7 @@ export async function handleChatRequest(
     const logOpenAiCompatFallback = (mode: 'stream' | 'once', failedModelId: string, error: unknown) => {
       const reason = error instanceof Error ? error.message : String(error);
       outputChannel?.warn(
-        `[client] OpenAI-compatible ${mode} call failed for ${failedModelId}; falling back to native SDK: ${reason}`,
+        `[client] OpenAI-compatible ${mode} call failed for ${failedModelId}; falling back to native SDK: ${reason}`
       );
     };
 
@@ -378,12 +386,12 @@ export async function handleChatRequest(
       // This keeps IDE-injected context separate from the conversational user turn.
       const systemContextParts: string[] = [];
 
-      type OllamaToolResultMessage = {
-        role: 'tool';
+      interface OllamaToolResultMessage {
         content: string;
-        tool_name: string;
+        role: 'tool';
         tool_call_id?: string;
-      };
+        tool_name: string;
+      }
 
       const ollamaMessages: Array<Message | OllamaToolResultMessage> = messages.map(msg => {
         const isUser = msg.role === vscode.LanguageModelChatMessageRole.User;
@@ -400,7 +408,7 @@ export async function handleChatRequest(
         }
         return {
           role: (isUser ? 'user' : 'assistant') as 'user' | 'assistant',
-          content,
+          content
         };
       });
 
@@ -409,7 +417,7 @@ export async function handleChatRequest(
       if (dedupedContextParts.length > 0) {
         ollamaMessages.unshift({
           role: 'system',
-          content: BASE_SYSTEM_PROMPT + '\n\n' + dedupedContextParts.join('\n\n'),
+          content: `${BASE_SYSTEM_PROMPT}\n\n${dedupedContextParts.join('\n\n')}`
         });
       } else {
         ollamaMessages.unshift({ role: 'system', content: BASE_SYSTEM_PROMPT });
@@ -421,7 +429,7 @@ export async function handleChatRequest(
       const maxInputTokens = resolveContextLimit(
         request.model.maxInputTokens ?? 0,
         modelOptions.num_ctx,
-        getSetting<number>('maxContextTokens', 0),
+        getSetting<number>('maxContextTokens', 0)
       );
       if (maxInputTokens > 0) {
         const truncated = truncateMessages(ollamaMessages as Message[], maxInputTokens);
@@ -437,8 +445,8 @@ export async function handleChatRequest(
           function: {
             name: t.name,
             description: t.description ?? '',
-            parameters: normalizeToolParameters(t.inputSchema),
-          },
+            parameters: normalizeToolParameters(t.inputSchema)
+          }
         }));
 
         const shouldThinkInToolLoop =
@@ -458,10 +466,11 @@ export async function handleChatRequest(
                   tools: ollamaTools,
                   shouldThink: shouldThinkInToolLoop,
                   effectiveClient,
+                  // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
                   baseUrl: baseUrl!,
                   authToken,
                   modelOptions,
-                  onOpenAiCompatFallback: logOpenAiCompatFallback,
+                  onOpenAiCompatFallback: logOpenAiCompatFallback
                 })
               : nativeSdkChatOnce({
                   modelId,
@@ -469,12 +478,12 @@ export async function handleChatRequest(
                   tools: ollamaTools,
                   shouldThink: shouldThinkInToolLoop,
                   effectiveClient,
-                  modelOptions,
+                  modelOptions
                 }));
           } catch (toolError) {
             if (isToolsNotSupportedError(toolError)) {
               outputChannel?.warn(
-                `[client] disabling tools for @ollama request on model ${modelId}: ${String(toolError)}`,
+                `[client] disabling tools for @ollama request on model ${modelId}: ${String(toolError)}`
               );
               useXmlFallback = true;
               break;
@@ -495,7 +504,7 @@ export async function handleChatRequest(
           ollamaMessages.push({
             role: 'assistant',
             content: roundResponse.message.content ?? '',
-            tool_calls: toolCalls,
+            tool_calls: toolCalls
           });
 
           // Invoke each tool via VS Code's tool API and append result messages.
@@ -511,9 +520,10 @@ export async function handleChatRequest(
                   toolName,
                   {
                     input: toolCall.function.arguments as Record<string, unknown>,
-                    toolInvocationToken: request.toolInvocationToken!,
+                    // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
+                    toolInvocationToken: request.toolInvocationToken!
                   },
-                  token,
+                  token
                 );
               } catch (taskCompleteError) {
                 const message =
@@ -527,8 +537,12 @@ export async function handleChatRequest(
             try {
               const result = await vscode.lm.invokeTool(
                 toolName,
-                { input: toolInput, toolInvocationToken: request.toolInvocationToken! },
-                token,
+                {
+                  input: toolInput,
+                  // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
+                  toolInvocationToken: request.toolInvocationToken!
+                },
+                token
               );
               resultText = result.content
                 .filter((c): c is vscode.LanguageModelTextPart => c instanceof vscode.LanguageModelTextPart)
@@ -541,7 +555,7 @@ export async function handleChatRequest(
               role: 'tool',
               content: resultText,
               tool_name: toolName,
-              tool_call_id: (toolCall as { id?: string }).id,
+              tool_call_id: (toolCall as { id?: string }).id
             });
           }
 
@@ -565,13 +579,15 @@ export async function handleChatRequest(
         const xmlConversation: Message[] = [
           ...existingSystem,
           { role: 'system', content: xmlSystemPrompt },
-          ...nonSystem,
+          ...nonSystem
         ];
 
         const MAX_XML_ROUNDS = 5;
         let correctedOnce = false;
         for (let xmlRound = 0; xmlRound < MAX_XML_ROUNDS; xmlRound++) {
-          if (token.isCancellationRequested) return;
+          if (token.isCancellationRequested) {
+            return;
+          }
 
           const xmlResponse = await (isCloudModel
             ? openAiCompatChatOnce({
@@ -579,31 +595,35 @@ export async function handleChatRequest(
                 messages: xmlConversation,
                 shouldThink: false,
                 effectiveClient,
+                // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
                 baseUrl: baseUrl!,
                 authToken,
                 modelOptions,
-                onOpenAiCompatFallback: logOpenAiCompatFallback,
+                onOpenAiCompatFallback: logOpenAiCompatFallback
               })
             : nativeSdkChatOnce({
                 modelId,
                 messages: xmlConversation,
                 shouldThink: false,
                 effectiveClient,
-                modelOptions,
+                modelOptions
               }));
 
           const responseText = xmlResponse.message.content ?? '';
           const xmlToolCalls = extractXmlToolCalls(responseText, toolNames);
 
           if (!xmlToolCalls.length) {
-            if (!correctedOnce && !responseText.trim() && xmlRound < MAX_XML_ROUNDS - 1) {
+            if (!(correctedOnce || responseText.trim()) && xmlRound < MAX_XML_ROUNDS - 1) {
               correctedOnce = true;
-              xmlConversation.push({ role: 'assistant', content: responseText });
+              xmlConversation.push({
+                role: 'assistant',
+                content: responseText
+              });
               xmlConversation.push({
                 role: 'user',
                 content:
-                  `Your previous response was empty. If you need information, emit a single XML tool call — no markdown fences, no prose. ` +
-                  `If you already have enough information, answer in plain text. Available tools: ${[...toolNames].join(', ')}.`,
+                  'Your previous response was empty. If you need information, emit a single XML tool call — no markdown fences, no prose. ' +
+                  `If you already have enough information, answer in plain text. Available tools: ${[...toolNames].join(', ')}.`
               });
               continue;
             }
@@ -620,15 +640,19 @@ export async function handleChatRequest(
           const [xmlToolCall] = xmlToolCalls;
           if (xmlToolCalls.length > 1) {
             outputChannel?.warn(
-              `[client] XML fallback extracted ${xmlToolCalls.length} tool calls; executing only the first (${xmlToolCall.name}) to comply with 'ONE tool per response' contract.`,
+              `[client] XML fallback extracted ${xmlToolCalls.length} tool calls; executing only the first (${xmlToolCall.name}) to comply with 'ONE tool per response' contract.`
             );
           }
           let resultText: string;
           try {
             const result = await vscode.lm.invokeTool(
               xmlToolCall.name,
-              { input: xmlToolCall.parameters, toolInvocationToken: request.toolInvocationToken! },
-              token,
+              {
+                input: xmlToolCall.parameters,
+                // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
+                toolInvocationToken: request.toolInvocationToken!
+              },
+              token
             );
             resultText = result.content
               .filter((c): c is vscode.LanguageModelTextPart => c instanceof vscode.LanguageModelTextPart)
@@ -639,7 +663,10 @@ export async function handleChatRequest(
           }
           // Use 'user' role for tool results in the XML fallback path — models that fail
           // JSON function calling have no training data for the 'tool' role either.
-          xmlConversation.push({ role: 'user', content: `[Tool result: ${xmlToolCall.name}]\n${resultText}` });
+          xmlConversation.push({
+            role: 'user',
+            content: `[Tool result: ${xmlToolCall.name}]\n${resultText}`
+          });
 
           correctedOnce = false;
         }
@@ -664,10 +691,11 @@ export async function handleChatRequest(
               messages: ollamaMessages as Message[],
               shouldThink: think,
               effectiveClient,
+              // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
               baseUrl: baseUrl!,
               authToken,
               modelOptions,
-              onOpenAiCompatFallback: logOpenAiCompatFallback,
+              onOpenAiCompatFallback: logOpenAiCompatFallback
             })
         : (think: boolean) =>
             nativeSdkStreamChat({
@@ -675,7 +703,7 @@ export async function handleChatRequest(
               messages: ollamaMessages as Message[],
               shouldThink: think,
               effectiveClient,
-              modelOptions,
+              modelOptions
             });
 
       try {
@@ -708,7 +736,11 @@ export async function handleChatRequest(
         rawRepSensitivity === 'off' || rawRepSensitivity === 'conservative' || rawRepSensitivity === 'moderate'
           ? rawRepSensitivity
           : 'conservative';
-      const xmlFilter = createXmlStreamFilter();
+      const xmlFilter = createXmlStreamFilter({
+        onWarning: (msg, ctx) => {
+          outputChannel?.warn(`[client] xmlFilter: ${msg}${ctx ? ` ${JSON.stringify(ctx)}` : ''}`);
+        }
+      });
       // Parse <think> tags on both cloud and local paths.
       // For local models Ollama normally pre-splits thinking into message.thinking, but
       // some model/version combinations still emit raw <think> tags in message.content.
@@ -756,7 +788,7 @@ export async function handleChatRequest(
               stream.markdown('\n\n---\n\n*Response*\n\n');
               contentStarted = true;
             }
-            outputChannel?.debug(`[client] @ollama chunk: ${contentChunk.substring(0, 50)}`);
+            outputChannel?.debug(`[client] @ollama chunk: ${contentChunk.slice(0, 50)}`);
             // Filter context tags using SAX parser - handles incomplete tags across chunk boundaries
             const cleanContent = xmlFilter.write(contentChunk);
             if (cleanContent) {
@@ -765,7 +797,7 @@ export async function handleChatRequest(
               // Append to rolling buffer (bounded to 600 chars) for repetition detection.
               responseBuffer = (responseBuffer + cleanContent).slice(-600);
               if (detectsRepetition(responseBuffer, repSensitivity)) {
-                outputChannel?.warn(`[client] repetition detected in @ollama response; stopping stream`);
+                outputChannel?.warn('[client] repetition detected in @ollama response; stopping stream');
                 stream.markdown('\n\n*\\[Stopped: repetition detected\\]*');
                 break;
               }
@@ -776,7 +808,7 @@ export async function handleChatRequest(
         if (chunk.message?.tool_calls?.length) {
           for (const toolCall of chunk.message.tool_calls) {
             stream.markdown(
-              `\n\`\`\`json\n${JSON.stringify({ tool: toolCall.function.name, arguments: toolCall.function.arguments }, null, 2)}\n\`\`\`\n`,
+              `\n\`\`\`json\n${JSON.stringify({ tool: toolCall.function.name, arguments: toolCall.function.arguments }, null, 2)}\n\`\`\`\n`
             );
             emittedContent = true;
           }
@@ -796,7 +828,7 @@ export async function handleChatRequest(
 
       // Some model/server combinations return a successful stream that emits
       // no visible content or tool calls. Recover by retrying once without streaming.
-      if (!emittedContent && !token.isCancellationRequested) {
+      if (!(emittedContent || token.isCancellationRequested)) {
         outputChannel?.warn(`[client] @ollama stream returned no output for ${modelId}; retrying with stream=false`);
         const fallback = await (isCloudModel
           ? openAiCompatChatOnce({
@@ -804,17 +836,18 @@ export async function handleChatRequest(
               messages: ollamaMessages as Message[],
               shouldThink,
               effectiveClient,
+              // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
               baseUrl: baseUrl!,
               authToken,
               modelOptions,
-              onOpenAiCompatFallback: logOpenAiCompatFallback,
+              onOpenAiCompatFallback: logOpenAiCompatFallback
             })
           : nativeSdkChatOnce({
               modelId,
               messages: ollamaMessages as Message[],
               shouldThink,
               effectiveClient,
-              modelOptions,
+              modelOptions
             }));
         if (fallback.message?.content) {
           stream.markdown(sanitizeNonStreamingModelOutput(fallback.message.content));
@@ -824,14 +857,25 @@ export async function handleChatRequest(
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      reportError(outputChannel, 'Chat participant request failed', error, { showToUser: true });
+      reportError(outputChannel, 'Chat participant request failed', error, {
+        showToUser: true
+      });
       const isCrashError = error instanceof Error && error.message.includes('model runner has unexpectedly stopped');
       if (isCrashError) {
         // Best-effort unload to keep behaviour consistent with the provider path.
-        void effectiveClient.generate({ model: modelId, prompt: '', keep_alive: 0, stream: false }).catch(() => {});
+        void effectiveClient
+          .generate({
+            model: modelId,
+            prompt: '',
+            keep_alive: 0,
+            stream: false
+          })
+          .catch(() => {
+            /* fire-and-forget — model unload on crash */
+          });
         const selection = await vscode.window.showErrorMessage(
           'The Ollama model runner crashed. Please check the Ollama server logs and restart if needed.',
-          'Open Logs',
+          'Open Logs'
         );
         if (selection === 'Open Logs') {
           const logsPath = join(homedir(), '.ollama', 'logs', 'server.log');
@@ -840,7 +884,7 @@ export async function handleChatRequest(
             await vscode.window.showTextDocument(document, { preview: false });
           } catch {
             void vscode.window.showWarningMessage(
-              `Could not open Ollama logs at ${logsPath}. Please check that the Ollama server is installed and logging is enabled.`,
+              `Could not open Ollama logs at ${logsPath}. Please check that the Ollama server is installed and logging is enabled.`
             );
           }
         }
@@ -855,7 +899,9 @@ export async function handleChatRequest(
   if (request.model.vendor === LANGUAGE_MODEL_VENDOR) {
     model = request.model;
   } else {
-    const models = await vscode.lm.selectChatModels({ vendor: LANGUAGE_MODEL_VENDOR });
+    const models = await vscode.lm.selectChatModels({
+      vendor: LANGUAGE_MODEL_VENDOR
+    });
     if (!models.length) {
       stream.markdown('No Ollama models available. Pull a model first using the Ollama sidebar.');
       return;
@@ -872,9 +918,15 @@ export async function handleChatRequest(
       const response = await model.sendRequest(
         conversationMessages,
         tools.length && request.toolInvocationToken
-          ? { tools: tools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })) }
+          ? {
+              tools: tools.map(t => ({
+                name: t.name,
+                description: t.description,
+                inputSchema: t.inputSchema
+              }))
+            }
           : {},
-        token,
+        token
       );
 
       const pendingToolCalls: vscode.LanguageModelToolCallPart[] = [];
@@ -900,12 +952,16 @@ export async function handleChatRequest(
         // streamed incrementally while reading response.stream.
         // Invoke task_complete for VS Code Autopilot bookkeeping.
         if (hasTaskComplete && request.toolInvocationToken) {
+          // biome-ignore lint/style/noNonNullAssertion: guaranteed by hasTaskComplete check
           const tc = pendingToolCalls.find(c => c.name === TASK_COMPLETE_TOOL_NAME)!;
           try {
             await vscode.lm.invokeTool(
               TASK_COMPLETE_TOOL_NAME,
-              { input: tc.input as Record<string, unknown>, toolInvocationToken: request.toolInvocationToken },
-              token,
+              {
+                input: tc.input as Record<string, unknown>,
+                toolInvocationToken: request.toolInvocationToken
+              },
+              token
             );
           } catch (taskCompleteError) {
             const message = taskCompleteError instanceof Error ? taskCompleteError.message : String(taskCompleteError);
@@ -917,7 +973,7 @@ export async function handleChatRequest(
 
       // Append the full assistant turn (text + tool calls) so subsequent rounds have context.
       conversationMessages.push(
-        vscode.LanguageModelChatMessage.Assistant([...assistantTextParts, ...pendingToolCalls]),
+        vscode.LanguageModelChatMessage.Assistant([...assistantTextParts, ...pendingToolCalls])
       );
 
       const toolResults: vscode.LanguageModelToolResultPart[] = [];
@@ -925,14 +981,17 @@ export async function handleChatRequest(
         try {
           const result = await vscode.lm.invokeTool(
             toolCall.name,
-            { input: toolCall.input as Record<string, unknown>, toolInvocationToken: request.toolInvocationToken },
-            token,
+            {
+              input: toolCall.input as Record<string, unknown>,
+              toolInvocationToken: request.toolInvocationToken
+            },
+            token
           );
           toolResults.push(new vscode.LanguageModelToolResultPart(toolCall.callId, result.content));
         } catch (invokeError) {
           const errMsg = invokeError instanceof Error ? invokeError.message : 'Tool execution failed';
           toolResults.push(
-            new vscode.LanguageModelToolResultPart(toolCall.callId, [new vscode.LanguageModelTextPart(errMsg)]),
+            new vscode.LanguageModelToolResultPart(toolCall.callId, [new vscode.LanguageModelTextPart(errMsg)])
           );
         }
       }
@@ -947,11 +1006,16 @@ export async function handleChatRequest(
 export async function activate(context: vscode.ExtensionContext) {
   let logTailProcess: ChildProcessWithoutNullStreams | undefined;
   const noopLogger: DiagnosticsLogger = {
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional no-op
     debug: () => {},
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional no-op
     info: () => {},
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional no-op
     warn: () => {},
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional no-op
     error: () => {},
-    exception: () => {},
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional no-op
+    exception: () => {}
   };
 
   const stopLogStreaming = () => {
@@ -989,15 +1053,19 @@ export async function activate(context: vscode.ExtensionContext) {
     if (platform === 'darwin') {
       const logPath = join(homedir(), '.ollama', 'logs', 'server.log');
       output.info(`[server] starting log stream from ${logPath}`);
-      logTailProcess = spawn('tail', ['-n', '200', '-F', logPath], { stdio: 'pipe' });
+      logTailProcess = spawn('tail', ['-n', '200', '-F', logPath], {
+        stdio: 'pipe'
+      });
     } else if (platform === 'linux') {
       output.info('[server] starting log stream from journalctl (-u ollama)');
       logTailProcess = spawn('journalctl', ['-u', 'ollama', '--no-pager', '--follow', '--output', 'cat'], {
-        stdio: 'pipe',
+        stdio: 'pipe'
       });
     } else if (platform === 'win32') {
       output.info('[server] starting log stream from %LOCALAPPDATA%\\Ollama\\server.log');
-      logTailProcess = spawn('powershell', getWindowsLogTailPowerShellArgs(), { stdio: 'pipe' });
+      logTailProcess = spawn('powershell', getWindowsLogTailPowerShellArgs(), {
+        stdio: 'pipe'
+      });
     } else {
       output.warn(`[server] log streaming not supported on platform: ${platform}`);
       return;
@@ -1069,7 +1137,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context,
     initialStore: modelSettingsStore,
     getAvailableModels: getAvailableModelNames,
-    onStoreChanged: async nextStore => {
+    onStoreChanged: nextStore => {
       modelSettingsStore = nextStore;
       if (context.globalStorageUri?.fsPath) {
         // Debounce writes: sliders fire many rapid patches; batch into a single save after 500 ms.
@@ -1078,20 +1146,22 @@ export async function activate(context: vscode.ExtensionContext) {
           void saveModelSettings(context.globalStorageUri, modelSettingsStore, diagnostics);
         }, 500);
       }
+
+      return Promise.resolve();
     },
-    diagnostics,
+    diagnostics
   });
 
   diagnostics.info(`[model-settings] Registering webview view provider with ID: ${MODEL_SETTINGS_VIEW_ID}`);
   const modelSettingsViewRegistration =
     typeof vscode.window.registerWebviewViewProvider === 'function'
       ? vscode.window.registerWebviewViewProvider(MODEL_SETTINGS_VIEW_ID, modelSettingsViewProvider, {
-          webviewOptions: { retainContextWhenHidden: true },
+          webviewOptions: { retainContextWhenHidden: true }
         })
       : {
           dispose: () => {
             /* noop for tests/mocks */
-          },
+          }
         };
   diagnostics.info('[model-settings] View provider registered');
 
@@ -1103,7 +1173,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes('already registered')) {
       diagnostics.warn(
-        `[client] language model provider vendor "${LANGUAGE_MODEL_VENDOR}" is already registered; skipping duplicate registration.`,
+        `[client] language model provider vendor "${LANGUAGE_MODEL_VENDOR}" is already registered; skipping duplicate registration.`
       );
     } else {
       reportError(diagnostics, 'Language model provider registration failed', error, { showToUser: true });
@@ -1122,7 +1192,7 @@ export async function activate(context: vscode.ExtensionContext) {
       await handleBuiltInOllamaConflict(undefined, undefined, undefined, undefined, context);
     } catch (error) {
       diagnostics.debug(
-        `[client] Built-in Ollama conflict check failed: ${error instanceof Error ? error.message : String(error)}`,
+        `[client] Built-in Ollama conflict check failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   })();
@@ -1161,16 +1231,16 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('opilot.checkServerHealth', async () => {
       const isConnected = await testConnection(client);
-      if (!isConnected) {
-        await handleConnectionTestFailure(host, undefined, undefined, logOutputChannel);
-      } else {
+      if (isConnected) {
         void vscode.window.showInformationMessage('Ollama server is reachable.');
+      } else {
+        await handleConnectionTestFailure(host, undefined, undefined, logOutputChannel);
       }
     }),
     statusBarRegistration,
     modelSettingsViewRegistration,
     {
-      dispose: () => stopLogStreaming(),
+      dispose: () => stopLogStreaming()
     },
     {
       // Flush any pending debounced model-settings save on extension deactivation.
@@ -1179,8 +1249,8 @@ export async function activate(context: vscode.ExtensionContext) {
         if (context.globalStorageUri?.fsPath) {
           void saveModelSettings(context.globalStorageUri, modelSettingsStore, diagnostics);
         }
-      },
-    },
+      }
+    }
   ];
 
   if (lmProviderDisposable) {
@@ -1195,13 +1265,13 @@ export async function activate(context: vscode.ExtensionContext) {
   // Register inline completion provider
   const completionProvider = new OllamaInlineCompletionProvider(client, diagnostics);
   context.subscriptions.push(
-    vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, completionProvider),
+    vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, completionProvider)
   );
 
   // Test connection to Ollama server on startup (non-blocking)
   void (async () => {
     try {
-      const isConnected = await testConnection(client, 5_000, details => {
+      const isConnected = await testConnection(client, 5000, details => {
         diagnostics.warn(`[client] connection test failed (${details.kind}): ${details.message}`);
       });
       diagnostics.info(`[client] Connection test result: ${isConnected ? 'connected' : 'not connected'}`);
@@ -1209,7 +1279,9 @@ export async function activate(context: vscode.ExtensionContext) {
         await handleConnectionTestFailure(host, undefined, undefined, logOutputChannel);
       }
     } catch (error) {
-      reportError(diagnostics, 'Connection test failed', error, { showToUser: true });
+      reportError(diagnostics, 'Connection test failed', error, {
+        showToUser: true
+      });
     }
   })();
 
@@ -1236,9 +1308,18 @@ export async function activate(context: vscode.ExtensionContext) {
               stopLogStreaming();
               diagnostics.info('[server] log streaming disabled via settings');
             }
-          },
+          }
         );
-      }),
+
+        // Model setting changes: refresh the provider so the model list stays
+        // current when the user adds/removes models via the sidebar or edits
+        // settings that affect model availability.
+        if (affectsSetting(event, 'completionModel') || affectsSetting(event, 'enableInlineCompletions')) {
+          diagnostics.info(
+            `[client] model setting changed: ${event.affectsConfiguration(`${SETTINGS_NAMESPACE}.completionModel`) ? 'completionModel' : 'enableInlineCompletions'}`
+          );
+        }
+      })
     );
 
     context.subscriptions.push(logOutputChannel);
@@ -1248,7 +1329,7 @@ export async function activate(context: vscode.ExtensionContext) {
     request: vscode.ChatRequest,
     chatContext: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
-    token: vscode.CancellationToken,
+    token: vscode.CancellationToken
   ): Promise<void> => {
     // Pass the Ollama client so the handler streams directly — no VS Code IPC overhead.
     await handleChatRequest(request, chatContext, stream, token, client, diagnostics, context, modelSettingsStore);
@@ -1258,4 +1339,5 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(participant);
 }
 
+// biome-ignore lint/suspicious/noEmptyBlockStatements: VS Code lifecycle hook — intentionally empty
 export function deactivate() {}

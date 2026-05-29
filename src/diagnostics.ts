@@ -7,7 +7,7 @@
  * - provide consistent error/exception formatting across modules
  */
 
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { getSetting } from './settings.js';
 
 export type DiagnosticsLogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -16,15 +16,15 @@ const levelOrder: Record<DiagnosticsLogLevel, number> = {
   debug: 10,
   info: 20,
   warn: 30,
-  error: 40,
+  error: 40
 };
 
 export interface DiagnosticsLogger {
   debug(message: string): void;
-  info(message: string): void;
-  warn(message: string): void;
   error(message: string): void;
   exception(context: string, error: unknown): void;
+  info(message: string): void;
+  warn(message: string): void;
 }
 
 export function getConfiguredLogLevel(): DiagnosticsLogLevel {
@@ -49,7 +49,7 @@ function formatError(error: unknown): string {
 
 export function createDiagnosticsLogger(
   output: vscode.LogOutputChannel,
-  getLevel: () => DiagnosticsLogLevel,
+  getLevel: () => DiagnosticsLogLevel
 ): DiagnosticsLogger {
   return {
     debug(message: string): void {
@@ -77,6 +77,6 @@ export function createDiagnosticsLogger(
         return;
       }
       output.error(`${context}: ${formatError(error)}`);
-    },
+    }
   };
 }

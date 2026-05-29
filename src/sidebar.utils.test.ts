@@ -25,7 +25,7 @@ beforeEach(() => {
     TreeItemCollapsibleState: {
       None: 0,
       Collapsed: 1,
-      Expanded: 2,
+      Expanded: 2
     },
     EventEmitter: class {
       event = {};
@@ -37,27 +37,27 @@ beforeEach(() => {
       showErrorMessage: vi.fn(),
       createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
       withProgress: vi.fn(async (_opts: unknown, cb: (progress: unknown, token: unknown) => Promise<void>) =>
-        cb({}, {}),
+        cb({}, {})
       ),
       createTerminal: vi.fn(() => ({ show: vi.fn(), sendText: vi.fn() })),
-      showInputBox: vi.fn(),
+      showInputBox: vi.fn()
     },
     commands: {
       registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-      executeCommand: vi.fn(),
+      executeCommand: vi.fn()
     },
     env: {
-      openExternal: vi.fn(),
+      openExternal: vi.fn()
     },
     Uri: {
-      parse: vi.fn((value: string) => ({ value })),
+      parse: vi.fn((value: string) => ({ value }))
     },
     ProgressLocation: { Notification: 15 },
     workspace: {
       getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0), update: vi.fn() })),
-      onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
     },
-    Disposable: class {},
+    Disposable: class {}
   }));
 });
 
@@ -69,24 +69,24 @@ describe('sidebar utility helpers', () => {
       assertHtmlContentType({
         headers: { get: () => null },
         url: 'https://ollama.com/library',
-        status: 200,
-      } as unknown as Response),
+        status: 200
+      } as unknown as Response)
     ).not.toThrow();
 
     expect(() =>
       assertHtmlContentType({
         headers: { get: () => 'text/html; charset=utf-8' },
         url: 'https://ollama.com/library',
-        status: 200,
-      } as unknown as Response),
+        status: 200
+      } as unknown as Response)
     ).not.toThrow();
 
     expect(() =>
       assertHtmlContentType({
         headers: { get: () => 'application/json' },
         url: 'https://ollama.com/library',
-        status: 502,
-      } as unknown as Response),
+        status: 502
+      } as unknown as Response)
     ).toThrow("Expected text/html from https://ollama.com/library but got 'application/json' (HTTP 502)");
   });
 
@@ -108,7 +108,7 @@ describe('sidebar utility helpers', () => {
     const models = [
       new ModelTreeItem('llama3.2:latest', 'local-stopped'),
       new ModelTreeItem('llama2:latest', 'local-stopped'),
-      new ModelTreeItem('mistral:latest', 'local-stopped'),
+      new ModelTreeItem('mistral:latest', 'local-stopped')
     ];
 
     const grouped = groupModelsByFamily(models);
@@ -127,7 +127,12 @@ describe('sidebar utility helpers', () => {
     c.description = '🧩';
 
     const caps = aggregateFamilyCapabilities([a, b, c]);
-    expect(caps).toEqual({ thinking: true, tools: true, vision: true, embedding: true });
+    expect(caps).toEqual({
+      thinking: true,
+      tools: true,
+      vision: true,
+      embedding: true
+    });
 
     expect(buildCapabilityLines(caps)).toContain('🧠 Thinking');
     expect(buildCapabilityLines({})).toBe('');
@@ -152,9 +157,15 @@ describe('sidebar utility helpers', () => {
     const tooltip = buildLocalModelTooltip(
       'llama3.2:latest',
       3 * 1024 ** 3,
-      { id: 'abc', durationMs: 90_000, processor: '25% GPU', size: 3 * 1024 ** 3, sizeVram: 1 * 1024 ** 3 },
+      {
+        id: 'abc',
+        durationMs: 90_000,
+        processor: '25% GPU',
+        size: 3 * 1024 ** 3,
+        sizeVram: 1 * 1024 ** 3
+      },
       'description',
-      { thinking: true, toolCalling: true, imageInput: false, embedding: true },
+      { thinking: true, toolCalling: true, imageInput: false, embedding: true }
     );
 
     expect(tooltip).toContain('🆔 abc');
@@ -257,8 +268,8 @@ describe('sidebar utility helpers', () => {
         vi.fn().mockResolvedValue({
           ok: true,
           headers: { get: () => null },
-          text: async () => '<a href="/library/tiny-llama-3b"></a><a href="/library/big-model-70b"></a>',
-        }),
+          text: async () => '<a href="/library/tiny-llama-3b"></a><a href="/library/big-model-70b"></a>'
+        })
       );
 
       const { LibraryModelsProvider } = await import('./sidebar.js');
@@ -281,8 +292,8 @@ describe('sidebar utility helpers', () => {
         vi.fn().mockResolvedValue({
           ok: true,
           headers: { get: () => null },
-          text: async () => '<a href="/library/tiny-llama-3b"></a><a href="/library/big-model-70b"></a>',
-        }),
+          text: async () => '<a href="/library/tiny-llama-3b"></a><a href="/library/big-model-70b"></a>'
+        })
       );
 
       const { LibraryModelsProvider } = await import('./sidebar.js');

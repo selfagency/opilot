@@ -1,0 +1,56 @@
+[
+  {
+    "match": {
+      "method": "POST",
+      "path": "/api/chat",
+      "body": {
+        "model": "nonexistent-model"
+      }
+    },
+    "response": {
+      "error": {
+        "message": "model 'nonexistent-model' not found"
+      }
+    },
+    "status": 404
+  },
+  {
+    "match": {
+      "method": "POST",
+      "path": "/api/chat",
+      "body": {
+        "model": "error-model"
+      }
+    },
+    "response": {
+      "error": {
+        "message": "Internal server error"
+      }
+    },
+    "status": 500
+  },
+  {
+    "match": {
+      "method": "GET",
+      "path": "/api/tags"
+    },
+    "response": {
+      "json": {
+        "models": [
+          {
+            "name": "smollm:135m",
+            "modified_at": "2024-01-01T00:00:00Z",
+            "size": 1000000000,
+            "digest": "abc123"
+          },
+          {
+            "name": "qwen3:0.6b",
+            "modified_at": "2024-01-01T00:00:00Z",
+            "size": 600000000,
+            "digest": "def456"
+          }
+        ]
+      }
+    }
+  }
+]

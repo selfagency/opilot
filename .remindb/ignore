@@ -1,0 +1,11 @@
+# build + deps + generated noise
+node_modules/
+dist/
+out/
+coverage/
+*.lock
+*.min.*
+.git/
+.github/
+.cache/
+.tmp/

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { Ollama } from 'ollama';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { InputBoxOptions } from 'vscode';
 
 // ---------------------------------------------------------------------------
 // getModelfilesFolder
@@ -23,7 +24,7 @@ const minimalVscodeMock = () => ({
   RelativePattern: class {
     constructor(
       public base: string,
-      public pattern: string,
+      public pattern: string
     ) {}
   },
   Uri: { file: (fsPath: string) => ({ fsPath }) },
@@ -38,10 +39,10 @@ const minimalVscodeMock = () => ({
       onDidCreate: vi.fn(),
       onDidDelete: vi.fn(),
       onDidChange: vi.fn(),
-      dispose: vi.fn(),
+      dispose: vi.fn()
     })),
     fs: { writeFile: vi.fn().mockResolvedValue(undefined) },
-    openTextDocument: vi.fn().mockResolvedValue({}),
+    openTextDocument: vi.fn().mockResolvedValue({})
   },
   window: {
     showInputBox: vi.fn(),
@@ -49,27 +50,30 @@ const minimalVscodeMock = () => ({
     showErrorMessage: vi.fn(),
     showTextDocument: vi.fn(),
     withProgress: vi.fn(),
-    registerTreeDataProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+    registerTreeDataProvider: vi.fn().mockReturnValue({ dispose: vi.fn() })
   },
   env: {
-    openExternal: vi.fn().mockResolvedValue(true),
+    openExternal: vi.fn().mockResolvedValue(true)
   },
   ProgressLocation: { Notification: 15 },
-  commands: { registerCommand: vi.fn().mockReturnValue({ dispose: vi.fn() }), executeCommand: vi.fn() },
+  commands: {
+    registerCommand: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+    executeCommand: vi.fn()
+  },
   languages: {
     registerHoverProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-    registerCompletionItemProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+    registerCompletionItemProvider: vi.fn().mockReturnValue({ dispose: vi.fn() })
   },
   Hover: class {
     constructor(
       public contents: unknown,
-      public range?: unknown,
+      public range?: unknown
     ) {}
   },
   CompletionItem: class {
     constructor(
       public label: string,
-      public kind?: number,
+      public kind?: number
     ) {}
   },
   CompletionItemKind: { Keyword: 13, Property: 9 },
@@ -78,7 +82,7 @@ const minimalVscodeMock = () => ({
   },
   MarkdownString: class {
     constructor(public value: string) {}
-  },
+  }
 });
 
 describe('getModelfilesFolder', () => {
@@ -113,7 +117,7 @@ describe('getModelfilesFolder', () => {
     const { getModelfilesFolder } = await import('./modelfiles.js');
     const config = { get: vi.fn().mockReturnValue('.ollama/modelfiles') };
     expect(getModelfilesFolder(config as any, '/home/user', '/workspace/project')).toBe(
-      '/workspace/project/.ollama/modelfiles',
+      '/workspace/project/.ollama/modelfiles'
     );
   });
 });
@@ -156,17 +160,17 @@ describe('ModelfileItem', () => {
           onDidCreate: vi.fn(),
           onDidDelete: vi.fn(),
           onDidChange: vi.fn(),
-          dispose: vi.fn(),
-        })),
+          dispose: vi.fn()
+        }))
       },
       window: {
         showInputBox: vi.fn(),
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       ProgressLocation: { Notification: 15 },
-      commands: { executeCommand: vi.fn() },
+      commands: { executeCommand: vi.fn() }
     }));
     const mod = await import('./modelfiles.js');
     ModelfileItem = mod.ModelfileItem;
@@ -205,9 +209,9 @@ describe('ModelfilesProvider.getChildren', () => {
       readdir: vi.fn().mockResolvedValue([
         { name: 'pirate.modelfile', isFile: () => true },
         { name: 'assistant.modelfile', isFile: () => true },
-        { name: 'README.md', isFile: () => true },
+        { name: 'README.md', isFile: () => true }
       ]),
-      readFile: vi.fn().mockResolvedValue('FROM llama3.2'),
+      readFile: vi.fn().mockResolvedValue('FROM llama3.2')
     }));
 
     vi.doMock('vscode', () => ({
@@ -235,7 +239,7 @@ describe('ModelfilesProvider.getChildren', () => {
       RelativePattern: class {
         constructor(
           public base: string,
-          public pattern: string,
+          public pattern: string
         ) {}
       },
       workspace: {
@@ -245,17 +249,17 @@ describe('ModelfilesProvider.getChildren', () => {
           onDidCreate: vi.fn(),
           onDidDelete: vi.fn(),
           onDidChange: vi.fn(),
-          dispose: vi.fn(),
-        })),
+          dispose: vi.fn()
+        }))
       },
       window: {
         showInputBox: vi.fn(),
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       ProgressLocation: { Notification: 15 },
-      commands: { executeCommand: vi.fn() },
+      commands: { executeCommand: vi.fn() }
     }));
 
     const { ModelfilesProvider } = await import('./modelfiles.js');
@@ -277,21 +281,21 @@ describe('handleNewModelfile', () => {
   let mockClient: any;
   let writtenContent: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.resetModules();
     writtenContent = '';
 
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue([]),
-      readFile: vi.fn().mockResolvedValue(''),
+      readFile: vi.fn().mockResolvedValue('')
     }));
 
     vi.doMock('vscode', () => ({
       TreeItem: class {
         constructor(
           public label: string,
-          public collapsibleState: number,
+          public collapsibleState: number
         ) {}
       },
       TreeItemCollapsibleState: { None: 0 },
@@ -301,7 +305,7 @@ describe('handleNewModelfile', () => {
       RelativePattern: class {
         constructor(
           public base: string,
-          public pattern: string,
+          public pattern: string
         ) {}
       },
       Uri: { file: (fsPath: string) => ({ fsPath }) },
@@ -316,14 +320,14 @@ describe('handleNewModelfile', () => {
           onDidCreate: vi.fn(),
           onDidDelete: vi.fn(),
           onDidChange: vi.fn(),
-          dispose: vi.fn(),
+          dispose: vi.fn()
         })),
         fs: {
           writeFile: vi.fn().mockImplementation((_uri: unknown, data: Buffer) => {
             writtenContent = data.toString('utf8');
-          }),
+          })
         },
-        openTextDocument: vi.fn().mockResolvedValue({ uri: { fsPath: '/tmp/test.modelfile' } }),
+        openTextDocument: vi.fn().mockResolvedValue({ uri: { fsPath: '/tmp/test.modelfile' } })
       },
       window: {
         showInputBox: vi.fn().mockResolvedValueOnce('pirate-bot').mockResolvedValueOnce('You are a pirate. Arr!'),
@@ -332,13 +336,16 @@ describe('handleNewModelfile', () => {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
         withProgress: vi.fn(),
-        registerTreeDataProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        registerTreeDataProvider: vi.fn().mockReturnValue({ dispose: vi.fn() })
       },
       ProgressLocation: { Notification: 15 },
-      commands: { registerCommand: vi.fn().mockReturnValue({ dispose: vi.fn() }), executeCommand: vi.fn() },
+      commands: {
+        registerCommand: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        executeCommand: vi.fn()
+      },
       languages: {
         registerHoverProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-        registerCompletionItemProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        registerCompletionItemProvider: vi.fn().mockReturnValue({ dispose: vi.fn() })
       },
       Hover: class {
         constructor(public contents: unknown) {}
@@ -346,7 +353,7 @@ describe('handleNewModelfile', () => {
       CompletionItem: class {
         constructor(
           public label: string,
-          public kind?: number,
+          public kind?: number
         ) {}
       },
       CompletionItemKind: { Keyword: 13, Property: 9 },
@@ -355,13 +362,13 @@ describe('handleNewModelfile', () => {
       },
       MarkdownString: class {
         constructor(public value: string) {}
-      },
+      }
     }));
 
     mockClient = {
       list: vi.fn().mockResolvedValue({
-        models: [{ name: 'llama3.2:3b' }, { name: 'mistral:latest' }],
-      }),
+        models: [{ name: 'llama3.2:3b' }, { name: 'mistral:latest' }]
+      })
     };
   });
 
@@ -385,9 +392,9 @@ describe('handleNewModelfile', () => {
     expect(vscode.window.showQuickPick).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ label: 'llama3.2:3b' }),
-        expect.objectContaining({ label: 'mistral:latest' }),
+        expect.objectContaining({ label: 'mistral:latest' })
       ]),
-      expect.objectContaining({ placeHolder: expect.any(String) }),
+      expect.objectContaining({ placeHolder: expect.any(String) })
     );
   });
 
@@ -420,13 +427,13 @@ describe('handleNewModelfile', () => {
 describe('handleBuildModelfile', () => {
   let mockClient: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.resetModules();
 
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue([]),
-      readFile: vi.fn().mockResolvedValue('FROM llama3.2\nSYSTEM """test"""'),
+      readFile: vi.fn().mockResolvedValue('FROM llama3.2\nSYSTEM """test"""')
     }));
 
     vi.doMock('vscode', () => ({
@@ -457,27 +464,28 @@ describe('handleBuildModelfile', () => {
           onDidCreate: vi.fn(),
           onDidDelete: vi.fn(),
           onDidChange: vi.fn(),
-          dispose: vi.fn(),
-        })),
+          dispose: vi.fn()
+        }))
       },
       window: {
         showInputBox: vi.fn().mockResolvedValue('my-model'),
-        withProgress: vi.fn(async (_opts: unknown, task: (p: { report: (msg: unknown) => void }) => Promise<void>) =>
-          task({ report: vi.fn() }),
+        withProgress: vi.fn((_opts: unknown, task: (p: { report: (msg: unknown) => void }) => Promise<void>) =>
+          task({ report: vi.fn() })
         ),
         showInformationMessage: vi.fn(),
-        showErrorMessage: vi.fn(),
+        showErrorMessage: vi.fn()
       },
-      commands: { executeCommand: vi.fn() },
+      commands: { executeCommand: vi.fn() }
     }));
 
     async function* fakeStream() {
+      await Promise.resolve();
       yield { status: 'pulling manifest' };
       yield { status: 'success' };
     }
 
     mockClient = {
-      create: vi.fn().mockReturnValue(fakeStream()),
+      create: vi.fn().mockReturnValue(fakeStream())
     };
   });
 
@@ -487,11 +495,18 @@ describe('handleBuildModelfile', () => {
 
   it('calls client.create with structured fields from parsed Modelfile', async () => {
     const { handleBuildModelfile, ModelfileItem } = await import('./modelfiles.js');
-    const item = new ModelfileItem({ fsPath: '/modelfiles/pirate.modelfile' } as unknown as import('vscode').Uri);
+    const item = new ModelfileItem({
+      fsPath: '/modelfiles/pirate.modelfile'
+    } as unknown as import('vscode').Uri);
     await handleBuildModelfile(item, mockClient as unknown as Ollama);
 
     expect(mockClient.create).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'my-model', from: 'llama3.2', system: 'test', stream: true }),
+      expect.objectContaining({
+        model: 'my-model',
+        from: 'llama3.2',
+        system: 'test',
+        stream: true
+      })
     );
   });
 
@@ -500,7 +515,9 @@ describe('handleBuildModelfile', () => {
     vi.mocked(vscode.window.showInputBox).mockResolvedValue(undefined);
 
     const { handleBuildModelfile, ModelfileItem } = await import('./modelfiles.js');
-    const item = new ModelfileItem({ fsPath: '/modelfiles/pirate.modelfile' } as unknown as import('vscode').Uri);
+    const item = new ModelfileItem({
+      fsPath: '/modelfiles/pirate.modelfile'
+    } as unknown as import('vscode').Uri);
     await handleBuildModelfile(item, mockClient as unknown as Ollama);
 
     expect(mockClient.create).not.toHaveBeenCalled();
@@ -509,7 +526,9 @@ describe('handleBuildModelfile', () => {
   it('refreshes local models on success', async () => {
     const vscode = await import('vscode');
     const { handleBuildModelfile, ModelfileItem } = await import('./modelfiles.js');
-    const item = new ModelfileItem({ fsPath: '/modelfiles/pirate.modelfile' } as unknown as import('vscode').Uri);
+    const item = new ModelfileItem({
+      fsPath: '/modelfiles/pirate.modelfile'
+    } as unknown as import('vscode').Uri);
     await handleBuildModelfile(item, mockClient as unknown as Ollama);
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('opilot.refreshLocalModels');
@@ -517,13 +536,16 @@ describe('handleBuildModelfile', () => {
 
   it('shows error message when client.create throws', async () => {
     mockClient.create = vi.fn().mockImplementation(async function* () {
+      await Promise.resolve();
       yield { status: 'starting' };
       throw new Error('build failed');
     });
 
     const vscode = await import('vscode');
     const { handleBuildModelfile, ModelfileItem } = await import('./modelfiles.js');
-    const item = new ModelfileItem({ fsPath: '/modelfiles/pirate.modelfile' } as unknown as import('vscode').Uri);
+    const item = new ModelfileItem({
+      fsPath: '/modelfiles/pirate.modelfile'
+    } as unknown as import('vscode').Uri);
     await handleBuildModelfile(item, mockClient as unknown as Ollama);
 
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining('build failed'));
@@ -537,14 +559,14 @@ describe('handleOpenModelfilesFolder', () => {
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue([]),
-      readFile: vi.fn().mockResolvedValue(''),
+      readFile: vi.fn().mockResolvedValue('')
     }));
 
     vi.doMock('vscode', () => ({
       TreeItem: class {
         constructor(
           public label: string,
-          public collapsibleState: number,
+          public collapsibleState: number
         ) {}
       },
       TreeItemCollapsibleState: { None: 0 },
@@ -554,7 +576,7 @@ describe('handleOpenModelfilesFolder', () => {
       RelativePattern: class {
         constructor(
           public base: string,
-          public pattern: string,
+          public pattern: string
         ) {}
       },
       Uri: { file: (fsPath: string) => ({ fsPath }) },
@@ -569,18 +591,18 @@ describe('handleOpenModelfilesFolder', () => {
           onDidCreate: vi.fn(),
           onDidDelete: vi.fn(),
           onDidChange: vi.fn(),
-          dispose: vi.fn(),
-        })),
+          dispose: vi.fn()
+        }))
       },
       window: {
-        showErrorMessage: vi.fn(),
+        showErrorMessage: vi.fn()
       },
       env: {
-        openExternal: vi.fn().mockResolvedValue(true),
+        openExternal: vi.fn().mockResolvedValue(true)
       },
       commands: {
-        executeCommand: vi.fn(),
-      },
+        executeCommand: vi.fn()
+      }
     }));
   });
 
@@ -606,7 +628,7 @@ describe('handleOpenModelfilesFolder', () => {
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
       'revealFileInOS',
-      expect.objectContaining({ fsPath: '/tmp/modelfiles' }),
+      expect.objectContaining({ fsPath: '/tmp/modelfiles' })
     );
   });
 });
@@ -633,7 +655,7 @@ describe('createHoverProvider', () => {
     const range = {};
     const document = {
       getWordRangeAtPosition: vi.fn().mockReturnValue(range),
-      getText: vi.fn().mockReturnValue('FROM'),
+      getText: vi.fn().mockReturnValue('FROM')
     };
 
     const result = provider.provideHover(document as any, {} as any, null as any);
@@ -648,7 +670,7 @@ describe('createHoverProvider', () => {
     const range = {};
     const document = {
       getWordRangeAtPosition: vi.fn().mockReturnValue(range),
-      getText: vi.fn().mockReturnValue('temperature'),
+      getText: vi.fn().mockReturnValue('temperature')
     };
 
     const result = provider.provideHover(document as any, {} as any, null as any);
@@ -662,7 +684,7 @@ describe('createHoverProvider', () => {
     const range = {};
     const document = {
       getWordRangeAtPosition: vi.fn().mockReturnValue(range),
-      getText: vi.fn().mockReturnValue('UNKNOWN_WORD_XYZ'),
+      getText: vi.fn().mockReturnValue('UNKNOWN_WORD_XYZ')
     };
 
     const result = provider.provideHover(document as any, {} as any, null as any);
@@ -675,7 +697,7 @@ describe('createHoverProvider', () => {
 
     const document = {
       getWordRangeAtPosition: vi.fn().mockReturnValue(null),
-      getText: vi.fn(),
+      getText: vi.fn()
     };
 
     const result = provider.provideHover(document as any, {} as any, null as any);
@@ -719,7 +741,9 @@ describe('createCompletionProvider', () => {
 
     // lineText = 'PARAMETER '.substring(0,10) = 'PARAMETER '
     const position = { character: 10 };
-    const document = { lineAt: vi.fn().mockReturnValue({ text: 'PARAMETER temperature' }) };
+    const document = {
+      lineAt: vi.fn().mockReturnValue({ text: 'PARAMETER temperature' })
+    };
 
     const items = provider.provideCompletionItems(document as any, position as any, null as any, null as any) as any[];
     expect(items.some((i: any) => i.label === 'temperature')).toBe(true);
@@ -731,7 +755,9 @@ describe('createCompletionProvider', () => {
     const provider = createCompletionProvider();
 
     const position = { character: 11 };
-    const document = { lineAt: vi.fn().mockReturnValue({ text: 'hello world 123' }) };
+    const document = {
+      lineAt: vi.fn().mockReturnValue({ text: 'hello world 123' })
+    };
 
     const items = provider.provideCompletionItems(document as any, position as any, null as any, null as any);
     expect(items).toEqual([]);
@@ -770,27 +796,27 @@ describe('registerModelfileManager', () => {
     expect(vscode.commands.registerCommand).toHaveBeenCalledWith('opilot.openModelfilesFolder', expect.any(Function));
     expect(vscode.languages.registerHoverProvider).toHaveBeenCalledWith(
       expect.objectContaining({ language: 'modelfile' }),
-      expect.any(Object),
+      expect.any(Object)
     );
     expect(vscode.languages.registerCompletionItemProvider).toHaveBeenCalledWith(
       expect.objectContaining({ language: 'modelfile' }),
       expect.any(Object),
-      ' ',
+      ' '
     );
   });
 
   it('invokes all registered command callbacks covering inner lambdas', async () => {
     vi.resetModules();
 
-    const cbMap = new Map<string, Function>();
-    const registerCommand = vi.fn((name: string, cb: Function) => {
+    const cbMap = new Map<string, (...args: unknown[]) => unknown>();
+    const registerCommand = vi.fn((name: string, cb: (...args: unknown[]) => unknown) => {
       cbMap.set(name, cb);
       return { dispose: vi.fn() };
     });
 
     vi.doMock('vscode', () => ({
       ...minimalVscodeMock(),
-      commands: { registerCommand, executeCommand: vi.fn() },
+      commands: { registerCommand, executeCommand: vi.fn() }
     }));
 
     const { registerModelfileManager } = await import('./modelfiles.js');
@@ -798,7 +824,7 @@ describe('registerModelfileManager', () => {
     const subscriptions: any[] = [];
     const context = {
       subscriptions,
-      extensionUri: { fsPath: '/fake/ext' },
+      extensionUri: { fsPath: '/fake/ext' }
     } as any;
     const client = {} as any;
 
@@ -813,10 +839,15 @@ describe('registerModelfileManager', () => {
     await getCb('opilot.newModelfile')?.();
 
     // editModelfile: (item) => executeCommand('vscode.open', item.uri) — pass fake item
-    getCb('opilot.editModelfile')?.({ uri: { fsPath: '/fake/test.modelfile' } });
+    getCb('opilot.editModelfile')?.({
+      uri: { fsPath: '/fake/test.modelfile' }
+    });
 
     // buildModelfile: (item) => handleBuildModelfile(item, client) — showInputBox returns undefined → early return
-    await getCb('opilot.buildModelfile')?.({ label: 'test', uri: { fsPath: '/fake/test.modelfile' } });
+    await getCb('opilot.buildModelfile')?.({
+      label: 'test',
+      uri: { fsPath: '/fake/test.modelfile' }
+    });
 
     // openModelfilesFolder: async () => handleOpenModelfilesFolder(path) — env.openExternal is mocked
     await getCb('opilot.openModelfilesFolder')?.();
@@ -871,7 +902,9 @@ describe('parseModelfile', () => {
   it('parses ADAPTER directive', async () => {
     const { parseModelfile } = await import('./modelfiles.js');
     const result = parseModelfile('FROM base\nADAPTER ./my-adapter.gguf');
-    expect(result.adapters).toEqual({ './my-adapter.gguf': './my-adapter.gguf' });
+    expect(result.adapters).toEqual({
+      './my-adapter.gguf': './my-adapter.gguf'
+    });
   });
 
   it('parses PARAMETER with numeric value', async () => {
@@ -989,7 +1022,7 @@ describe('parseModelfile', () => {
       'PARAMETER temperature 0.5',
       'PARAMETER num_ctx 4096',
       'MESSAGE user hello',
-      'MESSAGE assistant Hi!',
+      'MESSAGE assistant Hi!'
     ].join('\n');
     const result = parseModelfile(content);
     expect(result.from).toBe('llama3.2');
@@ -1022,11 +1055,11 @@ describe('ModelfilesProvider.getChildren error path', () => {
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockRejectedValue(new Error('ENOENT: no such file or directory')),
-      readFile: vi.fn().mockResolvedValue(''),
+      readFile: vi.fn().mockResolvedValue('')
     }));
 
     vi.doMock('vscode', () => ({
-      ...minimalVscodeMock(),
+      ...minimalVscodeMock()
     }));
 
     const { ModelfilesProvider } = await import('./modelfiles.js');
@@ -1049,7 +1082,7 @@ describe('ModelfilesProvider watcher callbacks', () => {
 
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
-      readdir: vi.fn().mockResolvedValue([]),
+      readdir: vi.fn().mockResolvedValue([])
     }));
 
     const watcherMock = {
@@ -1059,15 +1092,15 @@ describe('ModelfilesProvider watcher callbacks', () => {
       }),
       onDidDelete: vi.fn(() => ({ dispose: vi.fn() })),
       onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
-      dispose: vi.fn(),
+      dispose: vi.fn()
     };
 
     vi.doMock('vscode', () => ({
       ...minimalVscodeMock(),
       workspace: {
         ...minimalVscodeMock().workspace,
-        createFileSystemWatcher: vi.fn(() => watcherMock),
-      },
+        createFileSystemWatcher: vi.fn(() => watcherMock)
+      }
     }));
 
     const { ModelfilesProvider } = await import('./modelfiles.js');
@@ -1089,7 +1122,7 @@ describe('ModelfilesProvider watcher callbacks', () => {
 
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
-      readdir: vi.fn().mockResolvedValue([]),
+      readdir: vi.fn().mockResolvedValue([])
     }));
 
     const watcherMock = {
@@ -1099,15 +1132,15 @@ describe('ModelfilesProvider watcher callbacks', () => {
         return { dispose: vi.fn() };
       }),
       onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
-      dispose: vi.fn(),
+      dispose: vi.fn()
     };
 
     vi.doMock('vscode', () => ({
       ...minimalVscodeMock(),
       workspace: {
         ...minimalVscodeMock().workspace,
-        createFileSystemWatcher: vi.fn(() => watcherMock),
-      },
+        createFileSystemWatcher: vi.fn(() => watcherMock)
+      }
     }));
 
     const { ModelfilesProvider } = await import('./modelfiles.js');
@@ -1129,7 +1162,7 @@ describe('ModelfilesProvider watcher callbacks', () => {
 
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
-      readdir: vi.fn().mockResolvedValue([]),
+      readdir: vi.fn().mockResolvedValue([])
     }));
 
     vi.doMock('vscode', () => ({
@@ -1141,9 +1174,9 @@ describe('ModelfilesProvider watcher callbacks', () => {
           return { dispose: vi.fn() };
         }),
         getConfiguration: vi.fn(() => ({
-          get: vi.fn().mockReturnValue('/new/path'),
-        })),
-      },
+          get: vi.fn().mockReturnValue('/new/path')
+        }))
+      }
     }));
 
     const { ModelfilesProvider } = await import('./modelfiles.js');
@@ -1152,7 +1185,9 @@ describe('ModelfilesProvider watcher callbacks', () => {
     const fireCall = vi.fn();
     (provider as any).treeChangeEmitter.fire = fireCall;
 
-    configChangeCb?.({ affectsConfiguration: (key: string) => key === 'ollama.modelfilesPath' });
+    configChangeCb?.({
+      affectsConfiguration: (key: string) => key === 'ollama.modelfilesPath'
+    });
 
     expect(fireCall).toHaveBeenCalledWith(null);
   });
@@ -1169,7 +1204,7 @@ describe('handleNewModelfile edge cases', () => {
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue([]),
-      readFile: vi.fn().mockResolvedValue(''),
+      readFile: vi.fn().mockResolvedValue('')
     }));
 
     vi.doMock('vscode', () => ({
@@ -1177,14 +1212,14 @@ describe('handleNewModelfile edge cases', () => {
       workspace: {
         ...minimalVscodeMock().workspace,
         fs: { writeFile: vi.fn().mockResolvedValue(undefined) },
-        openTextDocument: vi.fn().mockResolvedValue({}),
+        openTextDocument: vi.fn().mockResolvedValue({})
       },
       window: {
         ...minimalVscodeMock().window,
         showInputBox: vi.fn(),
         showQuickPick: vi.fn(),
-        showTextDocument: vi.fn(),
-      },
+        showTextDocument: vi.fn()
+      }
     }));
   });
 
@@ -1195,17 +1230,22 @@ describe('handleNewModelfile edge cases', () => {
   it('falls back to default model when client.list() throws', async () => {
     const vscode = await import('vscode');
     vi.mocked(vscode.window.showInputBox).mockResolvedValueOnce('my-bot').mockResolvedValueOnce('You are helpful.');
-    vi.mocked(vscode.window.showQuickPick).mockResolvedValue({ label: 'llama3.2:3b', description: 'default' });
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue({
+      label: 'llama3.2:3b',
+      description: 'default'
+    });
     vi.mocked(vscode.window.showTextDocument).mockResolvedValue(undefined as any);
 
-    const mockClient = { list: vi.fn().mockRejectedValue(new Error('connection refused')) } as any;
+    const mockClient = {
+      list: vi.fn().mockRejectedValue(new Error('connection refused'))
+    } as any;
     const { handleNewModelfile } = await import('./modelfiles.js');
     await handleNewModelfile('/modelfiles', mockClient);
 
     // Quick pick should still be shown with a fallback model
     expect(vscode.window.showQuickPick).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ label: 'llama3.2:3b' })]),
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -1214,9 +1254,14 @@ describe('handleNewModelfile edge cases', () => {
     vi.mocked(vscode.window.showInputBox)
       .mockResolvedValueOnce('my-bot') // name
       .mockResolvedValueOnce(undefined); // systemPrompt cancelled
-    vi.mocked(vscode.window.showQuickPick).mockResolvedValue({ label: 'llama3.2:3b', description: 'local' });
+    vi.mocked(vscode.window.showQuickPick).mockResolvedValue({
+      label: 'llama3.2:3b',
+      description: 'local'
+    });
 
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [{ name: 'llama3.2:3b' }] }) } as any;
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [{ name: 'llama3.2:3b' }] })
+    } as any;
     const { handleNewModelfile } = await import('./modelfiles.js');
     await handleNewModelfile('/modelfiles', mockClient);
 
@@ -1224,20 +1269,26 @@ describe('handleNewModelfile edge cases', () => {
   });
 
   it('validateInput for name rejects empty string', async () => {
-    let capturedValidator: ((v: string) => string | null) | undefined;
+    const validationResults: Array<string | null | undefined> = [];
     const vscode = await import('vscode');
-    vi.mocked(vscode.window.showInputBox).mockImplementation(async (opts: any) => {
-      if (opts?.validateInput) capturedValidator = opts.validateInput;
-      return undefined;
+    vi.mocked(vscode.window.showInputBox).mockImplementation(async (opts?: InputBoxOptions) => {
+      if (opts?.validateInput) {
+        const coerce = (value: string | { message: string } | null | undefined): string | null =>
+          typeof value === 'string' ? value : (value?.message ?? null);
+        validationResults.push(coerce(await Promise.resolve(opts.validateInput(''))));
+        validationResults.push(coerce(await Promise.resolve(opts.validateInput('valid-name'))));
+        validationResults.push(coerce(await Promise.resolve(opts.validateInput('has/slash'))));
+      }
+      return Promise.resolve(undefined);
     });
 
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }) } as any;
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] })
+    } as any;
     const { handleNewModelfile } = await import('./modelfiles.js');
     await handleNewModelfile('/modelfiles', mockClient);
 
-    expect(capturedValidator?.('')).toBe('Name is required');
-    expect(capturedValidator?.('valid-name')).toBeNull();
-    expect(capturedValidator?.('has/slash')).toContain('path separators');
+    expect(validationResults).toEqual(['Name is required', null, 'Name cannot contain path separators']);
   });
 });
 
@@ -1252,7 +1303,7 @@ describe('handleBuildModelfile missing FROM', () => {
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue([]),
-      readFile: vi.fn().mockResolvedValue('SYSTEM "I have no base model"'),
+      readFile: vi.fn().mockResolvedValue('SYSTEM "I have no base model"')
     }));
 
     vi.doMock('vscode', () => ({
@@ -1260,14 +1311,16 @@ describe('handleBuildModelfile missing FROM', () => {
       window: {
         ...minimalVscodeMock().window,
         showInputBox: vi.fn().mockResolvedValue('my-model'),
-        withProgress: vi.fn(async (_opts: unknown, task: (p: any) => Promise<void>) => task({ report: vi.fn() })),
-      },
+        withProgress: vi.fn((_opts: unknown, task: (p: any) => Promise<void>) => task({ report: vi.fn() }))
+      }
     }));
 
     const vscode = await import('vscode');
     const mockClient = { create: vi.fn() } as any;
     const { handleBuildModelfile, ModelfileItem } = await import('./modelfiles.js');
-    const item = new ModelfileItem({ fsPath: '/modelfiles/bad.modelfile' } as any);
+    const item = new ModelfileItem({
+      fsPath: '/modelfiles/bad.modelfile'
+    } as any);
     await handleBuildModelfile(item, mockClient);
 
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(expect.stringContaining('missing the required FROM'));
@@ -1282,24 +1335,28 @@ describe('handleBuildModelfile missing FROM', () => {
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue([]),
-      readFile: vi.fn().mockResolvedValue('FROM base'),
+      readFile: vi.fn().mockResolvedValue('FROM base')
     }));
 
     vi.doMock('vscode', () => ({
       ...minimalVscodeMock(),
       window: {
         ...minimalVscodeMock().window,
-        showInputBox: vi.fn().mockImplementation(async (opts: any) => {
-          if (opts?.validateInput) capturedValidator = opts.validateInput;
-          return undefined;
+        showInputBox: vi.fn().mockImplementation((opts: any) => {
+          if (opts?.validateInput) {
+            capturedValidator = opts.validateInput;
+          }
+          return Promise.resolve(undefined);
         }),
-        withProgress: vi.fn(),
-      },
+        withProgress: vi.fn()
+      }
     }));
 
     const mockClient = { create: vi.fn() } as any;
     const { handleBuildModelfile, ModelfileItem } = await import('./modelfiles.js');
-    const item = new ModelfileItem({ fsPath: '/modelfiles/test.modelfile' } as any);
+    const item = new ModelfileItem({
+      fsPath: '/modelfiles/test.modelfile'
+    } as any);
     await handleBuildModelfile(item, mockClient);
 
     expect(capturedValidator?.('')).toBe('Model name is required');
@@ -1317,17 +1374,19 @@ describe('handleOpenModelfilesFolder error path', () => {
 
     vi.doMock('node:fs/promises', () => ({
       mkdir: vi.fn().mockResolvedValue(undefined),
-      readdir: vi.fn().mockResolvedValue([]),
+      readdir: vi.fn().mockResolvedValue([])
     }));
 
     vi.doMock('vscode', () => ({
       ...minimalVscodeMock(),
-      env: { openExternal: vi.fn().mockRejectedValue(new Error('cannot open')) },
+      env: {
+        openExternal: vi.fn().mockRejectedValue(new Error('cannot open'))
+      },
       Uri: { file: vi.fn((p: string) => ({ fsPath: p })) },
       window: {
         ...minimalVscodeMock().window,
-        showErrorMessage: vi.fn(),
-      },
+        showErrorMessage: vi.fn()
+      }
     }));
 
     const vscode = await import('vscode');
@@ -1335,7 +1394,7 @@ describe('handleOpenModelfilesFolder error path', () => {
     await handleOpenModelfilesFolder('/modelfiles');
 
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to open Modelfiles folder'),
+      expect.stringContaining('Failed to open Modelfiles folder')
     );
   });
 });

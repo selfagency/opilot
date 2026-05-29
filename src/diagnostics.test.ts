@@ -11,9 +11,9 @@ describe('diagnostics', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: vi.fn(),
-        })),
-      },
+          get: vi.fn()
+        }))
+      }
     }));
 
     const diagnosticsModule = await import('./diagnostics.js');
@@ -23,7 +23,7 @@ describe('diagnostics', () => {
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
-      error: vi.fn(),
+      error: vi.fn()
     };
   });
 
@@ -34,11 +34,13 @@ describe('diagnostics', () => {
         workspace: {
           getConfiguration: vi.fn(() => ({
             get: vi.fn((key: string) => {
-              if (key === 'diagnostics.logLevel') return 'debug';
-              return undefined;
-            }),
-          })),
-        },
+              if (key === 'diagnostics.logLevel') {
+                return 'debug';
+              }
+              return;
+            })
+          }))
+        }
       }));
       const mod = await import('./diagnostics.js');
       expect(mod.getConfiguredLogLevel()).toBe('debug');
@@ -50,11 +52,13 @@ describe('diagnostics', () => {
         workspace: {
           getConfiguration: vi.fn(() => ({
             get: vi.fn((key: string) => {
-              if (key === 'diagnostics.logLevel') return 'info';
-              return undefined;
-            }),
-          })),
-        },
+              if (key === 'diagnostics.logLevel') {
+                return 'info';
+              }
+              return;
+            })
+          }))
+        }
       }));
       const mod = await import('./diagnostics.js');
       expect(mod.getConfiguredLogLevel()).toBe('info');
@@ -66,11 +70,13 @@ describe('diagnostics', () => {
         workspace: {
           getConfiguration: vi.fn(() => ({
             get: vi.fn((key: string) => {
-              if (key === 'diagnostics.logLevel') return 'warn';
-              return undefined;
-            }),
-          })),
-        },
+              if (key === 'diagnostics.logLevel') {
+                return 'warn';
+              }
+              return;
+            })
+          }))
+        }
       }));
       const mod = await import('./diagnostics.js');
       expect(mod.getConfiguredLogLevel()).toBe('warn');
@@ -82,11 +88,13 @@ describe('diagnostics', () => {
         workspace: {
           getConfiguration: vi.fn(() => ({
             get: vi.fn((key: string) => {
-              if (key === 'diagnostics.logLevel') return 'error';
-              return undefined;
-            }),
-          })),
-        },
+              if (key === 'diagnostics.logLevel') {
+                return 'error';
+              }
+              return;
+            })
+          }))
+        }
       }));
       const mod = await import('./diagnostics.js');
       expect(mod.getConfiguredLogLevel()).toBe('error');
@@ -98,11 +106,13 @@ describe('diagnostics', () => {
         workspace: {
           getConfiguration: vi.fn(() => ({
             get: vi.fn((key: string) => {
-              if (key === 'diagnostics.logLevel') return 'invalid';
-              return undefined;
-            }),
-          })),
-        },
+              if (key === 'diagnostics.logLevel') {
+                return 'invalid';
+              }
+              return;
+            })
+          }))
+        }
       }));
       const mod = await import('./diagnostics.js');
       expect(mod.getConfiguredLogLevel()).toBe('info');
@@ -113,9 +123,9 @@ describe('diagnostics', () => {
       vi.doMock('vscode', () => ({
         workspace: {
           getConfiguration: vi.fn(() => ({
-            get: vi.fn(() => undefined),
-          })),
-        },
+            get: vi.fn(() => undefined)
+          }))
+        }
       }));
       const mod = await import('./diagnostics.js');
       expect(mod.getConfiguredLogLevel()).toBe('info');

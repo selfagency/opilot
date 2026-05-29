@@ -1,6 +1,6 @@
 import { Ollama } from 'ollama';
 import { Agent, fetch as undiciFetch } from 'undici';
-import { ExtensionContext } from 'vscode';
+import type { ExtensionContext } from 'vscode';
 import { getSetting } from './settings.js';
 
 export function getOllamaHost(): string {
@@ -20,22 +20,22 @@ function createInsecureFetch(): typeof globalThis.fetch {
   return (input, init) =>
     undiciFetch(input as Parameters<typeof undiciFetch>[0], {
       ...(init as Parameters<typeof undiciFetch>[1]),
-      dispatcher: agent,
+      dispatcher: agent
     }) as Promise<Response>;
 }
 
-export async function getOllamaAuthToken(context: ExtensionContext): Promise<string | undefined> {
+export function getOllamaAuthToken(context: ExtensionContext): Thenable<string | undefined> {
   return context.secrets.get('ollama-auth-token');
 }
 
 export async function getOllamaAuthHeaders(context: ExtensionContext): Promise<Record<string, string> | undefined> {
   const authToken = await getOllamaAuthToken(context);
   if (!authToken) {
-    return undefined;
+    return;
   }
 
   return {
-    Authorization: `Bearer ${authToken}`,
+    Authorization: `Bearer ${authToken}`
   };
 }
 
@@ -45,7 +45,7 @@ export async function getOllamaAuthHeaders(context: ExtensionContext): Promise<R
 export function redactUrlCredentials(urlOrHost: string): string {
   try {
     const parsed = new URL(urlOrHost);
-    if (!parsed.username && !parsed.password) {
+    if (!(parsed.username || parsed.password)) {
       return urlOrHost;
     }
 
@@ -77,13 +77,17 @@ export async function getOllamaClient(context: ExtensionContext): Promise<Ollama
   const host = getOllamaHost();
   const authToken = await getOllamaAuthToken(context);
 
-  const clientConfig: { host: string; headers?: Record<string, string>; fetch?: typeof globalThis.fetch } = {
-    host,
+  const clientConfig: {
+    host: string;
+    headers?: Record<string, string>;
+    fetch?: typeof globalThis.fetch;
+  } = {
+    host
   };
 
   if (authToken) {
     clientConfig.headers = {
-      Authorization: `Bearer ${authToken}`,
+      Authorization: `Bearer ${authToken}`
     };
   }
 
@@ -102,7 +106,7 @@ export async function getOllamaClient(context: ExtensionContext): Promise<Ollama
  * Otherwise, it returns a client connecting to the configured host (e.g. local server),
  * which handles cloud model requests via credential forwarding (after `ollama login`).
  */
-export async function getCloudOllamaClient(context: ExtensionContext): Promise<Ollama> {
+export function getCloudOllamaClient(context: ExtensionContext): Promise<Ollama> {
   return getOllamaClient(context);
 }
 
@@ -110,20 +114,20 @@ export async function getCloudOllamaClient(context: ExtensionContext): Promise<O
  * Model capabilities detected from Ollama model metadata
  */
 export interface ModelCapabilities {
-  toolCalling: boolean;
-  imageInput: boolean;
-  thinking: boolean;
   embedding: boolean;
+  imageInput: boolean;
   maxInputTokens: number;
   maxOutputTokens: number;
+  thinking: boolean;
+  toolCalling: boolean;
 }
 
 export type ConnectionFailureKind = 'timeout' | 'connection-refused' | 'authentication' | 'cancelled' | 'unknown';
 
 export interface ConnectionFailureDetails {
+  error: unknown;
   kind: ConnectionFailureKind;
   message: string;
-  error: unknown;
 }
 
 function classifyConnectionFailure(error: unknown): ConnectionFailureDetails {
@@ -161,8 +165,8 @@ function classifyConnectionFailure(error: unknown): ConnectionFailureDetails {
  */
 export async function testConnection(
   client: Ollama,
-  timeoutMs = 5_000,
-  onFailure?: (details: ConnectionFailureDetails) => void,
+  timeoutMs = 5000,
+  onFailure?: (details: ConnectionFailureDetails) => void
 ): Promise<boolean> {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -170,10 +174,15 @@ export async function testConnection(
       client.list(),
       new Promise((_, reject) => {
         timeoutHandle = setTimeout(
-          () => reject(Object.assign(new Error('Connection timed out'), { code: 'ETIMEDOUT' })),
-          timeoutMs,
+          () =>
+            reject(
+              Object.assign(new Error('Connection timed out'), {
+                code: 'ETIMEDOUT'
+              })
+            ),
+          timeoutMs
         );
-      }),
+      })
     ]);
     return true;
   } catch (error) {
@@ -190,6 +199,7 @@ export async function testConnection(
  * Fetch and parse model capabilities from an Ollama model
  * by inspecting the template and families metadata
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses many model metadata fields with fallbacks
 export async function fetchModelCapabilities(client: Ollama, modelId: string): Promise<ModelCapabilities> {
   try {
     const modelInfo = await client.show({ model: modelId });
@@ -199,7 +209,7 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
     let imageInput = false;
 
     // Check template for tool support by looking for {{ .Tools }}
-    if (modelInfo.template && modelInfo.template.includes('{{ .Tools }}')) {
+    if (modelInfo.template?.includes('{{ .Tools }}')) {
       toolCalling = true;
     }
 
@@ -242,7 +252,9 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
       contextLength = infoCtx;
     } else if (typeof parameters === 'string') {
       const match = /^num_ctx\s+(\d+)/m.exec(parameters);
-      if (match) contextLength = parseInt(match[1], 10);
+      if (match) {
+        contextLength = Number.parseInt(match[1], 10);
+      }
     }
 
     const maxInputTokens = contextLength;
@@ -254,7 +266,7 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
     if (typeof parameters === 'string') {
       const predictMatch = /num_predict\s+(-?\d+)/m.exec(parameters);
       if (predictMatch) {
-        const val = parseInt(predictMatch[1], 10);
+        const val = Number.parseInt(predictMatch[1], 10);
         maxOutputTokens = val > 0 ? val : contextLength;
       }
     }
@@ -273,7 +285,7 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
       thinking,
       embedding,
       maxInputTokens,
-      maxOutputTokens,
+      maxOutputTokens
     };
   } catch {
     // If we can't fetch model info, return conservative defaults
@@ -283,7 +295,7 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
       thinking: false,
       embedding: false,
       maxInputTokens: 2048,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 2048
     };
   }
 }

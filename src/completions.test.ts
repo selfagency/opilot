@@ -14,10 +14,14 @@ describe('OllamaInlineCompletionProvider', () => {
   }
 
   function makeDocument(text: string, offset: number) {
-    const positionAt = (off: number) => ({ _off: Math.min(Math.max(0, off), text.length) });
+    const positionAt = (off: number) => ({
+      _off: Math.min(Math.max(0, off), text.length)
+    });
     return {
       getText: (range?: unknown) => {
-        if (!range) return text;
+        if (!range) {
+          return text;
+        }
         const r = range as { start: { _off?: number }; end: { _off?: number } };
         // When `position` (passed as `{}`) is used as a range boundary it has no
         // `_off`, so fall back to the cursor offset so slicing stays correct.
@@ -27,23 +31,30 @@ describe('OllamaInlineCompletionProvider', () => {
       },
       offsetAt: (pos: unknown) => {
         if (typeof pos === 'object' && pos !== null) {
-          if ('_off' in (pos as object)) return (pos as { _off: number })._off;
+          if ('_off' in (pos as object)) {
+            return (pos as { _off: number })._off;
+          }
           // Sentinel: vscode.Position(lineCount - 1, MAX_SAFE_INTEGER) → document end
-          if ('character' in (pos as object) && (pos as { character: number }).character === Number.MAX_SAFE_INTEGER)
+          if ('character' in (pos as object) && (pos as { character: number }).character === Number.MAX_SAFE_INTEGER) {
             return text.length;
+          }
         }
         return offset;
       },
       positionAt,
-      lineCount: text.split('\n').length || 1,
+      lineCount: text.split('\n').length || 1
     };
   }
 
   function makeConfigGet(enableInlineCompletions: boolean, completionModel: string) {
     return vi.fn((key: string) => {
-      if (key === 'enableInlineCompletions') return enableInlineCompletions;
-      if (key === 'completionModel') return completionModel;
-      return undefined;
+      if (key === 'enableInlineCompletions') {
+        return enableInlineCompletions;
+      }
+      if (key === 'completionModel') {
+        return completionModel;
+      }
+      return;
     });
   }
 
@@ -51,24 +62,24 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(false, 'llama3.2'),
-        })),
+          get: makeConfigGet(false, 'llama3.2')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
@@ -78,7 +89,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     expect(result).toBeNull();
@@ -89,24 +100,24 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, ''),
-        })),
+          get: makeConfigGet(true, '')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
@@ -116,7 +127,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     expect(result).toBeNull();
@@ -127,24 +138,24 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, '   '),
-        })),
+          get: makeConfigGet(true, '   ')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
@@ -154,7 +165,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     expect(result).toBeNull();
@@ -167,24 +178,24 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
@@ -197,7 +208,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument(text, offset) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     expect(generateMock).toHaveBeenCalledWith(
@@ -205,8 +216,8 @@ describe('OllamaInlineCompletionProvider', () => {
         model: 'qwen2.5-coder:1.5b',
         prompt: 'hello',
         suffix: ' world',
-        stream: false,
-      }),
+        stream: false
+      })
     );
   });
 
@@ -215,35 +226,37 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
-    const client = { generate: vi.fn().mockResolvedValue({ response: completionText }) } as any;
+    const client = {
+      generate: vi.fn().mockResolvedValue({ response: completionText })
+    } as any;
     const provider = new OllamaInlineCompletionProvider(client);
 
     const result = await provider.provideInlineCompletionItems(
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     expect(result).toHaveLength(1);
@@ -254,35 +267,37 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
-    const client = { generate: vi.fn().mockResolvedValue({ response: '' }) } as any;
+    const client = {
+      generate: vi.fn().mockResolvedValue({ response: '' })
+    } as any;
     const provider = new OllamaInlineCompletionProvider(client);
 
     const result = await provider.provideInlineCompletionItems(
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     expect(result).toBeNull();
@@ -292,35 +307,37 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
-    const client = { generate: vi.fn().mockResolvedValue({ response: '   \n  ' }) } as any;
+    const client = {
+      generate: vi.fn().mockResolvedValue({ response: '   \n  ' })
+    } as any;
     const provider = new OllamaInlineCompletionProvider(client);
 
     const result = await provider.provideInlineCompletionItems(
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     expect(result).toBeNull();
@@ -330,24 +347,24 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
@@ -358,7 +375,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      makeToken(true) as any,
+      makeToken(true) as any
     );
 
     expect(result).toBeNull();
@@ -371,32 +388,32 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
     const client = {
-      generate: vi.fn().mockImplementation(async () => {
+      generate: vi.fn().mockImplementation(() => {
         token.isCancellationRequested = true;
         return { response: 'const x = 1;' };
-      }),
+      })
     } as any;
     const provider = new OllamaInlineCompletionProvider(client);
 
@@ -404,7 +421,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      token as any,
+      token as any
     );
 
     expect(result).toBeNull();
@@ -416,24 +433,24 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider, MAX_COMPLETION_PREFIX_CHARS } = await import('./completions.js');
@@ -449,7 +466,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument(text, offset) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     const call = generateMock.mock.calls[0][0];
@@ -463,24 +480,24 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider, MAX_COMPLETION_SUFFIX_CHARS } = await import('./completions.js');
@@ -496,7 +513,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument(text, offset) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     const call = generateMock.mock.calls[0][0];
@@ -510,24 +527,24 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
@@ -541,7 +558,7 @@ describe('OllamaInlineCompletionProvider', () => {
       makeDocument(text, offset) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     const call = generateMock.mock.calls[0][0];
@@ -554,35 +571,37 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
-    const client = { generate: vi.fn().mockRejectedValue(new Error('Connection refused')) } as any;
+    const client = {
+      generate: vi.fn().mockRejectedValue(new Error('Connection refused'))
+    } as any;
     const provider = new OllamaInlineCompletionProvider(client, logChannel as any);
 
     const result = await provider.provideInlineCompletionItems(
       makeDocument('hello', 5) as any,
       {} as any,
       {} as any,
-      makeToken() as any,
+      makeToken() as any
     );
 
     expect(result).toBeNull();
@@ -593,32 +612,34 @@ describe('OllamaInlineCompletionProvider', () => {
     vi.doMock('vscode', () => ({
       workspace: {
         getConfiguration: vi.fn(() => ({
-          get: makeConfigGet(true, 'qwen2.5-coder:1.5b'),
-        })),
+          get: makeConfigGet(true, 'qwen2.5-coder:1.5b')
+        }))
       },
       Position: class {
         constructor(
           public readonly line: number,
-          public readonly character: number,
+          public readonly character: number
         ) {}
       },
       Range: class {
         constructor(
           public readonly start: unknown,
-          public readonly end: unknown,
+          public readonly end: unknown
         ) {}
       },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
-      },
+      }
     }));
 
     const { OllamaInlineCompletionProvider } = await import('./completions.js');
-    const client = { generate: vi.fn().mockRejectedValue(new Error('oops')) } as any;
+    const client = {
+      generate: vi.fn().mockRejectedValue(new Error('oops'))
+    } as any;
     const provider = new OllamaInlineCompletionProvider(client);
 
     await expect(
-      provider.provideInlineCompletionItems(makeDocument('hello', 5) as any, {} as any, {} as any, makeToken() as any),
+      provider.provideInlineCompletionItems(makeDocument('hello', 5) as any, {} as any, {} as any, makeToken() as any)
     ).resolves.toBeNull();
   });
 });

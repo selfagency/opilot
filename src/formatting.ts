@@ -1,17 +1,34 @@
 /**
  * Shared formatting utilities for extension and provider paths.
- * Implementation delegated to @selfagency/llm-stream-parser.
+ * Implementation delegated to @agentsy/core.
  */
 
-import { splitLeadingXmlContextBlocks as _split } from '@selfagency/llm-stream-parser/context';
+import { splitLeadingXmlContextBlocks as _split } from '@agentsy/core/context';
 
-export { dedupeXmlContextBlocksByTag, stripXmlContextTags } from '@selfagency/llm-stream-parser/context';
+export {
+  dedupeXmlContextBlocksByTag,
+  stripXmlContextTags
+} from '@agentsy/core/context';
 export {
   formatXmlLikeResponseForDisplay,
-  sanitizeNonStreamingModelOutput,
-} from '@selfagency/llm-stream-parser/formatting';
-export { createXmlStreamFilter } from '@selfagency/llm-stream-parser/xml-filter';
-export type { XmlStreamFilter } from '@selfagency/llm-stream-parser/xml-filter';
+  sanitizeNonStreamingModelOutput
+} from '@agentsy/core/formatting';
+export {
+  createXmlStreamFilter,
+  type XmlStreamFilter
+} from '@agentsy/core/xml-filter';
+
+/**
+ * Appends text to a markdown blockquote, adding `> ` prefix at line starts.
+ * TODO: remove when @agentsy/core publishes this from /formatting.
+ */
+export function appendToBlockquote(text: string, atLineStart: boolean): string {
+  if (!text) {
+    return '';
+  }
+
+  return `${atLineStart ? '> ' : ''}${text.replaceAll('\n', '\n> ')}`;
+}
 
 /**
  * Return shape matching existing call sites that access `.content`.

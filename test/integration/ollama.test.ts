@@ -63,10 +63,13 @@ beforeAll(async () => {
   if (cloudModelName) {
     try {
       const cloudClient = cloudApiKey
-        ? new Ollama({ host: 'https://ollama.com', headers: { Authorization: `Bearer ${cloudApiKey}` } })
+        ? new Ollama({
+            host: 'https://ollama.com',
+            headers: { Authorization: `Bearer ${cloudApiKey}` }
+          })
         : new Ollama({ host: OLLAMA_HOST });
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('cloud auth check timed out')), 15_000),
+        setTimeout(() => reject(new Error('cloud auth check timed out')), 15_000)
       );
       await Promise.race([
         cloudClient.generate({
@@ -74,9 +77,9 @@ beforeAll(async () => {
           prompt: '',
           stream: false,
           keep_alive: 0,
-          options: { num_predict: 1 },
+          options: { num_predict: 1 }
         } as Parameters<typeof cloudClient.generate>[0]),
-        timeout,
+        timeout
       ]);
       cloudAuthValid = true;
     } catch {
@@ -118,14 +121,14 @@ describe('Local model start and stop', () => {
       model: LOCAL_MODEL,
       prompt: '',
       stream: false,
-      keep_alive: '10m',
+      keep_alive: '10m'
     });
 
     // Verify the model appears in `ps`
     const ps = await client.ps();
     const running = ps.models.find(m => m.name.includes(LOCAL_MODEL.split(':')[0]));
     expect(running).toBeDefined();
-    expect(running!.name).toContain(LOCAL_MODEL.split(':')[0]);
+    expect(running?.name).toContain(LOCAL_MODEL.split(':')[0]);
   }, 120_000);
 
   it('stops a local model and verifies it is no longer running', async () => {
@@ -134,7 +137,7 @@ describe('Local model start and stop', () => {
       model: LOCAL_MODEL,
       prompt: '',
       stream: false,
-      keep_alive: '10m',
+      keep_alive: '10m'
     });
 
     // Stop the model using keep_alive: 0 (same pattern as sidebar.ts stopModel())
@@ -142,7 +145,7 @@ describe('Local model start and stop', () => {
       model: LOCAL_MODEL,
       prompt: '',
       stream: false,
-      keep_alive: 0,
+      keep_alive: 0
     });
 
     // Ollama unloads asynchronously — send a second keep_alive:0 to be sure,
@@ -151,7 +154,7 @@ describe('Local model start and stop', () => {
       model: LOCAL_MODEL,
       prompt: '',
       stream: false,
-      keep_alive: 0,
+      keep_alive: 0
     });
 
     const modelBase = LOCAL_MODEL.split(':')[0];
@@ -174,7 +177,7 @@ describe('Local model start and stop', () => {
       model: LOCAL_MODEL,
       prompt: '',
       stream: false,
-      keep_alive: 0,
+      keep_alive: 0
     });
 
     // Start again
@@ -182,7 +185,7 @@ describe('Local model start and stop', () => {
       model: LOCAL_MODEL,
       prompt: '',
       stream: false,
-      keep_alive: '10m',
+      keep_alive: '10m'
     });
 
     const ps = await client.ps();
@@ -201,7 +204,7 @@ describe('Local model chat', () => {
       model: LOCAL_MODEL,
       messages: [{ role: 'user', content: 'Reply with only the word "hello".' }],
       stream: false,
-      options: { num_predict: 20 },
+      options: { num_predict: 20 }
     });
 
     expect(response.message).toBeDefined();
@@ -215,7 +218,7 @@ describe('Local model chat', () => {
       model: LOCAL_MODEL,
       messages: [{ role: 'user', content: 'Reply with only the word "yes".' }],
       stream: true,
-      options: { num_predict: 20 },
+      options: { num_predict: 20 }
     });
 
     for await (const chunk of stream) {
@@ -235,10 +238,13 @@ describe('Local model chat', () => {
       messages: [
         { role: 'user', content: 'Remember the number 42.' },
         { role: 'assistant', content: 'I will remember the number 42.' },
-        { role: 'user', content: 'What number did I ask you to remember? Reply with just the number.' },
+        {
+          role: 'user',
+          content: 'What number did I ask you to remember? Reply with just the number.'
+        }
       ],
       stream: false,
-      options: { num_predict: 20 },
+      options: { num_predict: 20 }
     });
 
     expect(response.message.content).toBeDefined();
@@ -256,7 +262,7 @@ describe('Local model generate', () => {
       model: LOCAL_MODEL,
       prompt: 'The capital of France is',
       stream: false,
-      options: { num_predict: 20 },
+      options: { num_predict: 20 }
     });
 
     expect(response.response).toBeDefined();
@@ -272,7 +278,7 @@ describe('Local model embeddings', () => {
   it('produces an embedding vector', async () => {
     const response = await client.embed({
       model: LOCAL_MODEL,
-      input: 'Hello, world!',
+      input: 'Hello, world!'
     });
 
     expect(response.embeddings).toBeDefined();
@@ -315,7 +321,7 @@ describe('Model lifecycle', () => {
       model: CUSTOM_MODEL_NAME,
       from: LOCAL_MODEL,
       system: 'You are a helpful test assistant.',
-      stream: true,
+      stream: true
     });
 
     const statuses: string[] = [];
@@ -337,7 +343,7 @@ describe('Model lifecycle', () => {
     await client.create({
       model: `${CUSTOM_MODEL_NAME}-del`,
       from: LOCAL_MODEL,
-      stream: false,
+      stream: false
     });
 
     await client.delete({ model: `${CUSTOM_MODEL_NAME}-del` });
@@ -372,18 +378,21 @@ function getCloudClient(): Ollama {
   const host = CLOUD_API_KEY ? 'https://ollama.com' : OLLAMA_HOST;
   return new Ollama({
     host,
-    headers: { Authorization: `Bearer ${CLOUD_API_KEY}` },
+    headers: { Authorization: `Bearer ${CLOUD_API_KEY}` }
   });
 }
 
 describe('Cloud model chat', () => {
   it('generates a non-streaming response from a cloud model', async () => {
-    if (skipCloud()) return;
+    if (skipCloud()) {
+      return;
+    }
 
     const response = await getCloudClient().chat({
+      // biome-ignore lint/style/noNonNullAssertion: guarded by skipCloud() check
       model: cloudModelName!,
       messages: [{ role: 'user', content: 'Reply with only the word "hello".' }],
-      stream: false,
+      stream: false
     });
 
     expect(response.message).toBeDefined();
@@ -392,13 +401,16 @@ describe('Cloud model chat', () => {
   }, 120_000);
 
   it('generates a streaming response from a cloud model', async () => {
-    if (skipCloud()) return;
+    if (skipCloud()) {
+      return;
+    }
 
     const chunks: string[] = [];
     const stream = await getCloudClient().chat({
+      // biome-ignore lint/style/noNonNullAssertion: guarded by skipCloud() check
       model: cloudModelName!,
       messages: [{ role: 'user', content: 'Reply with only the word "yes".' }],
-      stream: true,
+      stream: true
     });
 
     for await (const chunk of stream) {
@@ -417,12 +429,15 @@ describe('Cloud model chat', () => {
 
 describe('Cloud model generate', () => {
   it('generates a completion from a cloud model', async () => {
-    if (skipCloud()) return;
+    if (skipCloud()) {
+      return;
+    }
 
     const response = await getCloudClient().generate({
+      // biome-ignore lint/style/noNonNullAssertion: guarded by skipCloud() check
       model: cloudModelName!,
       prompt: 'The capital of France is',
-      stream: false,
+      stream: false
     });
 
     expect(response.response).toBeDefined();
@@ -439,26 +454,32 @@ describe('Cloud model start and stop', () => {
   // These tests verify the start/stop API calls succeed without error.
 
   it('starts a cloud model without error', async () => {
-    if (skipCloud()) return;
+    if (skipCloud()) {
+      return;
+    }
 
     const response = await getCloudClient().generate({
+      // biome-ignore lint/style/noNonNullAssertion: guarded by skipCloud() check
       model: cloudModelName!,
       prompt: '',
       stream: false,
-      keep_alive: '10m',
+      keep_alive: '10m'
     });
 
     expect(response).toBeDefined();
   }, 120_000);
 
   it('stops a cloud model without error', async () => {
-    if (skipCloud()) return;
+    if (skipCloud()) {
+      return;
+    }
 
     const response = await getCloudClient().generate({
+      // biome-ignore lint/style/noNonNullAssertion: guarded by skipCloud() check
       model: cloudModelName!,
       prompt: '',
       stream: false,
-      keep_alive: 0,
+      keep_alive: 0
     });
 
     expect(response).toBeDefined();
@@ -495,16 +516,23 @@ describe('Cloud model detection', () => {
 describe('XML context tag extraction', () => {
   const XML_CONTEXT_TAG_RE = /<([a-zA-Z_][a-zA-Z0-9_.-]*)[^>]*>[\s\S]*?<\/\1>/gi;
 
-  function extractLeadingContextBlocks(text: string): { blocks: string[]; remaining: string } {
+  function extractLeadingContextBlocks(text: string): {
+    blocks: string[];
+    remaining: string;
+  } {
     const blocks: string[] = [];
     let remaining = text.trimStart();
 
-    if (!remaining.startsWith('<')) return { blocks, remaining: text };
+    if (!remaining.startsWith('<')) {
+      return { blocks, remaining: text };
+    }
 
     XML_CONTEXT_TAG_RE.lastIndex = 0;
     while (true) {
       const match = XML_CONTEXT_TAG_RE.exec(remaining);
-      if (!match || match.index !== 0) break;
+      if (!match || match.index !== 0) {
+        break;
+      }
       blocks.push(match[0].trim());
       remaining = remaining.slice(match[0].length).trimStart();
       XML_CONTEXT_TAG_RE.lastIndex = 0;
@@ -562,12 +590,13 @@ This is user text with <b>HTML</b> inside.`;
     const latestByTag = new Map<string, string>();
     for (let i = blocks.length - 1; i >= 0; i--) {
       XML_CONTEXT_TAG_RE.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = XML_CONTEXT_TAG_RE.exec(blocks[i])) !== null) {
+      let match: RegExpExecArray | null = XML_CONTEXT_TAG_RE.exec(blocks[i]);
+      while (match !== null) {
         const tagName = match[1];
         if (!latestByTag.has(tagName)) {
           latestByTag.set(tagName, match[0]);
         }
+        match = XML_CONTEXT_TAG_RE.exec(blocks[i]);
       }
     }
 

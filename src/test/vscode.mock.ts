@@ -1,26 +1,26 @@
 import { vi } from 'vitest';
 
 export interface LanguageModelChatInformation {
-  id: string;
-  name: string;
-  family?: string;
-  version?: string;
-  maxInputTokens?: number;
-  maxOutputTokens?: number;
-  detail?: string;
-  tooltip?: string;
   capabilities?: {
     toolCalling?: boolean;
     imageInput?: boolean;
   };
+  detail?: string;
+  family?: string;
+  id: string;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  name: string;
+  tooltip?: string;
+  version?: string;
 }
 
-export interface LanguageModelChatProvider {}
+export type LanguageModelChatProvider = Record<string, never>;
 
-export type Event<T> = (listener: (e: T) => void, thisArgs?: any, disposables?: any) => any;
+export type Event<T> = (listener: (e: T) => void, thisArgs?: unknown, disposables?: unknown) => unknown;
 
 export class EventEmitter<T> {
-  private listeners: Array<(e: T) => void> = [];
+  private readonly listeners: Array<(e: T) => void> = [];
 
   public readonly event: Event<T> = (listener: (e: T) => void) => {
     this.listeners.push(listener);
@@ -30,18 +30,18 @@ export class EventEmitter<T> {
         if (index !== -1) {
           this.listeners.splice(index, 1);
         }
-      },
+      }
     };
   };
 
   public fire(data: T): void {
-    this.listeners.forEach(listener => {
+    for (const listener of this.listeners) {
       try {
         listener(data);
       } catch (error) {
         console.error('Error in event listener:', error);
       }
-    });
+    }
   }
 
   public dispose(): void {
@@ -51,23 +51,23 @@ export class EventEmitter<T> {
 
 export enum LanguageModelChatMessageRole {
   User = 1,
-  Assistant = 2,
+  Assistant = 2
 }
 
 export enum LanguageModelChatToolMode {
   Auto = 0,
-  Required = 1,
+  Required = 1
 }
 
 export enum InputBoxValidationSeverity {
   Info = 1,
   Warning = 2,
-  Error = 3,
+  Error = 3
 }
 
 export enum QuickPickItemKind {
   Separator = -1,
-  Default = 0,
+  Default = 0
 }
 
 export class LanguageModelTextPart {
@@ -78,28 +78,28 @@ export class LanguageModelToolCallPart {
   constructor(
     public readonly callId: string,
     public readonly name: string,
-    public readonly input: Record<string, unknown>,
+    public readonly input: Record<string, unknown>
   ) {}
 }
 
 export class LanguageModelToolResultPart {
   constructor(
     public readonly callId: string,
-    public readonly content: LanguageModelTextPart[],
+    public readonly content: LanguageModelTextPart[]
   ) {}
 }
 
 export class LanguageModelDataPart {
   constructor(
     public readonly data: Uint8Array,
-    public readonly mimeType: string,
+    public readonly mimeType: string
   ) {}
 }
 
 export enum ConfigurationTarget {
   Global = 1,
   Workspace = 2,
-  WorkspaceFolder = 3,
+  WorkspaceFolder = 3
 }
 
 export const window = {
@@ -109,23 +109,23 @@ export const window = {
   showInformationMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
-  showTextDocument: vi.fn(),
+  showTextDocument: vi.fn()
 };
 
 export const lm = {
   registerLanguageModelChatProvider: vi.fn().mockReturnValue({ dispose: vi.fn() }),
   selectChatModels: vi.fn().mockResolvedValue([]),
-  onDidChangeChatModels: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+  onDidChangeChatModels: vi.fn().mockReturnValue({ dispose: vi.fn() })
 };
 
 export const workspace = {
   openTextDocument: vi.fn().mockResolvedValue({}),
-  getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() }),
+  getConfiguration: vi.fn().mockReturnValue({ get: vi.fn() })
 };
 
 export const commands = {
   registerCommand: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-  executeCommand: vi.fn().mockResolvedValue(undefined),
+  executeCommand: vi.fn().mockResolvedValue(undefined)
 };
 
 export class MarkdownString {
@@ -142,7 +142,7 @@ export class LanguageModelChatMessage {
   constructor(
     public readonly role: LanguageModelChatMessageRole,
     public readonly content: string,
-    public readonly name?: string,
+    public readonly name?: string
   ) {}
 }
 
@@ -160,11 +160,11 @@ export class ChatResponseMarkdownPart {
 
 export const Uri = {
   file: vi.fn((path: string) => ({ fsPath: path })),
-  joinPath: vi.fn().mockReturnValue(undefined),
+  joinPath: vi.fn().mockReturnValue(undefined)
 };
 
 export const chat = {
-  createChatParticipant: vi.fn().mockReturnValue({ iconPath: undefined, dispose: vi.fn() }),
+  createChatParticipant: vi.fn().mockReturnValue({ iconPath: undefined, dispose: vi.fn() })
 };
 
 export class InlineCompletionItem {

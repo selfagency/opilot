@@ -1,0 +1,22 @@
+{
+  "controls": [
+    {
+      "command": "/opt/homebrew/bin/lazygit",
+      "height": 300,
+      "id": "git",
+      "title": "Git"
+    },
+    {
+      "command": "/opt/homebrew/bin/yazi",
+      "height": 300,
+      "id": "yazi",
+      "title": "Files"
+    },
+    {
+      "command": "/opt/homebrew/bin/mactop",
+      "height": 300,
+      "id": "mactop",
+      "title": "System Monitor"
+    }
+  ]
+}

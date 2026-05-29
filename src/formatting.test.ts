@@ -5,7 +5,7 @@ import {
   formatXmlLikeResponseForDisplay,
   sanitizeNonStreamingModelOutput,
   splitLeadingXmlContextBlocks,
-  stripXmlContextTags,
+  stripXmlContextTags
 } from './formatting.js';
 
 describe('createXmlStreamFilter', () => {
@@ -85,7 +85,7 @@ describe('stripXmlContextTags', () => {
 
   it('removes user_info and workspace_info tags from complete text', () => {
     const result = stripXmlContextTags(
-      '<user_info>private user</user_info><workspace_info>private workspace</workspace_info>public',
+      '<user_info>private user</user_info><workspace_info>private workspace</workspace_info>public'
     );
     expect(result).toBe('public');
   });
@@ -97,7 +97,7 @@ describe('stripXmlContextTags', () => {
 
   it('strips toolCall tags with JSON content from model output', () => {
     const result = stripXmlContextTags(
-      'Before.<toolCall> {"name": "semantic_search", "arguments": {"query": "test"}} </toolCall>After.',
+      'Before.<toolCall> {"name": "semantic_search", "arguments": {"query": "test"}} </toolCall>After.'
     );
     expect(result).toBe('Before.After.');
   });
@@ -158,12 +158,14 @@ describe('createXmlStreamFilter — performance regression', () => {
 
     for (let i = 0; i < CHUNKS; i++) {
       // Alternate between plain text, context tag (should be stripped), and visible tag
-      const chunk =
-        i % 3 === 0
-          ? `word${i} `
-          : i % 3 === 1
-            ? `<environment_info>ctx${i}</environment_info>`
-            : `<code>snippet${i}</code>`;
+      let chunk: string;
+      if (i % 3 === 0) {
+        chunk = `word${i} `;
+      } else if (i % 3 === 1) {
+        chunk = `<environment_info>ctx${i}</environment_info>`;
+      } else {
+        chunk = `<code>snippet${i}</code>`;
+      }
       chunks.push(filter.write(chunk));
     }
     chunks.push(filter.end());
@@ -232,14 +234,14 @@ describe('dedupeXmlContextBlocksByTag', () => {
       '<environment_info>old-env</environment_info>',
       '<workspace_info>w1</workspace_info>',
       '<environment_info>new-env</environment_info>',
-      '<user_info>u1</user_info>',
+      '<user_info>u1</user_info>'
     ];
 
     const deduped = dedupeXmlContextBlocksByTag(blocks);
     expect(deduped).toEqual([
       '<workspace_info>w1</workspace_info>',
       '<environment_info>new-env</environment_info>',
-      '<user_info>u1</user_info>',
+      '<user_info>u1</user_info>'
     ]);
   });
 

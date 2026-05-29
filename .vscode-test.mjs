@@ -1,6 +1,6 @@
-import { defineConfig } from '@vscode/test-cli';
+import { defineConfig } from "@vscode/test-cli";
 
 export default defineConfig({
-  files: 'test/integration/**/*.test.js',
-  launchArgs: ['--disable-extensions'],
+  files: "test/integration/**/*.test.js",
+  launchArgs: ["--disable-extensions"],
 });

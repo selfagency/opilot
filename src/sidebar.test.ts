@@ -1,9 +1,9 @@
+import { HttpResponse, http } from 'msw';
 import type { Ollama } from 'ollama';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExtensionContext } from 'vscode';
-import { http, HttpResponse } from 'msw';
-import { server } from './mocks/node.js';
 import { DEFAULT_LIBRARY_MODELS, DEFAULT_OLLAMA_API_TAGS, libraryPageHtml, modelPageHtml } from './mocks/handlers.js';
+import { server } from './mocks/node.js';
 import type { CloudModelsProvider, LibraryModelsProvider, LocalModelsProvider, ModelTreeItem } from './sidebar.js';
 
 describe('LocalModelsProvider', () => {
@@ -39,7 +39,7 @@ describe('LocalModelsProvider', () => {
       TreeItemCollapsibleState: {
         None: 0,
         Collapsed: 1,
-        Expanded: 2,
+        Expanded: 2
       },
       EventEmitter: class {
         event = {};
@@ -49,36 +49,43 @@ describe('LocalModelsProvider', () => {
         registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
         withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
           const mockProgress = { report: vi.fn() };
-          const mockToken = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+          const mockToken = {
+            isCancellationRequested: false,
+            onCancellationRequested: vi.fn()
+          };
           return callback(mockProgress, mockToken);
         }),
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
-        showWarningMessage: vi.fn().mockResolvedValue('Delete'),
+        showWarningMessage: vi.fn().mockResolvedValue('Delete')
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: {
-        openExternal: vi.fn(),
+        openExternal: vi.fn()
       },
       Uri: {
-        parse: vi.fn((value: string) => ({ value })),
+        parse: vi.fn((value: string) => ({ value }))
       },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({
           get: vi.fn((key: string) => {
-            if (key === 'localModelRefreshInterval') return 0;
-            if (key === 'libraryRefreshInterval') return 0;
-            return undefined;
+            if (key === 'localModelRefreshInterval') {
+              return 0;
+            }
+            if (key === 'libraryRefreshInterval') {
+              return 0;
+            }
+            return;
           }),
-          update: vi.fn().mockResolvedValue(undefined),
+          update: vi.fn().mockResolvedValue(undefined)
         })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     const sidebarModule = await import('./sidebar.js');
@@ -92,32 +99,32 @@ describe('LocalModelsProvider', () => {
         models: [
           {
             name: 'llama2:latest',
-            size: 3826087936,
+            size: 3_826_087_936,
             digest: 'abc123',
-            details: { parameter_size: '7B', quantization_level: 'Q4_0' },
+            details: { parameter_size: '7B', quantization_level: 'Q4_0' }
           },
           {
             name: 'mistral:latest',
-            size: 4109738016,
+            size: 4_109_738_016,
             digest: 'def456',
-            details: { parameter_size: '7B', quantization_level: 'Q4_0' },
-          },
-        ],
+            details: { parameter_size: '7B', quantization_level: 'Q4_0' }
+          }
+        ]
       }),
       ps: vi.fn().mockResolvedValue({
         models: [
           {
             name: 'llama2:latest',
             digest: 'abc123',
-            size: 3826087936,
+            size: 3_826_087_936,
             expires_at: '2099-03-05T00:00:00Z',
-            size_vram: 3826087936,
-          },
-        ],
+            size_vram: 3_826_087_936
+          }
+        ]
       }),
       delete: vi.fn().mockResolvedValue({}),
       generate: vi.fn().mockResolvedValue({}),
-      pull: vi.fn().mockResolvedValue({}),
+      pull: vi.fn().mockResolvedValue({})
     } as unknown as Ollama;
 
     provider = new LocalModelsProvider(mockClient);
@@ -134,19 +141,21 @@ describe('LocalModelsProvider', () => {
 
     expect(getForceKillCommand(1234, 'win32')).toEqual({
       file: 'taskkill',
-      args: ['/F', '/PID', '1234'],
+      args: ['/F', '/PID', '1234']
     });
 
     expect(getForceKillCommand(5678, 'linux')).toEqual({
       file: 'kill',
-      args: ['-9', '5678'],
+      args: ['-9', '5678']
     });
   });
 
   it('reads Linux logs via journalctl when command exists', async () => {
     const { readLinuxJournalctlLogs } = await import('./sidebar.js');
 
-    const logs = await readLinuxJournalctlLogs(async (_file, _args) => ({ stdout: 'log line' }));
+    const logs = await readLinuxJournalctlLogs(async (_file, _args) => ({
+      stdout: 'log line'
+    }));
 
     expect(logs).toBe('log line');
   });
@@ -204,10 +213,14 @@ describe('LocalModelsProvider', () => {
     const initialListeners = onDidChangeConfigListeners.length;
 
     // Simulate the config change event being fired 3 times
-    const fakeEvent = { affectsConfiguration: (key: string) => key === 'ollama.localModelRefreshInterval' };
+    const fakeEvent = {
+      affectsConfiguration: (key: string) => key === 'ollama.localModelRefreshInterval'
+    };
     for (let i = 0; i < 3; i++) {
       // Fire ALL current listeners (simulates VS Code dispatching the event)
-      [...onDidChangeConfigListeners].forEach(l => l(fakeEvent));
+      for (const l of [...onDidChangeConfigListeners]) {
+        l(fakeEvent);
+      }
       // Give time for any async operations
       await new Promise(resolve => setTimeout(resolve, 0));
     }
@@ -229,19 +242,19 @@ describe('LocalModelsProvider', () => {
   });
 
   it('returns no children for nested element', async () => {
-    const item = new ModelTreeItem('llama2:latest', 'local-running', 3826087936, 1000);
+    const item = new ModelTreeItem('llama2:latest', 'local-running', 3_826_087_936, 1000);
     const children = await provider.getChildren(item);
     expect(children).toEqual([]);
   });
 
   it('formats running model description with size and duration', () => {
-    const item = new ModelTreeItem('llama2:latest', 'local-running', 3826087936, 90_000);
+    const item = new ModelTreeItem('llama2:latest', 'local-running', 3_826_087_936, 90_000);
     expect(item.description).toContain('GB');
     expect(item.description).toContain('1m');
   });
 
   it('uses play-circle icon for running models', () => {
-    const localRunning = new ModelTreeItem('llama2:latest', 'local-running', 3826087936, 90_000);
+    const localRunning = new ModelTreeItem('llama2:latest', 'local-running', 3_826_087_936, 90_000);
     const cloudRunning = new ModelTreeItem('cloud/llama2:latest', 'cloud-running', undefined, 90_000);
 
     expect((localRunning.iconPath as { id: string }).id).toBe('play-circle');
@@ -249,7 +262,7 @@ describe('LocalModelsProvider', () => {
   });
 
   it('uses stop-circle icon for stopped models', () => {
-    const localStopped = new ModelTreeItem('mistral:latest', 'local-stopped', 4109738016);
+    const localStopped = new ModelTreeItem('mistral:latest', 'local-stopped', 4_109_738_016);
     const cloudStopped = new ModelTreeItem('cloud/mistral:latest', 'cloud-stopped');
 
     expect((localStopped.iconPath as { id: string }).id).toBe('stop-circle');
@@ -257,7 +270,7 @@ describe('LocalModelsProvider', () => {
   });
 
   it('returns tree item unchanged', () => {
-    const item = new ModelTreeItem('mistral:latest', 'local-stopped', 4109738016);
+    const item = new ModelTreeItem('mistral:latest', 'local-stopped', 4_109_738_016);
     const treeItem = provider.getTreeItem(item);
 
     expect(treeItem.label).toBe('mistral:latest');
@@ -269,8 +282,8 @@ describe('LocalModelsProvider', () => {
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        text: async () => '<a href="/library/llama3"></a><a href="/library/mistral"></a>',
-      }),
+        text: async () => '<a href="/library/llama3"></a><a href="/library/mistral"></a>'
+      })
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
@@ -285,15 +298,17 @@ describe('LocalModelsProvider', () => {
 
     vi.doMock('./client.js', () => ({
       getCloudOllamaClient: vi.fn().mockResolvedValue({
-        list: vi.fn().mockResolvedValue({ models: [{ name: 'llama3:cloud', size: 1024 }] }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
+        list: vi.fn().mockResolvedValue({
+          models: [{ name: 'llama3:cloud', size: 1024 }]
+        }),
+        ps: vi.fn().mockResolvedValue({ models: [] })
       }),
       fetchModelCapabilities: vi.fn().mockResolvedValue({
         toolCalling: false,
         imageInput: false,
         maxInputTokens: 2048,
-        maxOutputTokens: 2048,
-      }),
+        maxOutputTokens: 2048
+      })
     }));
 
     vi.doMock('vscode', () => ({
@@ -319,45 +334,55 @@ describe('LocalModelsProvider', () => {
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
         showWarningMessage: vi.fn(),
-        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
-          return callback({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
-        }),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) =>
+          callback(
+            { report: vi.fn() },
+            {
+              isCancellationRequested: false,
+              onCancellationRequested: vi.fn()
+            }
+          )
+        )
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: {
-        openExternal: vi.fn(),
+        openExternal: vi.fn()
       },
       Uri: {
-        parse: vi.fn((value: string) => ({ value })),
+        parse: vi.fn((value: string) => ({ value }))
       },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({
           get: vi.fn((key: string) => {
-            if (key === 'libraryRefreshInterval') return 0;
-            return undefined;
-          }),
+            if (key === 'libraryRefreshInterval') {
+              return 0;
+            }
+            return;
+          })
         })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {},
+      Disposable: class {}
     }));
 
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        text: async () => '<a href="/library/llama3">llama3</a>',
-      }),
+        text: async () => '<a href="/library/llama3">llama3</a>'
+      })
     );
 
     const { CloudModelsProvider } = await import('./sidebar.js');
     const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as unknown as ExtensionContext,
-      undefined,
+      {
+        secrets: { get: vi.fn().mockResolvedValue(undefined) }
+      } as unknown as ExtensionContext,
+      undefined
     );
     cloudProvider.grouped = false;
     const models = await cloudProvider.getChildren();
@@ -370,9 +395,9 @@ describe('LocalModelsProvider', () => {
     const failingProvider = new LocalModelsProvider(
       {
         list: vi.fn().mockRejectedValue(new Error('boom')),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] })
       } as unknown as Ollama,
-      undefined,
+      undefined
     );
 
     const models = await failingProvider.getChildren();
@@ -398,8 +423,8 @@ describe('LocalModelsProvider', () => {
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        text: async () => '<a href="/library/zeta"></a><a href="/library/alpha"></a>',
-      }),
+        text: async () => '<a href="/library/zeta"></a><a href="/library/alpha"></a>'
+      })
     );
     const libraryProvider = new LibraryModelsProvider(undefined);
 
@@ -412,7 +437,7 @@ describe('LocalModelsProvider', () => {
   it('fetches from plain /library URL when name sort is active', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
-      text: async () => '<a href="/library/alpha"></a>',
+      text: async () => '<a href="/library/alpha"></a>'
     });
     vi.stubGlobal('fetch', mockFetch);
 
@@ -430,14 +455,14 @@ describe('LocalModelsProvider', () => {
     vi.doMock('./client.js', () => ({
       getCloudOllamaClient: vi.fn().mockResolvedValue({
         list: vi.fn().mockResolvedValue({ models: [] }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] })
       }),
       fetchModelCapabilities: vi.fn().mockResolvedValue({
         toolCalling: false,
         imageInput: false,
         maxInputTokens: 2048,
-        maxOutputTokens: 2048,
-      }),
+        maxOutputTokens: 2048
+      })
     }));
 
     vi.doMock('vscode', () => ({
@@ -463,45 +488,55 @@ describe('LocalModelsProvider', () => {
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
         showWarningMessage: vi.fn(),
-        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
-          return callback({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
-        }),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) =>
+          callback(
+            { report: vi.fn() },
+            {
+              isCancellationRequested: false,
+              onCancellationRequested: vi.fn()
+            }
+          )
+        )
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: {
-        openExternal: vi.fn(),
+        openExternal: vi.fn()
       },
       Uri: {
-        parse: vi.fn((value: string) => ({ value })),
+        parse: vi.fn((value: string) => ({ value }))
       },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({
           get: vi.fn((key: string) => {
-            if (key === 'libraryRefreshInterval') return 0;
-            return undefined;
-          }),
+            if (key === 'libraryRefreshInterval') {
+              return 0;
+            }
+            return;
+          })
         })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {},
+      Disposable: class {}
     }));
 
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        text: async () => '<html></html>',
-      }),
+        text: async () => '<html></html>'
+      })
     );
 
     const { CloudModelsProvider } = await import('./sidebar.js');
     const cloudProvider = new CloudModelsProvider(
-      { secrets: { get: vi.fn().mockResolvedValue(undefined) } } as unknown as ExtensionContext,
-      undefined,
+      {
+        secrets: { get: vi.fn().mockResolvedValue(undefined) }
+      } as unknown as ExtensionContext,
+      undefined
     );
 
     const models = await cloudProvider.getChildren();
@@ -516,9 +551,9 @@ describe('LocalModelsProvider', () => {
     const localProvider = new LocalModelsProvider(
       {
         list: vi.fn().mockResolvedValue({ models: [] }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] })
       } as unknown as Ollama,
-      undefined,
+      undefined
     );
 
     const item = new ModelTreeItem('test', 'local-running', 1000, 5000);
@@ -531,14 +566,14 @@ describe('LocalModelsProvider', () => {
     const localProvider = new LocalModelsProvider(
       {
         list: vi.fn().mockResolvedValue({
-          models: [{ name: 'llama2', size: 4000000000 }],
+          models: [{ name: 'llama2', size: 4_000_000_000 }]
         }),
         ps: vi.fn().mockResolvedValue({
-          models: [{ name: 'llama2', size: 4000000000, expires_at: '2099-01-01' }],
+          models: [{ name: 'llama2', size: 4_000_000_000, expires_at: '2099-01-01' }]
         }),
-        delete: deleteModel,
+        delete: deleteModel
       } as unknown as Ollama,
-      undefined,
+      undefined
     );
 
     // getChildren() now returns model-group items; navigate into the 'llama' group
@@ -557,14 +592,14 @@ describe('LocalModelsProvider', () => {
     const localProvider = new LocalModelsProvider(
       {
         list: vi.fn().mockResolvedValue({
-          models: [{ name: 'llama2', size: 4000000000 }],
+          models: [{ name: 'llama2', size: 4_000_000_000 }]
         }),
         ps: vi.fn().mockResolvedValue({
-          models: [{ name: 'llama2', size: 4000000000, expires_at: '2099-01-01' }],
+          models: [{ name: 'llama2', size: 4_000_000_000, expires_at: '2099-01-01' }]
         }),
-        generate: generateModel,
+        generate: generateModel
       } as unknown as Ollama,
-      undefined,
+      undefined
     );
 
     // getChildren() now returns model-group items; navigate into the 'llama' group
@@ -591,9 +626,9 @@ describe('LocalModelsProvider', () => {
       {
         list: vi.fn().mockResolvedValue({ models: [] }),
         ps,
-        generate,
+        generate
       } as unknown as Ollama,
-      undefined,
+      undefined
     );
 
     const stopPromise = localProvider.stopModel('llama2');
@@ -603,7 +638,12 @@ describe('LocalModelsProvider', () => {
 
     await stopPromise;
 
-    expect(generate).toHaveBeenCalledWith({ model: 'llama2', prompt: '', stream: false, keep_alive: 0 });
+    expect(generate).toHaveBeenCalledWith({
+      model: 'llama2',
+      prompt: '',
+      stream: false,
+      keep_alive: 0
+    });
     expect(ps).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();
@@ -619,14 +659,14 @@ describe('LocalModelsProvider', () => {
     vi.doMock('./client.js', () => ({
       getCloudOllamaClient: vi.fn().mockResolvedValue({
         generate: cloudGenerate,
-        ps: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] })
       }),
       fetchModelCapabilities: vi.fn().mockResolvedValue({
         toolCalling: false,
         imageInput: false,
         maxInputTokens: 2048,
-        maxOutputTokens: 2048,
-      }),
+        maxOutputTokens: 2048
+      })
     }));
 
     vi.doMock('vscode', () => ({
@@ -645,20 +685,28 @@ describe('LocalModelsProvider', () => {
       window: {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
-        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
-          return callback({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() });
-        }),
+        withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) =>
+          callback(
+            { report: vi.fn() },
+            {
+              isCancellationRequested: false,
+              onCancellationRequested: vi.fn()
+            }
+          )
+        )
       },
       workspace: {
         getConfiguration: vi.fn(() => ({
           get: vi.fn((key: string) => {
-            if (key === 'localModelRefreshInterval') return 0;
-            return undefined;
-          }),
+            if (key === 'localModelRefreshInterval') {
+              return 0;
+            }
+            return;
+          })
         })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { LocalModelsProvider } = await import('./sidebar.js');
@@ -666,19 +714,24 @@ describe('LocalModelsProvider', () => {
     const mockRegularClient = {
       list: vi.fn().mockResolvedValue({ models: [] }),
       ps: vi.fn().mockResolvedValue({ models: [] }),
-      generate: regularGenerate,
+      generate: regularGenerate
     } as unknown as Ollama;
 
     const mockContext = {
       secrets: {
-        get: vi.fn().mockResolvedValue('test-cloud-api-key'),
-      },
+        get: vi.fn().mockResolvedValue('test-cloud-api-key')
+      }
     } as unknown as ExtensionContext;
 
     const localProvider = new LocalModelsProvider(mockRegularClient, mockContext);
     await localProvider.stopModel('llama2:cloud');
 
-    expect(cloudGenerate).toHaveBeenCalledWith({ model: 'llama2:cloud', prompt: '', stream: false, keep_alive: 0 });
+    expect(cloudGenerate).toHaveBeenCalledWith({
+      model: 'llama2:cloud',
+      prompt: '',
+      stream: false,
+      keep_alive: 0
+    });
     expect(regularGenerate).not.toHaveBeenCalled();
 
     localProvider.dispose();
@@ -688,10 +741,10 @@ describe('LocalModelsProvider', () => {
     const cloudProvider = new CloudModelsProvider(
       {
         secrets: {
-          get: vi.fn().mockResolvedValue(null),
-        },
+          get: vi.fn().mockResolvedValue(null)
+        }
       },
-      undefined,
+      undefined
     );
 
     const models = await cloudProvider.getChildren();
@@ -706,8 +759,8 @@ describe('LocalModelsProvider', () => {
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        text: async () => '<html><body>no links here</body></html>',
-      }),
+        text: async () => '<html><body>no links here</body></html>'
+      })
     );
     const libraryProvider = new LibraryModelsProvider(undefined);
 
@@ -721,19 +774,19 @@ describe('LocalModelsProvider', () => {
     const localProvider = new LocalModelsProvider(
       {
         list: vi.fn().mockResolvedValue({
-          models: [{ name: 'test-model', size: 0 }],
+          models: [{ name: 'test-model', size: 0 }]
         }),
         ps: vi.fn().mockResolvedValue({
           models: [
             {
               name: 'test-model',
               size: 0,
-              expires_at: new Date().toISOString(),
-            },
-          ],
-        }),
+              expires_at: new Date().toISOString()
+            }
+          ]
+        })
       } as unknown as Ollama,
-      undefined,
+      undefined
     );
 
     // getChildren() returns model-group items; navigate into the group to find the model
@@ -750,10 +803,10 @@ describe('LocalModelsProvider', () => {
     const cloudProvider = new CloudModelsProvider(
       {
         secrets: {
-          get: vi.fn().mockResolvedValue('test-key'),
-        },
+          get: vi.fn().mockResolvedValue('test-key')
+        }
       } as unknown as ExtensionContext,
-      undefined,
+      undefined
     );
 
     // Mock the API response with a large model
@@ -778,8 +831,8 @@ describe('LocalModelsProvider', () => {
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        text: async () => '<a href="/library/test"></a>',
-      }),
+        text: async () => '<a href="/library/test"></a>'
+      })
     );
     const libraryProvider = new LibraryModelsProvider(undefined);
     libraryProvider.dispose();
@@ -816,20 +869,23 @@ describe('LocalModelsProvider', () => {
       '</a>',
       '<a href="/library/llama3.2:3b" class="sm:hidden flex flex-col space-y-[6px] group text-[13px] px-4 py-3">',
       '  <p class="flex text-neutral-500">2.0GB \u00b7 128K context window \u00b7 Text</p>',
-      '</a>',
+      '</a>'
     ].join('\n');
 
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
         if (url === 'https://ollama.com/library') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2"></a>'
+          });
         }
         if (url === 'https://ollama.com/library/llama3.2') {
           return Promise.resolve({ ok: true, text: async () => variantHtml });
         }
         return Promise.resolve({ ok: false, status: 404 });
-      }),
+      })
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
@@ -852,16 +908,19 @@ describe('LocalModelsProvider', () => {
       'fetch',
       vi.fn().mockImplementation((url: string) => {
         if (url === 'https://ollama.com/library') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2"></a>'
+          });
         }
         if (url === 'https://ollama.com/library/llama3.2') {
           return Promise.resolve({
             ok: true,
-            text: async () => '<a href="/library/llama3.2:1b"></a><a href="/library/llama3.2:3b"></a>',
+            text: async () => '<a href="/library/llama3.2:1b"></a><a href="/library/llama3.2:3b"></a>'
           });
         }
         return Promise.resolve({ ok: false, status: 404 });
-      }),
+      })
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
@@ -882,18 +941,24 @@ describe('LocalModelsProvider', () => {
       'fetch',
       vi.fn().mockImplementation((url: string) => {
         if (url === 'https://ollama.com/library') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2"></a>'
+          });
         }
         if (url === 'https://ollama.com/library/llama3.2') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2:1b"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2:1b"></a>'
+          });
         }
         return Promise.resolve({ ok: false, status: 404 });
-      }),
+      })
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
     libraryProvider.setLocalProvider({
-      getCachedLocalModelNames: () => new Set(['llama3.2:1b']),
+      getCachedLocalModelNames: () => new Set(['llama3.2:1b'])
     } as unknown as LocalModelsProvider);
     // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
@@ -905,7 +970,7 @@ describe('LocalModelsProvider', () => {
     const downloaded = children.find((c: any) => c.label === 'llama3.2:1b');
     expect(downloaded?.contextValue).toBe('library-model-downloaded-variant');
     expect(downloaded).toBeDefined();
-    expect((downloaded!.iconPath as { id: string }).id).toBe('check');
+    expect((downloaded?.iconPath as { id: string }).id).toBe('check');
     libraryProvider.dispose();
   });
 
@@ -914,19 +979,25 @@ describe('LocalModelsProvider', () => {
       'fetch',
       vi.fn().mockImplementation((url: string) => {
         if (url === 'https://ollama.com/library') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2"></a>'
+          });
         }
         if (url === 'https://ollama.com/library/llama3.2') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2:3b"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2:3b"></a>'
+          });
         }
         return Promise.resolve({ ok: false, status: 404 });
-      }),
+      })
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
     // local provider returns empty set — nothing downloaded
     libraryProvider.setLocalProvider({
-      getCachedLocalModelNames: () => new Set<string>(),
+      getCachedLocalModelNames: () => new Set<string>()
     } as unknown as LocalModelsProvider);
     // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
@@ -951,20 +1022,23 @@ describe('LocalModelsProvider', () => {
     const variantHtml = [
       '<a href="/library/llama3.2:1b" class="flex sm:hidden flex-col">',
       '  <p>1.3GB</p>',
-      '</a>',
+      '</a>'
     ].join('\n');
 
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation((url: string) => {
         if (url === 'https://ollama.com/library') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2"></a>'
+          });
         }
         if (url === 'https://ollama.com/library/llama3.2') {
           return Promise.resolve({ ok: true, text: async () => variantHtml });
         }
         return Promise.resolve({ ok: false, status: 404 });
-      }),
+      })
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
@@ -987,18 +1061,24 @@ describe('LocalModelsProvider', () => {
       'fetch',
       vi.fn().mockImplementation((url: string) => {
         if (url === 'https://ollama.com/library') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2"></a>'
+          });
         }
         if (url === 'https://ollama.com/library/llama3.2') {
-          return Promise.resolve({ ok: true, text: async () => '<a href="/library/llama3.2:1b"></a>' });
+          return Promise.resolve({
+            ok: true,
+            text: async () => '<a href="/library/llama3.2:1b"></a>'
+          });
         }
         return Promise.resolve({ ok: false, status: 404 });
-      }),
+      })
     );
 
     const libraryProvider = new LibraryModelsProvider(undefined);
     libraryProvider.setLocalProvider({
-      getCachedLocalModelNames: () => localModels,
+      getCachedLocalModelNames: () => localModels
     } as unknown as LocalModelsProvider);
     // getChildren() groups by family; llama3.2 -> family 'llama'
     const groups = await libraryProvider.getChildren();
@@ -1016,7 +1096,7 @@ describe('LocalModelsProvider', () => {
     // Second call uses cached raw metadata but re-materializes with updated local state
     const childrenAfter = await libraryProvider.getChildren(parent);
     expect(childrenAfter.find((c: any) => c.label === 'llama3.2:1b')?.contextValue).toBe(
-      'library-model-downloaded-variant',
+      'library-model-downloaded-variant'
     );
     libraryProvider.dispose();
   });
@@ -1026,13 +1106,13 @@ describe('LocalModelsProvider', () => {
       {
         list: vi.fn().mockResolvedValue({
           models: [
-            { name: 'llama2:latest', size: 4000000000 },
-            { name: 'mistral:7b', size: 3000000000 },
-          ],
+            { name: 'llama2:latest', size: 4_000_000_000 },
+            { name: 'mistral:7b', size: 3_000_000_000 }
+          ]
         }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
+        ps: vi.fn().mockResolvedValue({ models: [] })
       } as unknown as Ollama,
-      undefined,
+      undefined
     );
 
     await localProvider.getChildren();
@@ -1067,19 +1147,19 @@ describe('Extracted command handlers', () => {
       window: {
         showWarningMessage: vi.fn().mockResolvedValue('Delete'),
         showInformationMessage: vi.fn(),
-        showErrorMessage: vi.fn(),
+        showErrorMessage: vi.fn()
       },
       env: {
-        openExternal: vi.fn(),
+        openExternal: vi.fn()
       },
       Uri: {
-        parse: vi.fn((value: string) => ({ value })),
+        parse: vi.fn((value: string) => ({ value }))
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
   });
 
@@ -1087,7 +1167,7 @@ describe('Extracted command handlers', () => {
     const { handleRefreshLocalModels } = await import('./sidebar.js');
 
     const mockProvider = {
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as LocalModelsProvider;
 
     handleRefreshLocalModels(mockProvider);
@@ -1099,7 +1179,7 @@ describe('Extracted command handlers', () => {
     const { handleRefreshLibrary } = await import('./sidebar.js');
 
     const mockProvider = {
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as LibraryModelsProvider;
 
     handleRefreshLibrary(mockProvider);
@@ -1111,7 +1191,7 @@ describe('Extracted command handlers', () => {
     const { handleRefreshCloudModels } = await import('./sidebar.js');
 
     const mockProvider = {
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as CloudModelsProvider;
 
     handleRefreshCloudModels(mockProvider);
@@ -1123,7 +1203,7 @@ describe('Extracted command handlers', () => {
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
-      deleteModel: vi.fn(),
+      deleteModel: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-stopped', 1000);
@@ -1136,7 +1216,9 @@ describe('Extracted command handlers', () => {
   it('handleDeleteModel blocks deletion of a running local model', async () => {
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
-    const mockProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
+    const mockProvider = {
+      deleteModel: vi.fn()
+    } as unknown as LocalModelsProvider;
     const item = new ModelTreeItem('test-model', 'local-running', 1000);
 
     await handleDeleteModel(item, mockProvider);
@@ -1147,7 +1229,9 @@ describe('Extracted command handlers', () => {
   it('handleDeleteModel blocks deletion of a running cloud model', async () => {
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
-    const mockProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
+    const mockProvider = {
+      deleteModel: vi.fn()
+    } as unknown as LocalModelsProvider;
     const item = new ModelTreeItem('cloud-model', 'cloud-running', 1000);
 
     await handleDeleteModel(item, mockProvider);
@@ -1179,24 +1263,26 @@ describe('Extracted command handlers', () => {
       window: {
         showWarningMessage: vi.fn().mockResolvedValue('Cancel'),
         showInformationMessage: vi.fn(),
-        showErrorMessage: vi.fn(),
+        showErrorMessage: vi.fn()
       },
       env: {
-        openExternal: vi.fn(),
+        openExternal: vi.fn()
       },
       Uri: {
-        parse: vi.fn((value: string) => ({ value })),
+        parse: vi.fn((value: string) => ({ value }))
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
-    const mockProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
+    const mockProvider = {
+      deleteModel: vi.fn()
+    } as unknown as LocalModelsProvider;
     const item = new ModelTreeItem('test-model', 'local-stopped');
 
     await handleDeleteModel(item, mockProvider);
@@ -1208,7 +1294,7 @@ describe('Extracted command handlers', () => {
     const { handleDeleteModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
-      deleteModel: vi.fn(),
+      deleteModel: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'library-model');
@@ -1222,7 +1308,7 @@ describe('Extracted command handlers', () => {
     const { handleStartModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
-      startModel: vi.fn(),
+      startModel: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-stopped');
@@ -1236,7 +1322,7 @@ describe('Extracted command handlers', () => {
     const { handleStopModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
-      stopModel: vi.fn(),
+      stopModel: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-running');
@@ -1260,7 +1346,7 @@ describe('Extracted command handlers', () => {
     const { handleDeleteModel } = await import('./sidebar.js');
 
     const mockProvider = {
-      deleteModel: vi.fn(),
+      deleteModel: vi.fn()
     } as unknown as LocalModelsProvider;
 
     handleDeleteModel(null as unknown as ModelTreeItem, mockProvider);
@@ -1273,7 +1359,7 @@ describe('Extracted command handlers', () => {
     const { handleStartModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
-      startModel: vi.fn(),
+      startModel: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-running');
@@ -1287,7 +1373,7 @@ describe('Extracted command handlers', () => {
     const { handleStopModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
-      stopModel: vi.fn(),
+      stopModel: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'cloud-running');
@@ -1302,13 +1388,13 @@ describe('Extracted command handlers', () => {
 
     const mockProvider = {
       startModel: vi.fn(),
-      getCachedLocalModelNames: vi.fn().mockReturnValue(new Set(['test-model'])),
+      getCachedLocalModelNames: vi.fn().mockReturnValue(new Set(['test-model']))
     } as unknown as LocalModelsProvider;
 
     const mockCloudProvider = {
       resolveRunnableCloudModelName: vi.fn().mockResolvedValue('test-model'),
       markModelWarm: vi.fn(),
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as CloudModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'cloud-stopped');
@@ -1349,34 +1435,37 @@ describe('Extracted command handlers', () => {
         showWarningMessage: vi.fn(),
         withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
           const mockProgress = { report: vi.fn() };
-          const mockToken = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+          const mockToken = {
+            isCancellationRequested: false,
+            onCancellationRequested: vi.fn()
+          };
           return callback(mockProgress, mockToken);
-        }),
+        })
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     const { handleStartCloudModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
       startModel: mockStartModel,
-      getCachedLocalModelNames: vi.fn().mockReturnValue(new Set<string>()),
+      getCachedLocalModelNames: vi.fn().mockReturnValue(new Set<string>())
     } as unknown as LocalModelsProvider;
 
     const mockCloudProvider = {
       resolveRunnableCloudModelName: vi.fn().mockResolvedValue('new-cloud-model:cloud'),
       markModelWarm: vi.fn(),
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as CloudModelsProvider;
 
     const item = new ModelTreeItem('new-cloud-model', 'cloud-stopped');
@@ -1393,13 +1482,13 @@ describe('Extracted command handlers', () => {
     const { handleStopCloudModel, ModelTreeItem } = await import('./sidebar.js');
 
     const mockProvider = {
-      stopModel: vi.fn(),
+      stopModel: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const mockCloudProvider = {
       getWarmedModelName: vi.fn().mockReturnValue('test-model:cloud'),
       markModelStopped: vi.fn(),
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as CloudModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'cloud-running');
@@ -1446,11 +1535,11 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const _mockClient = {
-      pull: vi.fn().mockResolvedValue(undefined),
+      pull: vi.fn().mockResolvedValue(undefined)
     } as unknown as Ollama;
 
     const mockProvider = {
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('mistral:7b', 'library-model');
@@ -1467,11 +1556,11 @@ describe('Extracted command handlers', () => {
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
 
     const mockClient = {
-      pull: vi.fn().mockResolvedValue(undefined),
+      pull: vi.fn().mockResolvedValue(undefined)
     } as unknown as Ollama;
 
     const mockProvider = {
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as LocalModelsProvider;
 
     const item = new ModelTreeItem('test-model', 'local-running');
@@ -1520,17 +1609,20 @@ describe('Extracted command handlers', () => {
         showErrorMessage: vi.fn(),
         showWarningMessage: vi.fn(),
         withProgress: vi.fn(),
-        showInputBox: vi.fn(),
+        showInputBox: vi.fn()
       },
-      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn()
+      },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((value: string) => ({ value })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {},
+      Disposable: class {}
     }));
 
     const { handleLoginToCloud } = await import('./sidebar.js');
@@ -1564,17 +1656,20 @@ describe('Extracted command handlers', () => {
         showErrorMessage: vi.fn(),
         showWarningMessage: vi.fn(),
         withProgress: vi.fn(),
-        showInputBox: vi.fn(),
+        showInputBox: vi.fn()
       },
-      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn()
+      },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((value: string) => ({ value })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {},
+      Disposable: class {}
     }));
 
     const { handleManageCloudApiKey } = await import('./sidebar.js');
@@ -1608,15 +1703,18 @@ describe('Extracted command handlers', () => {
         showErrorMessage: vi.fn(),
         showWarningMessage: vi.fn(),
         withProgress: vi.fn(),
-        showInputBox: vi.fn(),
+        showInputBox: vi.fn()
       },
-      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn()
+      },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {},
+      Disposable: class {}
     }));
 
     const { handleOpenCloudModel, ModelTreeItem } = await import('./sidebar.js');
@@ -1636,9 +1734,24 @@ describe('Extracted command handlers', () => {
 
     async function* makePullStream() {
       yield { status: 'pulling manifest', digest: '', total: 0, completed: 0 };
-      yield { status: 'downloading', digest: 'sha256:abc', total: 1000, completed: 250 };
-      yield { status: 'downloading', digest: 'sha256:abc', total: 1000, completed: 1000 };
-      yield { status: 'success', digest: 'sha256:abc', total: 1000, completed: 1000 };
+      yield {
+        status: 'downloading',
+        digest: 'sha256:abc',
+        total: 1000,
+        completed: 250
+      };
+      yield {
+        status: 'downloading',
+        digest: 'sha256:abc',
+        total: 1000,
+        completed: 1000
+      };
+      yield {
+        status: 'success',
+        digest: 'sha256:abc',
+        total: 1000,
+        completed: 1000
+      };
     }
 
     const mockPull = vi.fn().mockReturnValue(makePullStream());
@@ -1670,23 +1783,26 @@ describe('Extracted command handlers', () => {
           async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
             await task(
               { report: progressReport },
-              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+              {
+                isCancellationRequested: false,
+                onCancellationRequested: vi.fn()
+              }
             );
-          },
-        ),
+          }
+        )
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { handlePullModel } = await import('./sidebar.js');
 
     await handlePullModel(
       { pull: mockPull } as unknown as Ollama,
-      { refresh: mockRefresh } as unknown as LocalModelsProvider,
+      { refresh: mockRefresh } as unknown as LocalModelsProvider
     );
 
     expect(mockPull).toHaveBeenCalledWith({ model: 'llama3:8b', stream: true });
@@ -1718,20 +1834,20 @@ describe('Extracted command handlers', () => {
         showInputBox: vi.fn().mockResolvedValue(undefined),
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { handlePullModel } = await import('./sidebar.js');
 
     await handlePullModel(
       { pull: mockPull } as unknown as Ollama,
-      { refresh: vi.fn() } as unknown as LocalModelsProvider,
+      { refresh: vi.fn() } as unknown as LocalModelsProvider
     );
 
     expect(mockPull).not.toHaveBeenCalled();
@@ -1743,8 +1859,18 @@ describe('Extracted command handlers', () => {
     const progressReport = vi.fn();
 
     async function* makePullStream() {
-      yield { status: 'downloading', digest: 'sha256:abc', total: 2000, completed: 1000 };
-      yield { status: 'success', digest: 'sha256:abc', total: 2000, completed: 2000 };
+      yield {
+        status: 'downloading',
+        digest: 'sha256:abc',
+        total: 2000,
+        completed: 1000
+      };
+      yield {
+        status: 'success',
+        digest: 'sha256:abc',
+        total: 2000,
+        completed: 2000
+      };
     }
 
     const mockPull = vi.fn().mockReturnValue(makePullStream());
@@ -1775,16 +1901,19 @@ describe('Extracted command handlers', () => {
           async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
             await task(
               { report: progressReport },
-              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+              {
+                isCancellationRequested: false,
+                onCancellationRequested: vi.fn()
+              }
             );
-          },
-        ),
+          }
+        )
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
@@ -1793,10 +1922,13 @@ describe('Extracted command handlers', () => {
     await handlePullModelFromLibrary(
       item,
       { pull: mockPull } as unknown as Ollama,
-      { refresh: mockRefresh } as unknown as LocalModelsProvider,
+      { refresh: mockRefresh } as unknown as LocalModelsProvider
     );
 
-    expect(mockPull).toHaveBeenCalledWith({ model: 'mistral:7b', stream: true });
+    expect(mockPull).toHaveBeenCalledWith({
+      model: 'mistral:7b',
+      stream: true
+    });
     const reportCalls = progressReport.mock.calls.map((c: any) => c[0].message as string);
     expect(reportCalls.some(msg => msg.includes('%'))).toBe(true);
     expect(mockRefresh).toHaveBeenCalled();
@@ -1822,7 +1954,7 @@ describe('Extracted command handlers', () => {
       onCancellationRequested: vi.fn((fn: () => void) => {
         fn();
         return { dispose: vi.fn() };
-      }),
+      })
     };
 
     vi.doMock('vscode', () => ({
@@ -1849,17 +1981,17 @@ describe('Extracted command handlers', () => {
         withProgress: vi.fn(
           async (
             _opts: unknown,
-            task: (p: { report: ReturnType<typeof vi.fn> }, t: typeof mockToken) => Promise<void>,
+            task: (p: { report: ReturnType<typeof vi.fn> }, t: typeof mockToken) => Promise<void>
           ) => {
             await task({ report: vi.fn() }, mockToken);
-          },
-        ),
+          }
+        )
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
@@ -1869,8 +2001,8 @@ describe('Extracted command handlers', () => {
       item,
       { pull: mockPull, abort: mockAbort } as unknown as Ollama,
       {
-        refresh: vi.fn(),
-      } as unknown as LocalModelsProvider,
+        refresh: vi.fn()
+      } as unknown as LocalModelsProvider
     );
 
     expect(mockAbort).toHaveBeenCalled();
@@ -1886,8 +2018,8 @@ describe('Extracted command handlers', () => {
         toolCalling: true,
         imageInput: false,
         maxInputTokens: 4096,
-        maxOutputTokens: 4096,
-      }),
+        maxOutputTokens: 4096
+      })
     }));
 
     vi.doMock('vscode', () => ({
@@ -1911,27 +2043,29 @@ describe('Extracted command handlers', () => {
       window: {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       workspace: {
         getConfiguration: vi.fn(() => ({
           get: vi.fn((key: string) => {
-            if (key === 'localModelRefreshInterval') return 0;
-            return undefined;
-          }),
+            if (key === 'localModelRefreshInterval') {
+              return 0;
+            }
+            return;
+          })
         })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { LocalModelsProvider } = await import('./sidebar.js');
 
     const mockClient = {
       list: vi.fn().mockResolvedValue({
-        models: [{ name: 'llama3-tools:latest', size: 4000000000, digest: 'abc' }],
+        models: [{ name: 'llama3-tools:latest', size: 4_000_000_000, digest: 'abc' }]
       }),
-      ps: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] })
     } as unknown as Ollama;
 
     const localProvider = new LocalModelsProvider(mockClient);
@@ -1959,7 +2093,12 @@ describe('Extracted command handlers', () => {
     const progressReport = vi.fn();
 
     async function* makePullStream() {
-      yield { status: 'success', digest: 'sha256:abc', total: 100, completed: 100 };
+      yield {
+        status: 'success',
+        digest: 'sha256:abc',
+        total: 100,
+        completed: 100
+      };
     }
 
     const mockPull = vi.fn().mockReturnValue(makePullStream());
@@ -1990,16 +2129,19 @@ describe('Extracted command handlers', () => {
           async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
             await task(
               { report: progressReport },
-              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+              {
+                isCancellationRequested: false,
+                onCancellationRequested: vi.fn()
+              }
             );
-          },
-        ),
+          }
+        )
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
@@ -2008,10 +2150,13 @@ describe('Extracted command handlers', () => {
     await handlePullModelFromLibrary(
       item,
       { pull: mockPull } as unknown as Ollama,
-      { refresh: mockRefresh } as unknown as LocalModelsProvider,
+      { refresh: mockRefresh } as unknown as LocalModelsProvider
     );
 
-    expect(mockPull).toHaveBeenCalledWith({ model: 'llama3.2:1b', stream: true });
+    expect(mockPull).toHaveBeenCalledWith({
+      model: 'llama3.2:1b',
+      stream: true
+    });
     expect(mockRefresh).toHaveBeenCalled();
   });
 
@@ -2021,7 +2166,12 @@ describe('Extracted command handlers', () => {
     const progressReport = vi.fn();
 
     async function* makePullStream() {
-      yield { status: 'success', digest: 'sha256:abc', total: 100, completed: 100 };
+      yield {
+        status: 'success',
+        digest: 'sha256:abc',
+        total: 100,
+        completed: 100
+      };
     }
 
     const mockPull = vi.fn().mockReturnValue(makePullStream());
@@ -2052,16 +2202,19 @@ describe('Extracted command handlers', () => {
           async (_opts: unknown, task: (p: { report: typeof progressReport }, t: unknown) => Promise<void>) => {
             await task(
               { report: progressReport },
-              { isCancellationRequested: false, onCancellationRequested: vi.fn() },
+              {
+                isCancellationRequested: false,
+                onCancellationRequested: vi.fn()
+              }
             );
-          },
-        ),
+          }
+        )
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
@@ -2070,10 +2223,13 @@ describe('Extracted command handlers', () => {
     await handlePullModelFromLibrary(
       item,
       { pull: mockPull } as unknown as Ollama,
-      { refresh: mockRefresh } as unknown as LocalModelsProvider,
+      { refresh: mockRefresh } as unknown as LocalModelsProvider
     );
 
-    expect(mockPull).toHaveBeenCalledWith({ model: 'llama3.2:1b', stream: true });
+    expect(mockPull).toHaveBeenCalledWith({
+      model: 'llama3.2:1b',
+      stream: true
+    });
     expect(mockRefresh).toHaveBeenCalled();
   });
 
@@ -2103,13 +2259,13 @@ describe('Extracted command handlers', () => {
       window: {
         showInformationMessage: vi.fn(),
         showErrorMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      ProgressLocation: { Notification: 15 },
+      ProgressLocation: { Notification: 15 }
     }));
 
     const { handlePullModelFromLibrary, ModelTreeItem } = await import('./sidebar.js');
@@ -2118,7 +2274,7 @@ describe('Extracted command handlers', () => {
     await handlePullModelFromLibrary(
       item,
       { pull: mockPull } as unknown as Ollama,
-      { refresh: vi.fn() } as unknown as LocalModelsProvider,
+      { refresh: vi.fn() } as unknown as LocalModelsProvider
     );
 
     expect(mockPull).not.toHaveBeenCalled();
@@ -2146,19 +2302,19 @@ describe('Extracted command handlers', () => {
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
-        showWarningMessage: vi.fn(),
+        showWarningMessage: vi.fn()
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     const vscode = await import('vscode');
@@ -2166,13 +2322,17 @@ describe('Extracted command handlers', () => {
 
     const mockContext = {
       subscriptions: { push: vi.fn() },
-      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
-      globalState: { get: vi.fn(), update: vi.fn() },
+      secrets: {
+        get: vi.fn().mockResolvedValue(undefined),
+        store: vi.fn(),
+        delete: vi.fn()
+      },
+      globalState: { get: vi.fn(), update: vi.fn() }
     } as unknown as ExtensionContext;
 
     const mockClient = {
       list: vi.fn().mockResolvedValue({ models: [] }),
-      generate: vi.fn(),
+      generate: vi.fn()
     } as unknown as Ollama;
 
     registerSidebar(mockContext, mockClient);
@@ -2222,19 +2382,19 @@ describe('Extracted command handlers', () => {
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
-        showWarningMessage: vi.fn(),
+        showWarningMessage: vi.fn()
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     const vscode = await import('vscode');
@@ -2242,10 +2402,17 @@ describe('Extracted command handlers', () => {
 
     const mockContext = {
       subscriptions: { push: vi.fn() },
-      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
-      globalState: { get: vi.fn(), update: vi.fn() },
+      secrets: {
+        get: vi.fn().mockResolvedValue(undefined),
+        store: vi.fn(),
+        delete: vi.fn()
+      },
+      globalState: { get: vi.fn(), update: vi.fn() }
     } as unknown as ExtensionContext;
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as unknown as Ollama;
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      generate: vi.fn()
+    } as unknown as Ollama;
 
     registerSidebar(mockContext, mockClient);
 
@@ -2293,16 +2460,22 @@ describe('LocalModelsProvider filter', () => {
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
-        showWarningMessage: vi.fn(),
+        showWarningMessage: vi.fn()
       },
-      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn()
+      },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
-        getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0), update: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn(() => 0),
+          update: vi.fn()
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     const mod = await import('./sidebar.js');
@@ -2313,10 +2486,10 @@ describe('LocalModelsProvider filter', () => {
         models: [
           { name: 'llama2:latest', size: 1000, digest: 'a1', details: {} },
           { name: 'llama3:latest', size: 1000, digest: 'a2', details: {} },
-          { name: 'mistral:latest', size: 1000, digest: 'b1', details: {} },
-        ],
+          { name: 'mistral:latest', size: 1000, digest: 'b1', details: {} }
+        ]
       }),
-      ps: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] })
     };
   });
 
@@ -2382,16 +2555,22 @@ describe('LocalModelsProvider grouped/flat toggle', () => {
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
-        showWarningMessage: vi.fn(),
+        showWarningMessage: vi.fn()
       },
-      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn()
+      },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
-        getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0), update: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn(() => 0),
+          update: vi.fn()
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     const mod = await import('./sidebar.js');
@@ -2402,10 +2581,10 @@ describe('LocalModelsProvider grouped/flat toggle', () => {
         models: [
           { name: 'llama2:latest', size: 1000, digest: 'a1', details: {} },
           { name: 'mistral:latest', size: 1000, digest: 'b1', details: {} },
-          { name: 'gemma:latest', size: 1000, digest: 'c1', details: {} },
-        ],
+          { name: 'gemma:latest', size: 1000, digest: 'c1', details: {} }
+        ]
       }),
-      ps: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] })
     };
   });
 
@@ -2459,19 +2638,22 @@ describe('registerSidebar grouped/flat toggle commands', () => {
         showInputBox: vi.fn(),
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
-        showWarningMessage: vi.fn(),
+        showWarningMessage: vi.fn()
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
-        getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0), update: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn(() => 0),
+          update: vi.fn()
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     const vscode = await import('vscode');
@@ -2479,10 +2661,17 @@ describe('registerSidebar grouped/flat toggle commands', () => {
 
     const mockContext = {
       subscriptions: { push: vi.fn() },
-      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
-      globalState: { get: vi.fn().mockReturnValue(undefined), update: vi.fn() },
+      secrets: {
+        get: vi.fn().mockResolvedValue(undefined),
+        store: vi.fn(),
+        delete: vi.fn()
+      },
+      globalState: { get: vi.fn().mockReturnValue(undefined), update: vi.fn() }
     } as unknown as ExtensionContext;
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as unknown as Ollama;
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      generate: vi.fn()
+    } as unknown as Ollama;
 
     registerSidebar(mockContext, mockClient);
 
@@ -2527,26 +2716,26 @@ describe('Provider lifecycle and disposal', () => {
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
         showWarningMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0) })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: configDispose })),
-      },
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: configDispose }))
+      }
     }));
 
     const { LocalModelsProvider } = await import('./sidebar.js');
     const mockClient = {
       list: vi.fn().mockResolvedValue({ models: [] }),
       ps: vi.fn().mockResolvedValue({ models: [] }),
-      show: vi.fn(),
+      show: vi.fn()
     } as unknown as Ollama;
     const provider = new LocalModelsProvider(mockClient);
 
@@ -2578,19 +2767,21 @@ describe('Provider lifecycle and disposal', () => {
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
         showWarningMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
-        getConfiguration: vi.fn(() => ({ get: (key: string) => (key === 'localModelRefreshInterval' ? 1 : 0) })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        getConfiguration: vi.fn(() => ({
+          get: (key: string) => (key === 'localModelRefreshInterval' ? 1 : 0)
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     vi.useFakeTimers();
@@ -2599,7 +2790,7 @@ describe('Provider lifecycle and disposal', () => {
     const onLocalModelsChanged = vi.fn();
     const mockClient = {
       list: vi.fn().mockResolvedValue({ models: [] }),
-      ps: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] })
     } as unknown as Ollama;
     const provider = new LocalModelsProvider(mockClient, undefined, undefined, onLocalModelsChanged);
 
@@ -2635,19 +2826,19 @@ describe('Provider lifecycle and disposal', () => {
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
         showWarningMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
         getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0) })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     vi.useFakeTimers();
@@ -2656,7 +2847,7 @@ describe('Provider lifecycle and disposal', () => {
     const onLocalModelsChanged = vi.fn();
     const mockClient = {
       list: vi.fn().mockResolvedValue({ models: [] }),
-      ps: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] })
     } as unknown as Ollama;
     const provider = new LocalModelsProvider(mockClient, undefined, undefined, onLocalModelsChanged);
 
@@ -2696,34 +2887,42 @@ describe('Provider lifecycle and disposal', () => {
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
         showWarningMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
-        getConfiguration: vi.fn(() => ({ get: (key: string) => (key === 'cloudModelRefreshInterval' ? 1 : 0) })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        getConfiguration: vi.fn(() => ({
+          get: (key: string) => (key === 'cloudModelRefreshInterval' ? 1 : 0)
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     vi.useFakeTimers();
 
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue({ ok: true, headers: { get: vi.fn().mockReturnValue('text/html') }, text: async () => '' }),
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: vi.fn().mockReturnValue('text/html') },
+        text: async () => ''
+      })
     );
 
     const { CloudModelsProvider } = await import('./sidebar.js');
     const mockContext = {
-      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
-      globalState: { get: vi.fn().mockReturnValue(undefined), update: vi.fn() },
+      secrets: {
+        get: vi.fn().mockResolvedValue(undefined),
+        store: vi.fn(),
+        delete: vi.fn()
+      },
+      globalState: { get: vi.fn().mockReturnValue(undefined), update: vi.fn() }
     } as unknown as ExtensionContext;
 
     const cloudProvider = new CloudModelsProvider(mockContext);
@@ -2732,7 +2931,7 @@ describe('Provider lifecycle and disposal', () => {
     cloudProvider.dispose();
 
     // Advance several seconds — refresh should NOT be called by internal intervals after dispose
-    await vi.advanceTimersByTimeAsync(10000);
+    await vi.advanceTimersByTimeAsync(10_000);
 
     expect(refreshSpy).not.toHaveBeenCalled();
   });
@@ -2759,37 +2958,48 @@ describe('Provider lifecycle and disposal', () => {
         showErrorMessage: vi.fn(),
         showInformationMessage: vi.fn(),
         showWarningMessage: vi.fn(),
-        withProgress: vi.fn(),
+        withProgress: vi.fn()
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
-        getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0), update: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn(() => 0),
+          update: vi.fn()
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     }));
 
     const { registerSidebar } = await import('./sidebar.js');
 
     const pushedItems: unknown[] = [];
     const mockContext = {
-      subscriptions: { push: (...items: unknown[]) => pushedItems.push(...items) },
-      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
-      globalState: { get: vi.fn().mockReturnValue(undefined), update: vi.fn() },
+      subscriptions: {
+        push: (...items: unknown[]) => pushedItems.push(...items)
+      },
+      secrets: {
+        get: vi.fn().mockResolvedValue(undefined),
+        store: vi.fn(),
+        delete: vi.fn()
+      },
+      globalState: { get: vi.fn().mockReturnValue(undefined), update: vi.fn() }
     } as unknown as ExtensionContext;
-    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as unknown as Ollama;
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      generate: vi.fn()
+    } as unknown as Ollama;
 
     registerSidebar(mockContext, mockClient);
 
     // At least 3 dispose-wrapper items must be in subscriptions (for local, library, cloud providers)
     const disposeWrappers = pushedItems.filter(
-      item =>
-        item !== null && typeof item === 'object' && typeof (item as { dispose?: unknown }).dispose === 'function',
+      item => item !== null && typeof item === 'object' && typeof (item as { dispose?: unknown }).dispose === 'function'
     );
     expect(disposeWrappers.length).toBeGreaterThanOrEqual(3);
   });
@@ -2823,22 +3033,28 @@ describe('sidebar command handlers', () => {
         showWarningMessage: vi.fn(),
         withProgress: vi.fn(async (_options: unknown, callback: (progress: any, token: any) => Promise<void>) => {
           const mockProgress = { report: vi.fn() };
-          const mockToken = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+          const mockToken = {
+            isCancellationRequested: false,
+            onCancellationRequested: vi.fn()
+          };
           return callback(mockProgress, mockToken);
         }),
-        createTerminal: vi.fn(() => ({ show: vi.fn(), sendText: vi.fn() })),
+        createTerminal: vi.fn(() => ({ show: vi.fn(), sendText: vi.fn() }))
       },
       commands: {
         registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-        executeCommand: vi.fn(),
+        executeCommand: vi.fn()
       },
       env: { openExternal: vi.fn() },
       Uri: { parse: vi.fn((v: string) => ({ value: v })) },
       ProgressLocation: { Notification: 15 },
       workspace: {
-        getConfiguration: vi.fn(() => ({ get: vi.fn(() => 0), update: vi.fn() })),
-        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-      },
+        getConfiguration: vi.fn(() => ({
+          get: vi.fn(() => 0),
+          update: vi.fn()
+        })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
     };
 
     vi.doMock('vscode', () => mockVscode);
@@ -2852,7 +3068,9 @@ describe('sidebar command handlers', () => {
   // --- handleRefreshLocalModels ---
   it('handleRefreshLocalModels: calls refresh and shows info message', () => {
     const { handleRefreshLocalModels } = sidebarModule;
-    const localProvider = { refresh: vi.fn() } as unknown as LocalModelsProvider;
+    const localProvider = {
+      refresh: vi.fn()
+    } as unknown as LocalModelsProvider;
     handleRefreshLocalModels(localProvider);
     expect(localProvider.refresh).toHaveBeenCalled();
     expect(mockVscode.window.showInformationMessage).toHaveBeenCalledWith('Local models refreshed');
@@ -2861,7 +3079,9 @@ describe('sidebar command handlers', () => {
   // --- handleRefreshLibrary ---
   it('handleRefreshLibrary: calls refresh and shows info message', () => {
     const { handleRefreshLibrary } = sidebarModule;
-    const libraryProvider = { refresh: vi.fn() } as unknown as LibraryModelsProvider;
+    const libraryProvider = {
+      refresh: vi.fn()
+    } as unknown as LibraryModelsProvider;
     handleRefreshLibrary(libraryProvider);
     expect(libraryProvider.refresh).toHaveBeenCalled();
     expect(mockVscode.window.showInformationMessage).toHaveBeenCalledWith('Library catalog refreshed');
@@ -2870,7 +3090,9 @@ describe('sidebar command handlers', () => {
   // --- handleRefreshCloudModels ---
   it('handleRefreshCloudModels: calls refresh and shows info message', () => {
     const { handleRefreshCloudModels } = sidebarModule;
-    const cloudProvider = { refresh: vi.fn() } as unknown as CloudModelsProvider;
+    const cloudProvider = {
+      refresh: vi.fn()
+    } as unknown as CloudModelsProvider;
     handleRefreshCloudModels(cloudProvider);
     expect(cloudProvider.refresh).toHaveBeenCalled();
     expect(mockVscode.window.showInformationMessage).toHaveBeenCalledWith('Cloud models refreshed');
@@ -2884,7 +3106,9 @@ describe('sidebar command handlers', () => {
 
     handleLoginToCloud();
 
-    expect(mockVscode.window.createTerminal).toHaveBeenCalledWith({ name: 'Ollama Cloud Login' });
+    expect(mockVscode.window.createTerminal).toHaveBeenCalledWith({
+      name: 'Ollama Cloud Login'
+    });
     expect(fakeTerminal.show).toHaveBeenCalledWith(true);
     expect(fakeTerminal.sendText).toHaveBeenCalledWith('ollama login', true);
   });
@@ -2901,28 +3125,39 @@ describe('sidebar command handlers', () => {
 
     await handleManageCloudApiKey(mockContext, cloudProvider, libraryProvider);
 
-    expect(mockVscode.window.createTerminal).toHaveBeenCalledWith({ name: 'Ollama Cloud Login' });
+    expect(mockVscode.window.createTerminal).toHaveBeenCalledWith({
+      name: 'Ollama Cloud Login'
+    });
     expect(fakeTerminal.sendText).toHaveBeenCalledWith('ollama login', true);
   });
 
   // --- handleOpenCloudModel ---
   it('handleOpenCloudModel: opens external URL for cloud-running item', () => {
     const { handleOpenCloudModel } = sidebarModule;
-    const item = { type: 'cloud-running', label: 'llama3.3' } as unknown as ModelTreeItem;
+    const item = {
+      type: 'cloud-running',
+      label: 'llama3.3'
+    } as unknown as ModelTreeItem;
     handleOpenCloudModel(item);
     expect(mockVscode.env.openExternal).toHaveBeenCalled();
   });
 
   it('handleOpenCloudModel: opens external URL for cloud-stopped item', () => {
     const { handleOpenCloudModel } = sidebarModule;
-    const item = { type: 'cloud-stopped', label: 'llama3.3' } as unknown as ModelTreeItem;
+    const item = {
+      type: 'cloud-stopped',
+      label: 'llama3.3'
+    } as unknown as ModelTreeItem;
     handleOpenCloudModel(item);
     expect(mockVscode.env.openExternal).toHaveBeenCalled();
   });
 
   it('handleOpenCloudModel: does nothing for local-stopped item', () => {
     const { handleOpenCloudModel } = sidebarModule;
-    const item = { type: 'local-stopped', label: 'llama3.3' } as unknown as ModelTreeItem;
+    const item = {
+      type: 'local-stopped',
+      label: 'llama3.3'
+    } as unknown as ModelTreeItem;
     handleOpenCloudModel(item);
     expect(mockVscode.env.openExternal).not.toHaveBeenCalled();
   });
@@ -2930,8 +3165,13 @@ describe('sidebar command handlers', () => {
   // --- handleDeleteModel ---
   it('handleDeleteModel: shows error when model is running (local-running)', async () => {
     const { handleDeleteModel } = sidebarModule;
-    const item = { type: 'local-running', label: 'llama2:latest' } as unknown as ModelTreeItem;
-    const localProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'local-running',
+      label: 'llama2:latest'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      deleteModel: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handleDeleteModel(item, localProvider);
 
@@ -2941,8 +3181,13 @@ describe('sidebar command handlers', () => {
 
   it('handleDeleteModel: shows error when model is running (cloud-running)', async () => {
     const { handleDeleteModel } = sidebarModule;
-    const item = { type: 'cloud-running', label: 'llama2:latest' } as unknown as ModelTreeItem;
-    const localProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-running',
+      label: 'llama2:latest'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      deleteModel: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handleDeleteModel(item, localProvider);
 
@@ -2953,15 +3198,20 @@ describe('sidebar command handlers', () => {
   it('handleDeleteModel: deletes model on confirmation for local-stopped', async () => {
     const { handleDeleteModel } = sidebarModule;
     mockVscode.window.showWarningMessage = vi.fn().mockResolvedValue('Delete');
-    const item = { type: 'local-stopped', label: 'llama2:latest' } as unknown as ModelTreeItem;
-    const localProvider = { deleteModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'local-stopped',
+      label: 'llama2:latest'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      deleteModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
 
     await handleDeleteModel(item, localProvider);
 
     expect(mockVscode.window.showWarningMessage).toHaveBeenCalledWith(
       'Delete model "llama2:latest"?',
       'Delete',
-      'Cancel',
+      'Cancel'
     );
     expect(localProvider.deleteModel).toHaveBeenCalledWith('llama2:latest');
   });
@@ -2969,8 +3219,13 @@ describe('sidebar command handlers', () => {
   it('handleDeleteModel: does not delete model when user cancels', async () => {
     const { handleDeleteModel } = sidebarModule;
     mockVscode.window.showWarningMessage = vi.fn().mockResolvedValue('Cancel');
-    const item = { type: 'local-stopped', label: 'llama2:latest' } as unknown as ModelTreeItem;
-    const localProvider = { deleteModel: vi.fn() } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'local-stopped',
+      label: 'llama2:latest'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      deleteModel: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handleDeleteModel(item, localProvider);
 
@@ -2980,14 +3235,20 @@ describe('sidebar command handlers', () => {
   // --- handleOpenLibraryModelPage ---
   it('handleOpenLibraryModelPage: opens external URL for library-model item', () => {
     const { handleOpenLibraryModelPage } = sidebarModule;
-    const item = { type: 'library-model', label: 'llama3' } as unknown as ModelTreeItem;
+    const item = {
+      type: 'library-model',
+      label: 'llama3'
+    } as unknown as ModelTreeItem;
     handleOpenLibraryModelPage(item);
     expect(mockVscode.env.openExternal).toHaveBeenCalled();
   });
 
   it('handleOpenLibraryModelPage: does nothing for library-model-variant item', () => {
     const { handleOpenLibraryModelPage } = sidebarModule;
-    const item = { type: 'library-model-variant', label: 'llama3:8b' } as unknown as ModelTreeItem;
+    const item = {
+      type: 'library-model-variant',
+      label: 'llama3:8b'
+    } as unknown as ModelTreeItem;
     handleOpenLibraryModelPage(item);
     expect(mockVscode.env.openExternal).not.toHaveBeenCalled();
   });
@@ -2995,8 +3256,13 @@ describe('sidebar command handlers', () => {
   // --- handleStartModel ---
   it('handleStartModel: calls startModel for local-stopped item', () => {
     const { handleStartModel } = sidebarModule;
-    const item = { type: 'local-stopped', label: 'llama2:latest' } as unknown as ModelTreeItem;
-    const localProvider = { startModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'local-stopped',
+      label: 'llama2:latest'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      startModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
 
     handleStartModel(item, localProvider);
 
@@ -3005,8 +3271,13 @@ describe('sidebar command handlers', () => {
 
   it('handleStartModel: does nothing for non-local-stopped item', () => {
     const { handleStartModel } = sidebarModule;
-    const item = { type: 'local-running', label: 'llama2:latest' } as unknown as ModelTreeItem;
-    const localProvider = { startModel: vi.fn() } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'local-running',
+      label: 'llama2:latest'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      startModel: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     handleStartModel(item, localProvider);
 
@@ -3016,8 +3287,13 @@ describe('sidebar command handlers', () => {
   // --- handleStopModel ---
   it('handleStopModel: calls stopModel for local-running item', () => {
     const { handleStopModel } = sidebarModule;
-    const item = { type: 'local-running', label: 'llama2:latest' } as unknown as ModelTreeItem;
-    const localProvider = { stopModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'local-running',
+      label: 'llama2:latest'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      stopModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
 
     handleStopModel(item, localProvider);
 
@@ -3026,8 +3302,13 @@ describe('sidebar command handlers', () => {
 
   it('handleStopModel: calls stopModel for cloud-running item', () => {
     const { handleStopModel } = sidebarModule;
-    const item = { type: 'cloud-running', label: 'llama3.3:cloud' } as unknown as ModelTreeItem;
-    const localProvider = { stopModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-running',
+      label: 'llama3.3:cloud'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      stopModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
 
     handleStopModel(item, localProvider);
 
@@ -3036,8 +3317,13 @@ describe('sidebar command handlers', () => {
 
   it('handleStopModel: does nothing for local-stopped item', () => {
     const { handleStopModel } = sidebarModule;
-    const item = { type: 'local-stopped', label: 'llama2:latest' } as unknown as ModelTreeItem;
-    const localProvider = { stopModel: vi.fn() } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'local-stopped',
+      label: 'llama2:latest'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      stopModel: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     handleStopModel(item, localProvider);
 
@@ -3047,12 +3333,17 @@ describe('sidebar command handlers', () => {
   // --- handleStartCloudModel ---
   it('handleStartCloudModel: resolves model name via cloudProvider and calls startModel', async () => {
     const { handleStartCloudModel } = sidebarModule;
-    const item = { type: 'cloud-stopped', label: 'llama3.3' } as unknown as ModelTreeItem;
-    const localProvider = { startModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-stopped',
+      label: 'llama3.3'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      startModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
     const cloudProvider = {
       resolveRunnableCloudModelName: vi.fn().mockResolvedValue('llama3.3:cloud'),
       markModelWarm: vi.fn(),
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as CloudModelsProvider;
 
     await handleStartCloudModel(item, localProvider, cloudProvider);
@@ -3065,8 +3356,13 @@ describe('sidebar command handlers', () => {
 
   it('handleStartCloudModel: falls back to label:cloud when no cloudProvider', async () => {
     const { handleStartCloudModel } = sidebarModule;
-    const item = { type: 'cloud-stopped', label: 'llama3.3' } as unknown as ModelTreeItem;
-    const localProvider = { startModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-stopped',
+      label: 'llama3.3'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      startModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
 
     await handleStartCloudModel(item, localProvider, undefined);
 
@@ -3075,8 +3371,13 @@ describe('sidebar command handlers', () => {
 
   it('handleStartCloudModel: uses label directly when it already contains colon and no cloudProvider', async () => {
     const { handleStartCloudModel } = sidebarModule;
-    const item = { type: 'cloud-stopped', label: 'llama3.3:cloud' } as unknown as ModelTreeItem;
-    const localProvider = { startModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-stopped',
+      label: 'llama3.3:cloud'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      startModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
 
     await handleStartCloudModel(item, localProvider, undefined);
 
@@ -3085,8 +3386,13 @@ describe('sidebar command handlers', () => {
 
   it('handleStartCloudModel: does nothing for non-cloud-stopped item', async () => {
     const { handleStartCloudModel } = sidebarModule;
-    const item = { type: 'cloud-running', label: 'llama3.3' } as unknown as ModelTreeItem;
-    const localProvider = { startModel: vi.fn() } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-running',
+      label: 'llama3.3'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      startModel: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handleStartCloudModel(item, localProvider, undefined);
 
@@ -3096,12 +3402,17 @@ describe('sidebar command handlers', () => {
   // --- handleStopCloudModel ---
   it('handleStopCloudModel: resolves warmed model name via cloudProvider and calls stopModel', async () => {
     const { handleStopCloudModel } = sidebarModule;
-    const item = { type: 'cloud-running', label: 'llama3.3' } as unknown as ModelTreeItem;
-    const localProvider = { stopModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-running',
+      label: 'llama3.3'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      stopModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
     const cloudProvider = {
       getWarmedModelName: vi.fn().mockReturnValue('llama3.3:cloud'),
       markModelStopped: vi.fn(),
-      refresh: vi.fn(),
+      refresh: vi.fn()
     } as unknown as CloudModelsProvider;
 
     await handleStopCloudModel(item, localProvider, cloudProvider);
@@ -3114,8 +3425,13 @@ describe('sidebar command handlers', () => {
 
   it('handleStopCloudModel: falls back to item label when no cloudProvider', async () => {
     const { handleStopCloudModel } = sidebarModule;
-    const item = { type: 'cloud-running', label: 'llama3.3:cloud' } as unknown as ModelTreeItem;
-    const localProvider = { stopModel: vi.fn().mockResolvedValue(undefined) } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-running',
+      label: 'llama3.3:cloud'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      stopModel: vi.fn().mockResolvedValue(undefined)
+    } as unknown as LocalModelsProvider;
 
     await handleStopCloudModel(item, localProvider, undefined);
 
@@ -3124,8 +3440,13 @@ describe('sidebar command handlers', () => {
 
   it('handleStopCloudModel: does nothing for non-cloud-running item', async () => {
     const { handleStopCloudModel } = sidebarModule;
-    const item = { type: 'cloud-stopped', label: 'llama3.3' } as unknown as ModelTreeItem;
-    const localProvider = { stopModel: vi.fn() } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'cloud-stopped',
+      label: 'llama3.3'
+    } as unknown as ModelTreeItem;
+    const localProvider = {
+      stopModel: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handleStopCloudModel(item, localProvider, undefined);
 
@@ -3140,27 +3461,37 @@ describe('sidebar command handlers', () => {
       pull: vi.fn().mockResolvedValue(
         (async function* () {
           yield { status: 'done', total: 100, completed: 100 };
-        })(),
+        })()
       ),
-      abort: vi.fn(),
+      abort: vi.fn()
     } as unknown as import('ollama').Ollama;
-    const localProvider = { refresh: vi.fn() } as unknown as LocalModelsProvider;
+    const localProvider = {
+      refresh: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handlePullModel(mockClient, localProvider);
 
     expect(mockVscode.window.showInputBox).toHaveBeenCalledWith({
       prompt: 'Enter model name or identifier (e.g., llama2, mistral:7b)',
-      ignoreFocusOut: false,
+      ignoreFocusOut: false
     });
-    expect(mockClient.pull).toHaveBeenCalledWith({ model: 'mistral:7b', stream: true });
+    expect(mockClient.pull).toHaveBeenCalledWith({
+      model: 'mistral:7b',
+      stream: true
+    });
     expect(localProvider.refresh).toHaveBeenCalled();
   });
 
   it('handlePullModel: does nothing when user cancels input', async () => {
     const { handlePullModel } = sidebarModule;
     mockVscode.window.showInputBox = vi.fn().mockResolvedValue(undefined);
-    const mockClient = { pull: vi.fn(), abort: vi.fn() } as unknown as import('ollama').Ollama;
-    const localProvider = { refresh: vi.fn() } as unknown as LocalModelsProvider;
+    const mockClient = {
+      pull: vi.fn(),
+      abort: vi.fn()
+    } as unknown as import('ollama').Ollama;
+    const localProvider = {
+      refresh: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handlePullModel(mockClient, localProvider);
 
@@ -3170,45 +3501,69 @@ describe('sidebar command handlers', () => {
   // --- handlePullModelFromLibrary ---
   it('handlePullModelFromLibrary: pulls model for library-model-variant item', async () => {
     const { handlePullModelFromLibrary } = sidebarModule;
-    const item = { type: 'library-model-variant', label: 'llama3:8b' } as unknown as ModelTreeItem;
+    const item = {
+      type: 'library-model-variant',
+      label: 'llama3:8b'
+    } as unknown as ModelTreeItem;
     const mockClient = {
       pull: vi.fn().mockResolvedValue(
         (async function* () {
           yield { status: 'done', total: 200, completed: 200 };
-        })(),
+        })()
       ),
-      abort: vi.fn(),
+      abort: vi.fn()
     } as unknown as import('ollama').Ollama;
-    const localProvider = { refresh: vi.fn() } as unknown as LocalModelsProvider;
+    const localProvider = {
+      refresh: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handlePullModelFromLibrary(item, mockClient, localProvider);
 
-    expect(mockClient.pull).toHaveBeenCalledWith({ model: 'llama3:8b', stream: true });
+    expect(mockClient.pull).toHaveBeenCalledWith({
+      model: 'llama3:8b',
+      stream: true
+    });
   });
 
   it('handlePullModelFromLibrary: pulls model for library-model-downloaded-variant item', async () => {
     const { handlePullModelFromLibrary } = sidebarModule;
-    const item = { type: 'library-model-downloaded-variant', label: 'llama3:8b' } as unknown as ModelTreeItem;
+    const item = {
+      type: 'library-model-downloaded-variant',
+      label: 'llama3:8b'
+    } as unknown as ModelTreeItem;
     const mockClient = {
       pull: vi.fn().mockResolvedValue(
         (async function* () {
           yield { status: 'done', total: 200, completed: 200 };
-        })(),
+        })()
       ),
-      abort: vi.fn(),
+      abort: vi.fn()
     } as unknown as import('ollama').Ollama;
-    const localProvider = { refresh: vi.fn() } as unknown as LocalModelsProvider;
+    const localProvider = {
+      refresh: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handlePullModelFromLibrary(item, mockClient, localProvider);
 
-    expect(mockClient.pull).toHaveBeenCalledWith({ model: 'llama3:8b', stream: true });
+    expect(mockClient.pull).toHaveBeenCalledWith({
+      model: 'llama3:8b',
+      stream: true
+    });
   });
 
   it('handlePullModelFromLibrary: does nothing for non-variant item', async () => {
     const { handlePullModelFromLibrary } = sidebarModule;
-    const item = { type: 'library-model', label: 'llama3' } as unknown as ModelTreeItem;
-    const mockClient = { pull: vi.fn(), abort: vi.fn() } as unknown as import('ollama').Ollama;
-    const localProvider = { refresh: vi.fn() } as unknown as LocalModelsProvider;
+    const item = {
+      type: 'library-model',
+      label: 'llama3'
+    } as unknown as ModelTreeItem;
+    const mockClient = {
+      pull: vi.fn(),
+      abort: vi.fn()
+    } as unknown as import('ollama').Ollama;
+    const localProvider = {
+      refresh: vi.fn()
+    } as unknown as LocalModelsProvider;
 
     await handlePullModelFromLibrary(item, mockClient, localProvider);
 
@@ -3250,20 +3605,20 @@ const MINIMAL_VSCODE_MOCK = {
     showWarningMessage: vi.fn(),
     showInputBox: vi.fn(),
     withProgress: vi.fn(async (_opts: unknown, cb: (p: any, t: any) => Promise<void>) =>
-      cb({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() }),
-    ),
+      cb({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() })
+    )
   },
   commands: {
     registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
-    executeCommand: vi.fn(),
+    executeCommand: vi.fn()
   },
   env: { openExternal: vi.fn() },
   Uri: { parse: vi.fn((v: string) => ({ value: v })) },
   ProgressLocation: { Notification: 15 },
   workspace: {
     getConfiguration: vi.fn(() => ({ get: vi.fn(() => undefined) })),
-    onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-  },
+    onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+  }
 };
 
 describe('assertHtmlContentType', () => {
@@ -3272,8 +3627,12 @@ describe('assertHtmlContentType', () => {
     vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
     const { assertHtmlContentType } = await import('./sidebar.js');
 
-    const response = new Response('<html></html>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-    Object.defineProperty(response, 'url', { value: 'https://ollama.com/library' });
+    const response = new Response('<html></html>', {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
+    Object.defineProperty(response, 'url', {
+      value: 'https://ollama.com/library'
+    });
     expect(() => assertHtmlContentType(response)).not.toThrow();
   });
 
@@ -3293,9 +3652,11 @@ describe('assertHtmlContentType', () => {
     const { assertHtmlContentType } = await import('./sidebar.js');
 
     const response = new Response('{}', {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' }
     });
-    Object.defineProperty(response, 'url', { value: 'https://ollama.com/library' });
+    Object.defineProperty(response, 'url', {
+      value: 'https://ollama.com/library'
+    });
     expect(() => assertHtmlContentType(response)).toThrow(/Expected text\/html/);
   });
 });
@@ -3307,10 +3668,12 @@ describe('LibraryModelsProvider HTTP (MSW)', () => {
     vi.resetModules();
     vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
     vi.doMock('./client.js', () => ({
-      fetchModelCapabilities: vi
-        .fn()
-        .mockResolvedValue({ toolCalling: false, imageInput: false, maxInputTokens: null }),
-      getCloudOllamaClient: vi.fn().mockResolvedValue(null),
+      fetchModelCapabilities: vi.fn().mockResolvedValue({
+        toolCalling: false,
+        imageInput: false,
+        maxInputTokens: null
+      }),
+      getCloudOllamaClient: vi.fn().mockResolvedValue(null)
     }));
     ({ LibraryModelsProvider } = await import('./sidebar.js'));
   });
@@ -3357,16 +3720,16 @@ describe('LibraryModelsProvider HTTP (MSW)', () => {
         'https://ollama.com/library',
         () =>
           new HttpResponse(libraryPageHtml(['phi4', 'devstral']), {
-            headers: { 'Content-Type': 'text/html' },
-          }),
+            headers: { 'Content-Type': 'text/html' }
+          })
       ),
       http.get(
         'https://ollama.com/search',
         () =>
           new HttpResponse(libraryPageHtml(['devstral']), {
-            headers: { 'Content-Type': 'text/html' },
-          }),
-      ),
+            headers: { 'Content-Type': 'text/html' }
+          })
+      )
     );
 
     const provider = new LibraryModelsProvider(undefined);
@@ -3386,19 +3749,23 @@ describe('CloudModelsProvider loadCloudCatalogFromNetwork (MSW)', () => {
     vi.resetModules();
     vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
     vi.doMock('./client.js', () => ({
-      fetchModelCapabilities: vi
-        .fn()
-        .mockResolvedValue({ toolCalling: false, imageInput: false, maxInputTokens: null }),
+      fetchModelCapabilities: vi.fn().mockResolvedValue({
+        toolCalling: false,
+        imageInput: false,
+        maxInputTokens: null
+      }),
       getCloudOllamaClient: vi.fn().mockResolvedValue({
         list: vi.fn().mockResolvedValue({ models: [] }),
-        ps: vi.fn().mockResolvedValue({ models: [] }),
-      }),
+        ps: vi.fn().mockResolvedValue({ models: [] })
+      })
     }));
     ({ CloudModelsProvider } = await import('./sidebar.js'));
   });
 
   it('populates cloud catalog from /api/tags JSON via MSW', async () => {
-    const mockContext = { globalState: { get: vi.fn(() => null), update: vi.fn() } };
+    const mockContext = {
+      globalState: { get: vi.fn(() => null), update: vi.fn() }
+    };
     const provider = new CloudModelsProvider(mockContext as any) as any;
     await provider.getChildren();
 
@@ -3420,19 +3787,21 @@ describe('CloudModelsProvider loadCloudCatalogFromNetwork (MSW)', () => {
             `<!DOCTYPE html><html><body>
           <a href="/library/qwen3"><span>Tools</span><span>Vision</span></a>
           </body></html>`,
-            { headers: { 'Content-Type': 'text/html' } },
-          ),
-      ),
+            { headers: { 'Content-Type': 'text/html' } }
+          )
+      )
     );
 
-    const mockContext = { globalState: { get: vi.fn(() => null), update: vi.fn() } };
+    const mockContext = {
+      globalState: { get: vi.fn(() => null), update: vi.fn() }
+    };
     const provider = new CloudModelsProvider(mockContext as any) as any;
     await provider.getChildren();
 
     const caps: Set<string> | undefined = provider.cloudCapabilitiesByBase?.get('qwen3');
     expect(caps).toBeDefined();
-    expect(caps!.has('tools')).toBe(true);
-    expect(caps!.has('vision')).toBe(true);
+    expect(caps?.has('tools')).toBe(true);
+    expect(caps?.has('vision')).toBe(true);
     provider.dispose?.();
   });
 });
@@ -3441,7 +3810,9 @@ describe('CloudModelsProvider loadCloudCatalogFromNetwork (MSW)', () => {
 async function waitFor(condition: () => boolean, timeoutMs = 2000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!condition()) {
-    if (Date.now() >= deadline) throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+    if (Date.now() >= deadline) {
+      throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+    }
     await new Promise(r => setTimeout(r, 20));
   }
 }
@@ -3453,10 +3824,12 @@ describe('fetchModelPagePreview via LibraryModelsProvider (MSW)', () => {
     vi.resetModules();
     vi.doMock('vscode', () => MINIMAL_VSCODE_MOCK);
     vi.doMock('./client.js', () => ({
-      fetchModelCapabilities: vi
-        .fn()
-        .mockResolvedValue({ toolCalling: false, imageInput: false, maxInputTokens: null }),
-      getCloudOllamaClient: vi.fn().mockResolvedValue(null),
+      fetchModelCapabilities: vi.fn().mockResolvedValue({
+        toolCalling: false,
+        imageInput: false,
+        maxInputTokens: null
+      }),
+      getCloudOllamaClient: vi.fn().mockResolvedValue(null)
     }));
     ({ LibraryModelsProvider } = await import('./sidebar.js'));
   });
@@ -3465,7 +3838,10 @@ describe('fetchModelPagePreview via LibraryModelsProvider (MSW)', () => {
     server.use(
       http.get(
         'https://ollama.com/library',
-        () => new HttpResponse(libraryPageHtml(['phi4']), { headers: { 'Content-Type': 'text/html' } }),
+        () =>
+          new HttpResponse(libraryPageHtml(['phi4']), {
+            headers: { 'Content-Type': 'text/html' }
+          })
       ),
       http.get(
         'https://ollama.com/library/phi4',
@@ -3474,11 +3850,11 @@ describe('fetchModelPagePreview via LibraryModelsProvider (MSW)', () => {
             modelPageHtml({
               name: 'phi4',
               description: 'A capable reasoning model',
-              capabilities: ['Thinking', 'Vision'],
+              capabilities: ['Thinking', 'Vision']
             }),
-            { headers: { 'Content-Type': 'text/html' } },
-          ),
-      ),
+            { headers: { 'Content-Type': 'text/html' } }
+          )
+      )
     );
 
     const provider = new LibraryModelsProvider(undefined);
@@ -3498,15 +3874,18 @@ describe('fetchModelPagePreview via LibraryModelsProvider (MSW)', () => {
     server.use(
       http.get(
         'https://ollama.com/library',
-        () => new HttpResponse(libraryPageHtml(['llama3.3']), { headers: { 'Content-Type': 'text/html' } }),
+        () =>
+          new HttpResponse(libraryPageHtml(['llama3.3']), {
+            headers: { 'Content-Type': 'text/html' }
+          })
       ),
       http.get(
         'https://ollama.com/library/llama3.3',
         () =>
           new HttpResponse(modelPageHtml({ name: 'llama3.3', capabilities: ['Tools'] }), {
-            headers: { 'Content-Type': 'text/html' },
-          }),
-      ),
+            headers: { 'Content-Type': 'text/html' }
+          })
+      )
     );
 
     const provider = new LibraryModelsProvider(undefined);

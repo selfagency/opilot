@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-type ScopeValues = {
+interface ScopeValues {
   defaultValue?: unknown;
   globalValue?: unknown;
-  workspaceValue?: unknown;
   workspaceFolderValues?: Record<string, unknown>;
-};
+  workspaceValue?: unknown;
+}
 
 type ConfigStore = Record<string, ScopeValues>;
 
@@ -19,8 +19,12 @@ function createVscodeSettingsMock(options?: {
   const folders = options?.workspaceFolders ?? [];
 
   const getStore = (namespace: string): ConfigStore => {
-    if (namespace === 'opilot') return opilot;
-    if (namespace === 'ollama') return legacy;
+    if (namespace === 'opilot') {
+      return opilot;
+    }
+    if (namespace === 'ollama') {
+      return legacy;
+    }
     return {};
   };
 
@@ -34,7 +38,7 @@ function createVscodeSettingsMock(options?: {
           defaultValue: scoped.defaultValue,
           globalValue: scoped.globalValue,
           workspaceValue: scoped.workspaceValue,
-          workspaceFolderValue: folderKey ? scoped.workspaceFolderValues?.[folderKey] : undefined,
+          workspaceFolderValue: folderKey ? scoped.workspaceFolderValues?.[folderKey] : undefined
         };
       }),
       get: vi.fn((key: string) => {
@@ -43,12 +47,19 @@ function createVscodeSettingsMock(options?: {
         if (folderKey && scoped.workspaceFolderValues && folderKey in scoped.workspaceFolderValues) {
           return scoped.workspaceFolderValues[folderKey];
         }
-        if (scoped.workspaceValue !== undefined) return scoped.workspaceValue;
-        if (scoped.globalValue !== undefined) return scoped.globalValue;
+        if (scoped.workspaceValue !== undefined) {
+          return scoped.workspaceValue;
+        }
+        if (scoped.globalValue !== undefined) {
+          return scoped.globalValue;
+        }
         return scoped.defaultValue;
       }),
-      update: vi.fn(async (key: string, value: unknown, target: number) => {
-        const scoped = (store[key] ??= {});
+      update: vi.fn((key: string, value: unknown, target: number) => {
+        if (!store[key]) {
+          store[key] = {};
+        }
+        const scoped = store[key];
         if (target === 1) {
           scoped.globalValue = value;
           return;
@@ -59,24 +70,28 @@ function createVscodeSettingsMock(options?: {
         }
         if (target === 3) {
           const folderKey = scopeUri?.fsPath;
-          if (!folderKey) return;
-          if (!scoped.workspaceFolderValues) scoped.workspaceFolderValues = {};
+          if (!folderKey) {
+            return;
+          }
+          if (!scoped.workspaceFolderValues) {
+            scoped.workspaceFolderValues = {};
+          }
           scoped.workspaceFolderValues[folderKey] = value;
         }
-      }),
+      })
     };
   });
 
   return {
     workspace: {
       getConfiguration,
-      workspaceFolders: folders.map(fsPath => ({ uri: { fsPath } })),
+      workspaceFolders: folders.map(fsPath => ({ uri: { fsPath } }))
     },
     ConfigurationTarget: {
       Global: 1,
       Workspace: 2,
-      WorkspaceFolder: 3,
-    },
+      WorkspaceFolder: 3
+    }
   };
 }
 
@@ -92,9 +107,19 @@ describe('settings helpers', () => {
   it('getSetting prefers explicit opilot value over legacy value', async () => {
     vi.doMock('vscode', () =>
       createVscodeSettingsMock({
-        opilot: { host: { defaultValue: 'http://localhost:11434', globalValue: 'http://opilot:11434' } },
-        legacy: { host: { defaultValue: 'http://localhost:11434', globalValue: 'http://legacy:11434' } },
-      }),
+        opilot: {
+          host: {
+            defaultValue: 'http://localhost:11434',
+            globalValue: 'http://opilot:11434'
+          }
+        },
+        legacy: {
+          host: {
+            defaultValue: 'http://localhost:11434',
+            globalValue: 'http://legacy:11434'
+          }
+        }
+      })
     );
 
     const { getSetting } = await import('./settings.js');
@@ -105,8 +130,13 @@ describe('settings helpers', () => {
     vi.doMock('vscode', () =>
       createVscodeSettingsMock({
         opilot: { host: { defaultValue: 'http://localhost:11434' } },
-        legacy: { host: { defaultValue: 'http://localhost:11434', workspaceValue: 'http://legacy-workspace:11434' } },
-      }),
+        legacy: {
+          host: {
+            defaultValue: 'http://localhost:11434',
+            workspaceValue: 'http://legacy-workspace:11434'
+          }
+        }
+      })
     );
 
     const { getSetting } = await import('./settings.js');
@@ -117,8 +147,8 @@ describe('settings helpers', () => {
     vi.doMock('vscode', () =>
       createVscodeSettingsMock({
         opilot: { host: { defaultValue: 'http://localhost:11434' } },
-        legacy: { host: { defaultValue: 'http://localhost:11434' } },
-      }),
+        legacy: { host: { defaultValue: 'http://localhost:11434' } }
+      })
     );
 
     const { getSetting } = await import('./settings.js');
@@ -130,10 +160,10 @@ describe('settings helpers', () => {
     const { affectsSetting } = await import('./settings.js');
 
     const opilotEvent = {
-      affectsConfiguration: (key: string) => key === 'opilot.streamLogs',
+      affectsConfiguration: (key: string) => key === 'opilot.streamLogs'
     } as any;
     const legacyEvent = {
-      affectsConfiguration: (key: string) => key === 'ollama.streamLogs',
+      affectsConfiguration: (key: string) => key === 'ollama.streamLogs'
     } as any;
 
     expect(affectsSetting(opilotEvent, 'streamLogs')).toBe(true);
@@ -150,9 +180,9 @@ describe('settings helpers', () => {
         host: {
           defaultValue: 'http://localhost:11434',
           workspaceFolderValues: {
-            [folderB]: 'http://existing-b:11434',
-          },
-        },
+            [folderB]: 'http://existing-b:11434'
+          }
+        }
       },
       legacy: {
         host: {
@@ -161,10 +191,10 @@ describe('settings helpers', () => {
           workspaceValue: 'http://legacy-workspace:11434',
           workspaceFolderValues: {
             [folderA]: 'http://legacy-a:11434',
-            [folderB]: 'http://legacy-b:11434',
-          },
-        },
-      },
+            [folderB]: 'http://legacy-b:11434'
+          }
+        }
+      }
     });
 
     vi.doMock('vscode', () => vscodeMock);
@@ -176,34 +206,46 @@ describe('settings helpers', () => {
 
     // Global/workspace migrated
     expect((vscodeMock.workspace.getConfiguration('opilot') as any).inspect('host').globalValue).toBe(
-      'http://legacy-global:11434',
+      'http://legacy-global:11434'
     );
     expect((vscodeMock.workspace.getConfiguration('opilot') as any).inspect('host').workspaceValue).toBe(
-      'http://legacy-workspace:11434',
+      'http://legacy-workspace:11434'
     );
 
     // Folder A migrated (no existing opilot folder value)
     expect(
-      (vscodeMock.workspace.getConfiguration('opilot', { fsPath: folderA }) as any).inspect('host')
-        .workspaceFolderValue,
+      (
+        vscodeMock.workspace.getConfiguration('opilot', {
+          fsPath: folderA
+        }) as any
+      ).inspect('host').workspaceFolderValue
     ).toBe('http://legacy-a:11434');
     // Folder B preserved (existing opilot folder value)
     expect(
-      (vscodeMock.workspace.getConfiguration('opilot', { fsPath: folderB }) as any).inspect('host')
-        .workspaceFolderValue,
+      (
+        vscodeMock.workspace.getConfiguration('opilot', {
+          fsPath: folderB
+        }) as any
+      ).inspect('host').workspaceFolderValue
     ).toBe('http://existing-b:11434');
 
     // Legacy values are cleaned only for migrated scopes.
     expect((vscodeMock.workspace.getConfiguration('ollama') as any).inspect('host').globalValue).toBeUndefined();
     expect((vscodeMock.workspace.getConfiguration('ollama') as any).inspect('host').workspaceValue).toBeUndefined();
     expect(
-      (vscodeMock.workspace.getConfiguration('ollama', { fsPath: folderA }) as any).inspect('host')
-        .workspaceFolderValue,
+      (
+        vscodeMock.workspace.getConfiguration('ollama', {
+          fsPath: folderA
+        }) as any
+      ).inspect('host').workspaceFolderValue
     ).toBeUndefined();
     // Not migrated (opilot already had explicit folder value), so legacy B remains untouched.
     expect(
-      (vscodeMock.workspace.getConfiguration('ollama', { fsPath: folderB }) as any).inspect('host')
-        .workspaceFolderValue,
+      (
+        vscodeMock.workspace.getConfiguration('ollama', {
+          fsPath: folderB
+        }) as any
+      ).inspect('host').workspaceFolderValue
     ).toBe('http://legacy-b:11434');
   });
 
@@ -212,15 +254,15 @@ describe('settings helpers', () => {
       opilot: {
         host: {
           defaultValue: 'http://localhost:11434',
-          workspaceValue: 'http://opilot-workspace:11434',
-        },
+          workspaceValue: 'http://opilot-workspace:11434'
+        }
       },
       legacy: {
         host: {
           defaultValue: 'http://localhost:11434',
-          workspaceValue: 'http://legacy-workspace:11434',
-        },
-      },
+          workspaceValue: 'http://legacy-workspace:11434'
+        }
+      }
     });
 
     vi.doMock('vscode', () => vscodeMock);
@@ -229,7 +271,7 @@ describe('settings helpers', () => {
     const migrated = await migrateLegacySettings();
     expect(migrated).not.toContain('host');
     expect((vscodeMock.workspace.getConfiguration('ollama') as any).inspect('host').workspaceValue).toBe(
-      'http://legacy-workspace:11434',
+      'http://legacy-workspace:11434'
     );
   });
 });

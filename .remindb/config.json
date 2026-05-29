@@ -1,0 +1,5 @@
+{
+  "budgets": { "search": 1000, "fetch": 1500, "fetch_batch": 4000 },
+  "temperature": { "tick_interval": "5m", "cold_threshold": 0.1, "hot_threshold": 0.5 },
+  "rescan": { "enabled": true, "interval": "30s" }
+}

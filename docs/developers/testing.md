@@ -129,7 +129,7 @@ Extension tests run inside a real VS Code host using `@vscode/test-cli`. They te
 task extension-tests
 ```
 
-Test files live in `test/extension/`. See `test/extension/index.js` for the runner configuration.
+Test files live in `test/extension/`. See `test/extension/index.mjs` for the runner configuration.
 
 ## Integration Tests
 

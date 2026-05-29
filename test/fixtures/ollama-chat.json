@@ -1,0 +1,79 @@
+[
+  {
+    "match": {
+      "method": "POST",
+      "path": "/api/chat",
+      "body": {
+        "model": "smollm:135m",
+        "messages": [
+          {
+            "role": "user",
+            "content": "hello"
+          }
+        ]
+      }
+    },
+    "response": {
+      "content": "Hello! How can I help you today?"
+    }
+  },
+  {
+    "match": {
+      "method": "POST",
+      "path": "/api/chat",
+      "body": {
+        "model": "smollm:135m",
+        "messages": [
+          {
+            "role": "user",
+            "content": "write a function"
+          }
+        ]
+      }
+    },
+    "response": {
+      "content": "Here's a simple function:\n\nfunction greet(name) {\n  return `Hello, ${name}!`;\n}\n\nThis function takes a name parameter and returns a greeting string."
+    }
+  },
+  {
+    "match": {
+      "method": "POST",
+      "path": "/api/chat",
+      "body": {
+        "model": "qwen3:0.6b",
+        "messages": [
+          {
+            "role": "user",
+            "content": "what is 2+2"
+          }
+        ]
+      }
+    },
+    "response": {
+      "content": "2+2 equals 4."
+    }
+  },
+  {
+    "match": {
+      "method": "POST",
+      "path": "/api/chat",
+      "body": {
+        "model": "smollm:135m",
+        "messages": [
+          {
+            "role": "user",
+            "content": "tool test"
+          }
+        ]
+      }
+    },
+    "response": {
+      "toolCalls": [
+        {
+          "name": "get_weather",
+          "arguments": "{\"location\":\"New York\"}"
+        }
+      ]
+    }
+  }
+]

@@ -2,16 +2,26 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-type PackageJson = {
+interface PackageJson {
+  activationEvents?: string[];
   contributes?: {
     viewsContainers?: {
       activitybar?: Array<{ id: string; icon?: string }>;
     };
     views?: Record<string, Array<{ id: string; type?: string }>>;
-    commands?: Array<{ command: string; title?: string; category?: string; icon?: string }>;
+    commands?: Array<{
+      command: string;
+      title?: string;
+      category?: string;
+      icon?: string;
+    }>;
     menus?: {
       'view/title'?: Array<{ command: string; when?: string; group?: string }>;
-      'view/item/context'?: Array<{ command: string; when?: string; group?: string }>;
+      'view/item/context'?: Array<{
+        command: string;
+        when?: string;
+        group?: string;
+      }>;
     };
     languageModelChatProviders?: Array<{ vendor: string }>;
     configuration?: {
@@ -27,18 +37,17 @@ type PackageJson = {
       >;
     };
   };
-  activationEvents?: string[];
-};
+}
 
 function loadPackageJson(): PackageJson {
-  const packagePath = resolve(__dirname, '..', 'package.json');
+  const packagePath = resolve(import.meta.dirname, '..', 'package.json');
   const raw = readFileSync(packagePath, 'utf8');
   return JSON.parse(raw) as PackageJson;
 }
 
 function extractViewId(whenClause?: string): string | undefined {
   if (!whenClause) {
-    return undefined;
+    return;
   }
 
   const match = whenClause.match(/view\s*==\s*([a-z0-9-]+)/i);
@@ -88,7 +97,7 @@ describe('package contributes integrity', () => {
     const icon = pkg.contributes?.viewsContainers?.activitybar?.[0]?.icon;
 
     expect(icon).toBeTruthy();
-    const iconPath = resolve(__dirname, '..', icon!);
+    const iconPath = resolve(import.meta.dirname, '..', icon as string);
     expect(existsSync(iconPath)).toBe(true);
   });
 
@@ -101,7 +110,10 @@ describe('package contributes integrity', () => {
 
   it('all commands have "Ollama" category', () => {
     const pkg = loadPackageJson();
-    type PkgCommand = { command: string; category?: string };
+    interface PkgCommand {
+      category?: string;
+      command: string;
+    }
     const commands = (pkg.contributes?.commands ?? []) as PkgCommand[];
     const missing = commands.filter(c => c.category !== 'Ollama').map(c => c.command);
     expect(missing).toEqual([]);
@@ -111,7 +123,7 @@ describe('package contributes integrity', () => {
     const pkg = loadPackageJson();
     const commandIconMap = new Map((pkg.contributes?.commands ?? []).map(c => [c.command, c.icon]));
     const navMenuEntries = (pkg.contributes?.menus?.['view/title'] ?? []).filter(
-      entry => typeof entry.group === 'string' && entry.group.startsWith('navigation'),
+      entry => typeof entry.group === 'string' && entry.group.startsWith('navigation')
     );
     const missingIcon = navMenuEntries.filter(entry => !commandIconMap.get(entry.command)).map(entry => entry.command);
     expect(missingIcon).toEqual([]);
@@ -144,7 +156,7 @@ describe('package contributes integrity', () => {
       'ollama.modelfilesPath',
       'ollama.completionModel',
       'ollama.enableInlineCompletions',
-      'ollama.hideThinkingContent',
+      'ollama.hideThinkingContent'
     ];
 
     for (const key of legacyKeys) {
@@ -178,12 +190,12 @@ describe('package contributes integrity', () => {
   });
 
   it('all grammar keywords have hover documentation', () => {
-    const grammarPath = resolve(__dirname, '..', 'syntaxes', 'modelfile.tmLanguage.json');
+    const grammarPath = resolve(import.meta.dirname, '..', 'syntaxes', 'modelfile.tmLanguage.json');
     const grammarRaw = readFileSync(grammarPath, 'utf8');
     const grammar = JSON.parse(grammarRaw);
 
     // Extract KEYWORD_DOCS from modelfiles.ts source to avoid vscode dependency
-    const modelfilesPath = resolve(__dirname, 'modelfiles.ts');
+    const modelfilesPath = resolve(import.meta.dirname, 'modelfiles.ts');
     const modelfilesSource = readFileSync(modelfilesPath, 'utf8');
     const keywordNamesInSource = Array.from(modelfilesSource.matchAll(/^\s+([A-Z]+):\s+['"`]/gm), m => m[1]);
 

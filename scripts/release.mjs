@@ -1,10 +1,14 @@
 #!/usr/bin/env zx
+// biome-ignore-all lint/correctness/noUndeclaredVariables: zx runtime provides $, cd, argv, sleep, ProcessOutput as globals
+// biome-ignore-all lint/suspicious/useAwait: rollback is used as async handler for process.on
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: release script with many sequential steps
+// biome-ignore-all lint/style/noNestedTernary: changelog update logic
 
-import { Octokit } from '@octokit/rest';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Octokit } from '@octokit/rest';
 import ora from 'ora';
 
 $.verbose = false;
@@ -19,11 +23,11 @@ cd(ROOT);
 const version = argv._[0];
 const isPreRelease = argv['pre-release'] === true || argv.p === true;
 
-if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
+if (!(version && /^\d+\.\d+\.\d+$/.test(version))) {
   console.error(
     isPreRelease
       ? 'Usage: task prerelease -- <version>   (e.g. task prerelease -- 0.1.0)'
-      : 'Usage: task release -- <version>   (e.g. task release -- 1.0.0)',
+      : 'Usage: task release -- <version>   (e.g. task release -- 1.0.0)'
   );
   console.error('Note: VS Code Marketplace only supports major.minor.patch versions.');
   process.exit(1);
@@ -51,7 +55,7 @@ function runGit(args, options = {}) {
     cwd: ROOT,
     encoding: 'utf8',
     shell: false,
-    ...options,
+    ...options
   });
 
   if (result.status !== 0) {
@@ -65,13 +69,19 @@ function runGit(args, options = {}) {
 }
 
 function resolveGitExecutable() {
-  const direct = spawnSync('git', ['--version'], { stdio: 'ignore', shell: false });
+  const direct = spawnSync('git', ['--version'], {
+    stdio: 'ignore',
+    shell: false
+  });
   if (direct.status === 0) {
     return 'git';
   }
 
   const locatorCommand = process.platform === 'win32' ? 'where' : 'which';
-  const located = spawnSync(locatorCommand, ['git'], { encoding: 'utf8', shell: false });
+  const located = spawnSync(locatorCommand, ['git'], {
+    encoding: 'utf8',
+    shell: false
+  });
   if (located.status === 0) {
     const candidate = located.stdout
       .split(/\r?\n/)
@@ -196,7 +206,7 @@ async function main() {
     owner,
     repo,
     ref: 'tags/v',
-    per_page: 100,
+    per_page: 100
   });
 
   const previousTag =
@@ -220,7 +230,7 @@ async function main() {
     repo,
     tag_name: tag,
     target_commitish: 'main',
-    ...(previousTag ? { previous_tag_name: previousTag } : {}),
+    ...(previousTag ? { previous_tag_name: previousTag } : {})
   });
   const releaseNotes = notesResp.data.body?.trim() || '- No notable changes.';
 
@@ -230,7 +240,7 @@ async function main() {
   const pkgPath = resolve(ROOT, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
   pkg.version = version;
-  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+  writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
   // --- Update CHANGELOG.md --------------------------------------------------
 
@@ -248,7 +258,9 @@ async function main() {
     original = '# Change Log\n\n## [Unreleased]\n';
   }
 
-  if (!original.includes(heading)) {
+  if (original.includes(heading)) {
+    console.log('ℹ️  CHANGELOG already contains this release heading; skipping.');
+  } else {
     const marker = '## [Unreleased]';
     const idx = original.indexOf(marker);
     const firstVersionIdx = original.search(/^## \[/m);
@@ -259,8 +271,6 @@ async function main() {
           ? `${original.slice(0, firstVersionIdx)}${section}\n${original.slice(firstVersionIdx)}`
           : `${original}\n${section}`;
     writeFileSync(changelogPath, updated);
-  } else {
-    console.log('ℹ️  CHANGELOG already contains this release heading; skipping.');
   }
 
   // --- Commit + push --------------------------------------------------------
@@ -300,7 +310,11 @@ async function main() {
 
   console.log(`🚀 Dispatching release CI workflow for version ${version}${isPreRelease ? ' (pre-release)' : ''}...`);
 
-  const workflowsResp = await octokit.actions.listRepoWorkflows({ owner, repo, per_page: 100 });
+  const workflowsResp = await octokit.actions.listRepoWorkflows({
+    owner,
+    repo,
+    per_page: 100
+  });
   const releaseWorkflow = workflowsResp.data.workflows.find(w => w.name === 'Release');
   if (!releaseWorkflow) {
     throw new Error(`Release workflow not found in ${owner}/${repo}`);
@@ -313,8 +327,8 @@ async function main() {
     ref: 'main',
     inputs: {
       version,
-      pre_release: isPreRelease,
-    },
+      pre_release: isPreRelease
+    }
   });
 
   // --- Watch the release workflow ------------------------------------------
@@ -326,7 +340,7 @@ async function main() {
   spinner.start();
   await waitForWorkflow(octokit, 'Release', owner, repo, headSha, spinner, {
     autoDispatch: false,
-    branch: null,
+    branch: null
   });
 
   releaseDone = true;
@@ -344,10 +358,14 @@ async function waitForWorkflow(
   repo,
   headSha,
   spinner,
-  { timeoutMs = 3_600_000, pollMs = 15_000, autoDispatch = true, branch = 'main' } = {},
+  { timeoutMs = 3_600_000, pollMs = 15_000, autoDispatch = true, branch = 'main' } = {}
 ) {
   // Resolve the workflow ID by name.
-  const workflowsResp = await octokit.actions.listRepoWorkflows({ owner, repo, per_page: 100 });
+  const workflowsResp = await octokit.actions.listRepoWorkflows({
+    owner,
+    repo,
+    per_page: 100
+  });
   const workflow = workflowsResp.data.workflows.find(w => w.name === name);
   if (!workflow) {
     spinner.fail(`${name}: workflow not found in ${owner}/${repo}`);
@@ -367,7 +385,7 @@ async function waitForWorkflow(
       workflow_id: workflow.id,
       ...(branch ? { branch } : {}),
       head_sha: headSha,
-      per_page: 10,
+      per_page: 10
     });
 
     // Find the latest run that isn't one we already marked as cancelled.
@@ -376,7 +394,12 @@ async function waitForWorkflow(
     if (!run) {
       if (autoDispatch && !triggered) {
         spinner.text = `${name}: no run found — triggering workflow_dispatch...`;
-        await octokit.actions.createWorkflowDispatch({ owner, repo, workflow_id: workflow.id, ref: 'main' });
+        await octokit.actions.createWorkflowDispatch({
+          owner,
+          repo,
+          workflow_id: workflow.id,
+          ref: 'main'
+        });
         triggered = true;
         spinner.text = `${name}: waiting for run to appear...`;
       } else {

@@ -38,7 +38,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build docs
-        run: pnpm run docs:build
+        run: task docs-build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
