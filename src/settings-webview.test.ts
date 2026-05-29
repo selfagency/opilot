@@ -6,6 +6,7 @@ vi.mock('vscode', () => ({
   }
 }));
 
+import type { WebviewView } from 'vscode';
 import type { ModelSettingsStore } from './model-settings.js';
 import {
   createModelSettingsViewProvider,
@@ -33,11 +34,15 @@ function makeProvider(overrides: Partial<ConstructorParameters<typeof ModelSetti
 function makeWebviewView() {
   const messageHandlers: Array<(msg: unknown) => void | Promise<void>> = [];
   const disposeHandlers: Array<() => void> = [];
-  return {
+  const view = {
+    viewType: 'opilot.settingsView',
+    visible: true,
+    onDidChangeVisibility: vi.fn(),
     webview: {
       options: {} as never,
       html: '',
       cspSource: 'vscode-resource:',
+      asWebviewUri: vi.fn((uri: unknown) => uri),
       postMessage: vi.fn().mockResolvedValue(true),
       onDidReceiveMessage: vi.fn((handler: (msg: unknown) => void) => {
         messageHandlers.push(handler);
@@ -60,6 +65,7 @@ function makeWebviewView() {
       }
     }
   };
+  return view as typeof view & WebviewView;
 }
 
 // Flush microtask queue so void-returned async functions complete

@@ -93,7 +93,7 @@ export async function handleConnectionTestFailure(
       logOutputChannel?.show();
       (window.showInformationMessage ?? vscode.window.showInformationMessage)(
         `This is a remote Ollama connection. Check the Ollama server logs on the remote machine at ${safeHost}. Extension connection details are shown in the Opilot output channel.`
-      ).catch(() => {
+      ).then(undefined, () => {
         /* fire-and-forget: don't surface secondary notification errors */
       });
       return;

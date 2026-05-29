@@ -256,8 +256,7 @@ export async function ensureModelfilesFolder(folderPath: string): Promise<void> 
 // ---------------------------------------------------------------------------
 
 function createThemeIcon(id: string): vscode.ThemeIcon {
-  const ThemeIconCtor = vscode.ThemeIcon as unknown as (iconId: string) => vscode.ThemeIcon;
-  return new ThemeIconCtor(id);
+  return new vscode.ThemeIcon(id);
 }
 
 export class ModelfileItem extends vscode.TreeItem {
