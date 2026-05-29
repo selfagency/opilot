@@ -75,12 +75,18 @@ jobs:
 
       - name: Check types
         run: xvfb-run -a ./node_modules/.bin/task check-types
+        env:
+          PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
 
       - name: Lint
         run: xvfb-run -a ./node_modules/.bin/task lint
+        env:
+          PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
 
       - name: Compile
         run: xvfb-run -a ./node_modules/.bin/task compile
+        env:
+          PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
 
       - name: Run unit tests
         run: xvfb-run -a ./node_modules/.bin/task unit-test-coverage -- --reporter=default --reporter=junit --outputFile=test-report.junit.xml
