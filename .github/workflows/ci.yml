@@ -84,7 +84,7 @@ jobs:
       - name: Lint
         run: task lint
         env:
-          PATH: ${{ github.workspace }}/node_modules/@biomejs/biome/bin:${{ env.PATH }}
+          PATH: ${{ github.workspace }}/node_modules/@biomejs/biome/bin:$PATH
 
       - name: Compile
         run: task compile
