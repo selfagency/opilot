@@ -1669,7 +1669,7 @@ describe('Extracted command handlers', () => {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
         onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {}
+      Disposable: class { dispose = vi.fn() }
     }));
 
     const { handleManageCloudApiKey } = await import('./sidebar.js');
@@ -2087,19 +2087,19 @@ describe('Extracted command handlers', () => {
     localProvider.dispose();
   });
 
+  async function* makePullStream() {
+    yield {
+      status: 'success',
+      digest: 'sha256:abc',
+      total: 100,
+      completed: 100
+    };
+  }
+
   it('handlePullModelFromLibrary pulls for library-model-variant', async () => {
     vi.resetModules();
 
     const progressReport = vi.fn();
-
-    async function* makePullStream() {
-      yield {
-        status: 'success',
-        digest: 'sha256:abc',
-        total: 100,
-        completed: 100
-      };
-    }
 
     const mockPull = vi.fn().mockReturnValue(makePullStream());
     const mockRefresh = vi.fn();
@@ -2164,15 +2164,6 @@ describe('Extracted command handlers', () => {
     vi.resetModules();
 
     const progressReport = vi.fn();
-
-    async function* makePullStream() {
-      yield {
-        status: 'success',
-        digest: 'sha256:abc',
-        total: 100,
-        completed: 100
-      };
-    }
 
     const mockPull = vi.fn().mockReturnValue(makePullStream());
     const mockRefresh = vi.fn();

@@ -3646,7 +3646,10 @@ describe('handleConnectionTestFailure Open Logs path', () => {
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
-      CancellationToken: class {}
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      }
     }));
 
     const showErrorMessage = vi.fn().mockResolvedValue('Open Logs');

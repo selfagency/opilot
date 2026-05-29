@@ -154,7 +154,7 @@ describe('ollamaToolsToOpenAICompat', () => {
   });
 
   it('returns undefined when tools are missing or empty', () => {
-    expect(ollamaToolsToOpenAICompat(undefined)).toBeUndefined();
+    expect(ollamaToolsToOpenAICompat()).toBeUndefined();
     expect(ollamaToolsToOpenAICompat([])).toBeUndefined();
   });
 

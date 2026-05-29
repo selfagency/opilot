@@ -12,8 +12,6 @@ const mockStatusBarItem = {
   dispose: vi.fn()
 };
 
-const onDidChangeConfigurationListeners: Array<(e: { affectsConfiguration: (s: string) => boolean }) => void> = [];
-
 vi.mock('vscode', () => ({
   window: {
     createStatusBarItem: vi.fn(() => mockStatusBarItem)
@@ -34,10 +32,7 @@ vi.mock('vscode', () => ({
         return;
       })
     })),
-    onDidChangeConfiguration: vi.fn((cb: (e: { affectsConfiguration: (s: string) => boolean }) => void) => {
-      onDidChangeConfigurationListeners.push(cb);
-      return { dispose: vi.fn() };
-    })
+    onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
   }
 }));
 
@@ -166,7 +161,6 @@ describe('registerStatusBarHeartbeat', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    onDidChangeConfigurationListeners.length = 0;
     mockStatusBarItem.text = '';
     mockStatusBarItem.tooltip = undefined;
     mockStatusBarItem.backgroundColor = undefined;
