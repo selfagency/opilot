@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Code Quality
+
+- refactor: comprehensive lint fixes, file renames, and test infrastructure overhaul (#107)
+- fix: add go-task/setup-task to docs-deploy workflow (#109)
+- fix: resolve type errors from Thenable.catch, construct signature, and WebviewView mock
+- fix: remove unnecessary type assertions (35 fixes)
+- fix: populate empty mock classes with minimum required properties
+- ci: remove xvfb-run from CLI-only check-types/lint/compile steps
+- ci: replace broken pnpm shell shims with direct node invocations in Taskfile
+- ci: fix PATH override — ${{ env.PATH }} is empty, use $PATH instead
+- ci: pin go-task/setup-task to commit hash v2.1.0
+
 ## [1.6.0] - 2026-04-15
 
 ## What's Changed
