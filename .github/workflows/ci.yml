@@ -74,17 +74,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check types
-        run: xvfb-run -a ./node_modules/.bin/task check-types
+        run: ./node_modules/.bin/task check-types
         env:
           PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
 
       - name: Lint
-        run: xvfb-run -a ./node_modules/.bin/task lint
+        run: ./node_modules/.bin/task lint
         env:
           PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
 
       - name: Compile
-        run: xvfb-run -a ./node_modules/.bin/task compile
+        run: ./node_modules/.bin/task compile
         env:
           PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
 
