@@ -70,26 +70,25 @@ jobs:
           node-version: "24"
           cache: "pnpm"
 
+      - name: Setup task runner
+        uses: go-task/setup-task@v2
+        with:
+          version: "3.x"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Check types
-        run: ./node_modules/.bin/task check-types
-        env:
-          PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
+        run: task check-types
 
       - name: Lint
-        run: ./node_modules/.bin/task lint
-        env:
-          PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
+        run: task lint
 
       - name: Compile
-        run: ./node_modules/.bin/task compile
-        env:
-          PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
+        run: task compile
 
       - name: Run unit tests
-        run: xvfb-run -a ./node_modules/.bin/task unit-test-coverage -- --reporter=default --reporter=junit --outputFile=test-report.junit.xml
+        run: xvfb-run -a task unit-test-coverage -- --reporter=default --reporter=junit --outputFile=test-report.junit.xml
         env:
           CI: true
 
@@ -102,7 +101,7 @@ jobs:
             ${{ runner.os }}-vscode-test-
 
       - name: Run extension tests
-        run: xvfb-run -a ./node_modules/.bin/task extension-tests
+        run: xvfb-run -a task extension-tests
         env:
           CI: true
 
@@ -124,7 +123,7 @@ jobs:
           else
             echo "⚠️ OLLAMA_API_KEY not configured; running integration tests in local-only mode."
           fi
-          xvfb-run -a ./node_modules/.bin/task integration-tests
+          xvfb-run -a task integration-tests
         env:
           CI: true
           OLLAMA_TEST_MODEL: smollm:135m
