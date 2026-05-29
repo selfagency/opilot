@@ -11,7 +11,6 @@ const makeVscodeMock = (host = 'http://localhost:11434') => ({
         if (key === 'host') {
           return host;
         }
-        return;
       })
     }))
   }

@@ -98,7 +98,7 @@ function parseQuotedValue(value: string, lines: string[], lineIndex: { i: number
   if (value.startsWith('"""')) {
     const afterOpen = value.slice(3);
     if (afterOpen.endsWith('"""') && afterOpen.length > 3) {
-      return afterOpen.slice(0, afterOpen.length - 3);
+      return afterOpen.slice(0, -3);
     }
     const parts = [afterOpen];
     lineIndex.i++;
@@ -107,7 +107,7 @@ function parseQuotedValue(value: string, lines: string[], lineIndex: { i: number
       if (nextLine.trim() === '"""' || nextLine.trimEnd().endsWith('"""')) {
         const closing = nextLine.trimEnd();
         if (closing !== '"""') {
-          parts.push(closing.slice(0, closing.length - 3));
+          parts.push(closing.slice(0, -3));
         }
         break;
       }
@@ -117,7 +117,7 @@ function parseQuotedValue(value: string, lines: string[], lineIndex: { i: number
     return parts.join('\n');
   }
   if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-    return value.slice(1, value.length - 1);
+    return value.slice(1, -1);
   }
   return value;
 }
@@ -137,7 +137,7 @@ function parseMessage(value: string, messages: Message[]): void {
   if (msgMatch) {
     let msgContent = msgMatch[2];
     if (msgContent.startsWith('"') && msgContent.endsWith('"')) {
-      msgContent = msgContent.slice(1, msgContent.length - 1);
+      msgContent = msgContent.slice(1, -1);
     }
     messages.push({
       role: msgMatch[1] as 'system' | 'user' | 'assistant',
@@ -187,9 +187,8 @@ export function parseModelfile(content: string): ParsedModelfile {
         licenses.push(value);
         break;
       case 'ADAPTER':
-        if (!result.adapters) {
-          result.adapters = {};
-        }
+        result.adapters ??= {};
+
         result.adapters[value] = value;
         break;
       case 'PARAMETER':

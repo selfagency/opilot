@@ -140,7 +140,7 @@ function assertNoMidStreamError(parsed: unknown): void {
   }
 
   if (typeof candidate.error === 'string') {
-    throw new Error(`OpenAI-compat stream payload error: ${candidate.error}`);
+    throw new TypeError(`OpenAI-compat stream payload error: ${candidate.error}`);
   }
 
   const parts = [candidate.error.message, candidate.error.type, candidate.error.code]
@@ -251,7 +251,7 @@ export async function* chatCompletionsStream(
     assertNoMidStreamError(parsed);
 
     if (parsed && typeof parsed === 'object') {
-      yield parsed as OpenAICompatChatCompletionChunk;
+      yield parsed;
     }
   }
 }
@@ -297,7 +297,7 @@ export async function initiateChatCompletionsStream(
       assertNoMidStreamError(parsed);
 
       if (parsed && typeof parsed === 'object') {
-        yield parsed as OpenAICompatChatCompletionChunk;
+        yield parsed;
       }
     }
   })();

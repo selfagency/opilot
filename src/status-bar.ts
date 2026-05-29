@@ -79,9 +79,9 @@ export async function checkOllamaHealth(client: Ollama, host: string): Promise<H
       error !== null &&
       typeof error === 'object' &&
       'status_code' in error &&
-      typeof (error as { status_code: unknown }).status_code === 'number' &&
-      (error as { status_code: number }).status_code >= 400 &&
-      (error as { status_code: number }).status_code < 500;
+      typeof error.status_code === 'number' &&
+      error.status_code >= 400 &&
+      error.status_code < 500;
 
     if (isHttpError) {
       try {

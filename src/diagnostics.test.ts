@@ -55,7 +55,6 @@ describe('diagnostics', () => {
               if (key === 'diagnostics.logLevel') {
                 return 'info';
               }
-              return;
             })
           }))
         }

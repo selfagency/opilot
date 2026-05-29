@@ -366,7 +366,7 @@ describe('LocalModelsProvider', () => {
         })),
         onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {}
+      Disposable: class { dispose() {} }
     }));
 
     vi.stubGlobal(

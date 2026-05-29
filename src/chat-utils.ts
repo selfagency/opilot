@@ -90,6 +90,28 @@ export function buildSdkOptions(overrides: ModelOptionOverrides): Partial<Option
   return Object.keys(opts).length > 0 ? (opts as Partial<Options>) : undefined;
 }
 
+function buildOpenAiCompatRequest(params: {
+  modelId: string;
+  messages: Message[];
+  tools?: Tool[];
+  shouldThink: boolean;
+  modelOptions?: ModelOptionOverrides;
+}) {
+  const { temperature, top_p, num_predict, top_k, num_ctx, think_budget } = params.modelOptions ?? {};
+  return {
+    model: params.modelId,
+    messages: ollamaMessagesToOpenAICompat(params.messages),
+    tools: ollamaToolsToOpenAICompat(params.tools),
+    ...(params.shouldThink ? { think: true } : {}),
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(top_p === undefined ? {} : { top_p }),
+    ...(num_predict === undefined ? {} : { max_tokens: num_predict }),
+    ...(top_k === undefined ? {} : { top_k }),
+    ...(num_ctx === undefined ? {} : { num_ctx }),
+    ...(think_budget === undefined ? {} : { think_budget })
+  };
+}
+
 export async function openAiCompatStreamChat(params: {
   modelId: string;
   messages: Message[];
@@ -102,24 +124,12 @@ export async function openAiCompatStreamChat(params: {
   modelOptions?: ModelOptionOverrides;
   onOpenAiCompatFallback?: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
 }): Promise<AsyncIterable<ChatResponse>> {
-  const { temperature, top_p, num_predict, top_k, num_ctx, think_budget } = params.modelOptions ?? {};
   try {
     const stream = await initiateChatCompletionsStream({
       baseUrl: params.baseUrl,
       authToken: params.authToken,
       signal: params.signal,
-      request: {
-        model: params.modelId,
-        messages: ollamaMessagesToOpenAICompat(params.messages),
-        tools: ollamaToolsToOpenAICompat(params.tools),
-        ...(params.shouldThink ? { think: true } : {}),
-        ...(temperature === undefined ? {} : { temperature }),
-        ...(top_p === undefined ? {} : { top_p }),
-        ...(num_predict === undefined ? {} : { max_tokens: num_predict }),
-        ...(top_k === undefined ? {} : { top_k }),
-        ...(num_ctx === undefined ? {} : { num_ctx }),
-        ...(think_budget === undefined ? {} : { think_budget })
-      }
+      request: buildOpenAiCompatRequest(params)
     });
 
     return (async function* (): AsyncGenerator<ChatResponse> {
@@ -155,7 +165,6 @@ export async function openAiCompatStreamChat(params: {
   }
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: chat routing handles many model/provider combinations
 export async function openAiCompatChatOnce(params: {
   modelId: string;
   messages: Message[];
@@ -168,24 +177,12 @@ export async function openAiCompatChatOnce(params: {
   modelOptions?: ModelOptionOverrides;
   onOpenAiCompatFallback?: (mode: 'stream' | 'once', modelId: string, error: unknown) => void;
 }): Promise<ChatResponse> {
-  const { temperature, top_p, num_predict, top_k, num_ctx, think_budget } = params.modelOptions ?? {};
   try {
     const response = await chatCompletionsOnce({
       baseUrl: params.baseUrl,
       authToken: params.authToken,
       signal: params.signal,
-      request: {
-        model: params.modelId,
-        messages: ollamaMessagesToOpenAICompat(params.messages),
-        tools: ollamaToolsToOpenAICompat(params.tools),
-        ...(params.shouldThink ? { think: true } : {}),
-        ...(temperature === undefined ? {} : { temperature }),
-        ...(top_p === undefined ? {} : { top_p }),
-        ...(num_predict === undefined ? {} : { max_tokens: num_predict }),
-        ...(top_k === undefined ? {} : { top_k }),
-        ...(num_ctx === undefined ? {} : { num_ctx }),
-        ...(think_budget === undefined ? {} : { think_budget })
-      }
+      request: buildOpenAiCompatRequest(params)
     });
 
     const choice = response.choices?.[0];

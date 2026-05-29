@@ -112,7 +112,7 @@ export function addCustomFixture(
     status?: number;
   }
 ): void {
-  mock.addFixture(fixture as never);
+  mock.addFixture(fixture as Fixture);
 }
 
 /**

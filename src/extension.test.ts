@@ -104,7 +104,9 @@ describe('activate', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }

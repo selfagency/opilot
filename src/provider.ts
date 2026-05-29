@@ -1167,12 +1167,12 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       ollamaMessages.unshift({
         role: 'system',
         content: `${BASE_SYSTEM_PROMPT}\n\n${dedupedContextParts.join('\n\n')}`
-      } as never);
+      });
     } else {
       ollamaMessages.unshift({
-        role: 'system',
+        role: 'system' as const,
         content: BASE_SYSTEM_PROMPT
-      } as never);
+      });
     }
 
     if (strippedImageCount > 0) {
@@ -1275,7 +1275,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     return {
       messageCount: messages.length,
       messages: summarizedMessages,
-      optionKeys: Object.keys((options as unknown as Record<string, unknown>) ?? {}),
+      optionKeys: Object.keys(options as unknown as Record<string, unknown>),
       modelOptionKeys:
         options.modelOptions && typeof options.modelOptions === 'object'
           ? Object.keys(options.modelOptions as Record<string, unknown>)

@@ -66,7 +66,8 @@ describe('truncateMessages', () => {
     const result = truncateMessages([system, old1, old2, current], maxTokens);
     expect(result.at(-1)).toEqual(current);
     // Old history should be dropped
-    expect(result.some(m => m === old1 || m === old2)).toBe(false);
+    expect(result.includes(old1)).toBe(false);
+    expect(result.includes(old2)).toBe(false);
   });
 
   it('truncates system content when it exceeds 40% of budget', () => {
@@ -106,8 +107,8 @@ describe('truncateMessages', () => {
     // recent = ceil(20/4)+4 = 5+4 = 9 tokens — fits
     // old = ceil(5000/4)+4 = 1250+4 = 1254 tokens — does NOT fit
     const result = truncateMessages([system, old, recent, current], 200);
-    expect(result.some(m => m === recent)).toBe(true);
-    expect(result.some(m => m === old)).toBe(false);
+    expect(result.includes(recent)).toBe(true);
+    expect(result.includes(old)).toBe(false);
     expect(result.at(-1)).toEqual(current);
   });
 });
