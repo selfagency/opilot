@@ -6,25 +6,25 @@ tasks:
   check-types:
     desc: Check types
     cmds:
-      - ./node_modules/.bin/tsc --noEmit
+      - node node_modules/typescript/bin/tsc --noEmit
     silent: false
 
   check:
     desc: Run linter check
     cmds:
-      - ./node_modules/.bin/ultracite check
+      - node node_modules/ultracite/dist/index.js check
     silent: false
 
   lint:
     desc: Run linter
     cmds:
-      - ./node_modules/.bin/ultracite check
+      - node node_modules/ultracite/dist/index.js check
     silent: false
 
   lint-fix:
     desc: Run linter with auto-fix
     cmds:
-      - ./node_modules/.bin/ultracite fix
+      - node node_modules/ultracite/dist/index.js fix
     silent: false
 
   check-all:
@@ -39,19 +39,19 @@ tasks:
     env:
       NODE_ENV: production
     cmds:
-      - ./node_modules/.bin/tsup
+      - node node_modules/tsup/dist/cli-default.js
     silent: false
 
   unit-tests:
     desc: Run unit tests
     cmds:
-      - ./node_modules/.bin/vitest run src {{.CLI_ARGS}}
+      - node node_modules/vitest/vitest.mjs run src {{.CLI_ARGS}}
     silent: false
 
   unit-test-coverage:
     desc: Run unit tests with coverage
     cmds:
-      - ./node_modules/.bin/vitest run src --coverage {{.CLI_ARGS}}
+      - node node_modules/vitest/vitest.mjs run src --coverage {{.CLI_ARGS}}
     silent: false
 
   extension-tests:
@@ -72,7 +72,7 @@ tasks:
     desc: Run integration tests
     deps: [pull-models]
     cmds:
-      - ./node_modules/.bin/vitest run -c vitest.integration.config.js test/integration {{.CLI_ARGS}}
+      - node node_modules/vitest/vitest.mjs run -c vitest.integration.config.js test/integration {{.CLI_ARGS}}
     silent: false
 
   precommit:
@@ -86,14 +86,14 @@ tasks:
     desc: Create a pre-release
     deps: [compile]
     cmds:
-      - ./node_modules/.bin/zx ./scripts/release.mjs -- --pre-release -- {{.CLI_ARGS}}
+      - node node_modules/zx/build/cli.js ./scripts/release.mjs -- --pre-release -- {{.CLI_ARGS}}
     silent: false
 
   release:
     desc: Release the extension
     deps: [compile]
     cmds:
-      - ./node_modules/.bin/zx ./scripts/release.mjs {{.CLI_ARGS}}
+      - node node_modules/zx/build/cli.js ./scripts/release.mjs {{.CLI_ARGS}}
     silent: false
 
   test-all:
@@ -114,5 +114,5 @@ tasks:
   watch:
     desc: Watch for changes and recompile
     cmds:
-      - ./node_modules/.bin/tsup --watch
+      - node node_modules/tsup/dist/cli-default.js --watch
     silent: false
