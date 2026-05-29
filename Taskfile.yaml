@@ -27,24 +27,6 @@ tasks:
       - ./node_modules/.bin/ultracite fix
     silent: false
 
-  docs-build:
-    desc: Build documentation
-    cmds:
-      - ./node_modules/.bin/vitepress build
-    silent: false
-
-  docs-dev:
-    desc: Start documentation dev server
-    cmds:
-      - ./node_modules/.bin/vitepress dev
-    silent: false
-
-  docs-preview:
-    desc: Preview built documentation
-    cmds:
-      - ./node_modules/.bin/vitepress preview
-    silent: false
-
   check-all:
     desc: Run all checks
     cmds:
