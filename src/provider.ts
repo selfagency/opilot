@@ -749,13 +749,13 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             progress.report(new LanguageModelTextPart('\n\n> 💭 **Thinking**\n>\n'));
             thinkingStarted = true;
             thinkingLineStart = true;
-            emittedOutput = true;
+            emittedOutput ||= true;
           }
           if (!hideThinkingContent) {
             const formatted = appendToBlockquote(chunk.message.thinking, thinkingLineStart);
             thinkingLineStart = false;
             progress.report(new LanguageModelTextPart(formatted));
-            emittedOutput = true;
+            emittedOutput ||= true;
           }
         }
 
@@ -772,13 +772,13 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
                 progress.report(new LanguageModelTextPart('\n\n> 💭 **Thinking**\n>\n'));
                 thinkingStarted = true;
                 thinkingLineStart = true;
-                emittedOutput = true;
+                emittedOutput ||= true;
               }
               if (!hideThinkingContent) {
                 const formatted = appendToBlockquote(output.thinking, thinkingLineStart);
                 thinkingLineStart = false;
                 progress.report(new LanguageModelTextPart(formatted));
-                emittedOutput = true;
+                emittedOutput ||= true;
               }
             }
 
@@ -787,11 +787,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
               if (thinkingStarted && !contentStarted) {
                 progress.report(new LanguageModelTextPart('\n\n'));
                 contentStarted = true;
-                emittedOutput = true;
+                emittedOutput ||= true;
               }
               this.outputChannel.debug(`[client] streaming chunk: ${output.content.slice(0, 50)}`);
               progress.report(new LanguageModelTextPart(output.content));
-              emittedOutput = true;
+              emittedOutput ||= true;
               responseBuffer = (responseBuffer + output.content).slice(-600);
               if (detectsRepetition(responseBuffer, repSensitivity)) {
                 this.outputChannel.warn(`[client] repetition detected for ${runtimeModelId}; stopping stream`);
@@ -807,7 +807,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
                 const upstreamId = call.id || vsCodeId;
                 this.mapToolCallId(vsCodeId, upstreamId);
                 progress.report(new LanguageModelToolCallPart(vsCodeId, call.name, call.parameters));
-                emittedOutput = true;
+                emittedOutput ||= true;
               }
             }
 
@@ -828,7 +828,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       const final: ProcessedOutput = processor.flush();
       if (final.content) {
         progress.report(new LanguageModelTextPart(final.content));
-        emittedOutput = true;
+        emittedOutput ||= true;
       }
 
       // Some model/server combinations can return a successful stream that emits
