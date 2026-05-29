@@ -1,4 +1,5 @@
-const path = require('path');
+'use strict';
+const path = require('node:path');
 const base = __dirname;
 const bins = {
   ultracite: require(path.join(base, 'node_modules/ultracite/package.json')).bin,
@@ -10,9 +11,9 @@ const bins = {
 for (const [pkg, bin] of Object.entries(bins)) {
   if (typeof bin === 'object') {
     for (const [name, rel] of Object.entries(bin)) {
-      console.log(pkg + '/' + name + ' -> ' + rel);
+      console.log(`${pkg}/${name} -> ${rel}`);
     }
   } else {
-    console.log(pkg + ' -> ' + bin);
+    console.log(`${pkg} -> ${bin}`);
   }
 }
