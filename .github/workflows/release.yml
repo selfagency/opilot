@@ -67,17 +67,22 @@ jobs:
               // Bump package.json version and commit to main
               const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
               const prevVersion = pkg.version;
-              pkg.version = semver;
-              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-              core.info(`Bumped package.json: ${prevVersion} → ${semver}`);
 
-              // Set git identity and commit
-              const { execSync } = require('child_process');
-              execSync('git config user.name "github-actions[bot]"', { cwd: process.env.GITHUB_WORKSPACE });
-              execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', { cwd: process.env.GITHUB_WORKSPACE });
-              execSync(`git add package.json && git commit -m "chore(release): bump version to ${semver}"`, { cwd: process.env.GITHUB_WORKSPACE });
-              execSync('git push', { cwd: process.env.GITHUB_WORKSPACE });
-              core.info(`Bump commit pushed to main.`);
+              if (prevVersion !== semver) {
+                pkg.version = semver;
+                fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+                core.info(`Bumped package.json: ${prevVersion} → ${semver}`);
+
+                // Set git identity and commit
+                const { execSync } = require('child_process');
+                execSync('git config user.name "github-actions[bot]"', { cwd: process.env.GITHUB_WORKSPACE });
+                execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', { cwd: process.env.GITHUB_WORKSPACE });
+                execSync(`git add package.json && git commit -m "chore(release): bump version to ${semver}"`, { cwd: process.env.GITHUB_WORKSPACE });
+                execSync('git push', { cwd: process.env.GITHUB_WORKSPACE });
+                core.info(`Bump commit pushed to main.`);
+              } else {
+                core.info(`package.json version already ${semver}; no bump needed.`);
+              }
 
               // Resolve HEAD of main (now includes the bump commit)
               const main = await github.rest.repos.getBranch({ owner, repo, branch: 'main' });
