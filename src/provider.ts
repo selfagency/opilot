@@ -732,7 +732,8 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         accumulateNativeToolCalls: true,
         modelId: runtimeModelId,
         onWarning: (msg, ctx) => {
-          this.outputChannel.warn(`[client] processor: ${msg}${ctx ? ` ${JSON.stringify(ctx)}` : ''}`);
+          const ctxSuffix = ctx ? ` ${JSON.stringify(ctx)}` : '';
+          this.outputChannel.warn(`[client] processor: ${msg}${ctxSuffix}`);
         }
       });
 

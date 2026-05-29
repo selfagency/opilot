@@ -738,7 +738,8 @@ export async function handleChatRequest(
           : 'conservative';
       const xmlFilter = createXmlStreamFilter({
         onWarning: (msg, ctx) => {
-          outputChannel?.warn(`[client] xmlFilter: ${msg}${ctx ? ` ${JSON.stringify(ctx)}` : ''}`);
+          const ctxSuffix = ctx ? ` ${JSON.stringify(ctx)}` : '';
+          outputChannel?.warn(`[client] xmlFilter: ${msg}${ctxSuffix}`);
         }
       });
       // Parse <think> tags on both cloud and local paths.
@@ -1315,9 +1316,10 @@ export async function activate(context: vscode.ExtensionContext) {
         // current when the user adds/removes models via the sidebar or edits
         // settings that affect model availability.
         if (affectsSetting(event, 'completionModel') || affectsSetting(event, 'enableInlineCompletions')) {
-          diagnostics.info(
-            `[client] model setting changed: ${event.affectsConfiguration(`${SETTINGS_NAMESPACE}.completionModel`) ? 'completionModel' : 'enableInlineCompletions'}`
-          );
+          const changedSetting = event.affectsConfiguration(`${SETTINGS_NAMESPACE}.completionModel`)
+            ? 'completionModel'
+            : 'enableInlineCompletions';
+          diagnostics.info(`[client] model setting changed: ${changedSetting}`);
         }
       })
     );

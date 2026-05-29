@@ -204,9 +204,7 @@ export class ModelTreeItem extends TreeItem {
 function createThemeIcon(id: string): ThemeIcon {
   // The bundled `vscode` typings in this repo mark the constructor private,
   // but VS Code runtime supports codicon IDs for TreeItem ThemeIcon values.
-  const ThemeIconCtor = ThemeIcon as unknown as {
-    new (iconId: string): ThemeIcon;
-  };
+  const ThemeIconCtor = ThemeIcon as unknown as new (iconId: string) => ThemeIcon;
   return new ThemeIconCtor(id);
 }
 
