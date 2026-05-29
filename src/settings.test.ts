@@ -73,9 +73,7 @@ function createVscodeSettingsMock(options?: {
           if (!folderKey) {
             return;
           }
-          if (!scoped.workspaceFolderValues) {
-            scoped.workspaceFolderValues = {};
-          }
+          scoped.workspaceFolderValues ??= {};
           scoped.workspaceFolderValues[folderKey] = value;
         }
       })

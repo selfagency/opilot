@@ -24,7 +24,11 @@ export function reportError(
 
   if (showToUser) {
     try {
-      void vscode.window.showErrorMessage(`${message}: ${error instanceof Error ? error.message : String(error)}`);
+      vscode.window
+        .showErrorMessage(`${message}: ${error instanceof Error ? error.message : String(error)}`)
+        .catch(() => {
+          /* fire-and-forget: suppress unhandled promise rejection */
+        });
     } catch {
       // ignore UI errors
     }

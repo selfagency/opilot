@@ -71,8 +71,8 @@ export async function handleConnectionTestFailure(
   commandsApi?: Pick<typeof vscode.commands, 'executeCommand'>,
   logOutputChannel?: { show: () => void }
 ): Promise<void> {
-  const window = windowApi || vscode.window;
-  const commands = commandsApi || vscode.commands;
+  const window = windowApi ?? vscode.window;
+  const commands = commandsApi ?? vscode.commands;
   const safeHost = redactDisplayHost(host);
 
   const selection = await window.showErrorMessage(
@@ -91,9 +91,11 @@ export async function handleConnectionTestFailure(
       // Show the extension output channel (which has the connection error) and
       // tell the user where to find the remote server logs.
       logOutputChannel?.show();
-      void (window.showInformationMessage ?? vscode.window.showInformationMessage)(
+      (window.showInformationMessage ?? vscode.window.showInformationMessage)(
         `This is a remote Ollama connection. Check the Ollama server logs on the remote machine at ${safeHost}. Extension connection details are shown in the Opilot output channel.`
-      );
+      ).catch(() => {
+        /* fire-and-forget: don't surface secondary notification errors */
+      });
       return;
     }
 

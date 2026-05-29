@@ -208,9 +208,8 @@ export function registerStatusBarHeartbeat(
       return;
     }
 
-    diagnostics.debug(
-      `[statusBar] health check: ${result.online ? `online, ${result.runningCount} running` : 'offline'}`
-    );
+    const healthSummary = result.online ? `online, ${result.runningCount} running` : 'offline';
+    diagnostics.debug(`[statusBar] health check: ${healthSummary}`);
 
     if (result.online) {
       consecutiveFailures = 0;

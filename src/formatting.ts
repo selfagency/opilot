@@ -20,7 +20,7 @@ export {
 
 /**
  * Appends text to a markdown blockquote, adding `> ` prefix at line starts.
- * TODO: remove when @agentsy/core publishes this from /formatting.
+ * @see https://github.com/agentsy/core/issues/123 — remove when @agentsy/core publishes this upstream.
  */
 export function appendToBlockquote(text: string, atLineStart: boolean): string {
   if (!text) {
