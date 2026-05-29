@@ -144,8 +144,8 @@ async function migrateSettingKey(key: SupportedSettingKey, context: MigrationCon
 
 async function migrateWorkspaceFolderSetting(
   key: SupportedSettingKey,
-  opilotConfig: vscode.WorkspaceConfiguration,
-  legacyConfig: vscode.WorkspaceConfiguration
+  _opilotConfig: vscode.WorkspaceConfiguration,
+  _legacyConfig: vscode.WorkspaceConfiguration
 ): Promise<boolean> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   let migratedAnyFolder = false;
@@ -171,8 +171,6 @@ async function migrateWorkspaceFolderSetting(
     }
   }
 
-  void opilotConfig;
-  void legacyConfig;
   return migratedAnyFolder;
 }
 

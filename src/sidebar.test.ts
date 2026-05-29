@@ -520,7 +520,7 @@ describe('LocalModelsProvider', () => {
         })),
         onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {}
+      Disposable: class { dispose = vi.fn() }
     }));
 
     vi.stubGlobal(
@@ -1622,7 +1622,7 @@ describe('Extracted command handlers', () => {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
         onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {}
+      Disposable: class { dispose = vi.fn() }
     }));
 
     const { handleLoginToCloud } = await import('./sidebar.js');
@@ -1714,7 +1714,7 @@ describe('Extracted command handlers', () => {
         getConfiguration: vi.fn(() => ({ get: vi.fn() })),
         onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
       },
-      Disposable: class {}
+      Disposable: class { dispose = vi.fn() }
     }));
 
     const { handleOpenCloudModel, ModelTreeItem } = await import('./sidebar.js');

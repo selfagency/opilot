@@ -864,7 +864,7 @@ export async function handleChatRequest(
       const isCrashError = error instanceof Error && error.message.includes('model runner has unexpectedly stopped');
       if (isCrashError) {
         // Best-effort unload to keep behaviour consistent with the provider path.
-        void effectiveClient
+        effectiveClient
           .generate({
             model: modelId,
             prompt: '',

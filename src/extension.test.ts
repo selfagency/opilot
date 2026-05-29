@@ -242,7 +242,10 @@ describe('activate', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -378,7 +381,10 @@ describe('activate', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -532,7 +538,10 @@ describe('activate', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -673,7 +682,10 @@ describe('activate', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -819,7 +831,10 @@ describe('activate', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -949,7 +964,10 @@ describe('activate', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -1088,7 +1106,10 @@ describe('activate', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -1241,7 +1262,10 @@ describe('activate', () => {
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
-      CancellationToken: class {}
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      }
     }));
 
     vi.doMock('./client.js', () => ({
@@ -1326,8 +1350,13 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -1404,8 +1433,13 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -1488,8 +1522,13 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -1567,8 +1606,13 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -1663,8 +1707,13 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -1749,8 +1798,13 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -1947,8 +2001,13 @@ describe('handleChatRequest model selection', () => {
       LanguageModelTextPart: class {
         constructor(public value: string) {}
       },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ content }),
@@ -1987,8 +2046,13 @@ describe('handleChatRequest model selection', () => {
 
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: LMTextPart,
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ content }),
@@ -2030,8 +2094,13 @@ describe('handleChatRequest model selection', () => {
 
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: LMTextPart,
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ content }),
@@ -2083,8 +2152,13 @@ describe('handleChatRequest model selection', () => {
 
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: LMTextPart,
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ content }),
@@ -2138,8 +2212,13 @@ describe('handleChatRequest model selection', () => {
 
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: LMTextPart,
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ content }),
@@ -2217,8 +2296,13 @@ describe('handleChatRequest model selection', () => {
       LanguageModelTextPart: LMTextPart,
       LanguageModelToolCallPart: LMToolCallPart,
       LanguageModelToolResultPart: LMToolResultPart,
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: unknown) => ({ role: 'user', content }),
@@ -2308,8 +2392,13 @@ describe('handleChatRequest model selection', () => {
       LanguageModelTextPart: LMTextPart,
       LanguageModelToolCallPart: LMToolCallPart,
       LanguageModelToolResultPart: LMToolResultPart,
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: unknown) => ({ role: 'user', content }),
@@ -2413,8 +2502,13 @@ describe('handleChatRequest model selection', () => {
       LanguageModelTextPart: LMTextPart,
       LanguageModelToolCallPart: LMToolCallPart,
       LanguageModelToolResultPart: LMToolResultPart,
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: unknown) => ({ role: 'user', content }),
@@ -2538,8 +2632,13 @@ describe('handleChatRequest model selection', () => {
       LanguageModelTextPart: LMTextPart,
       LanguageModelToolCallPart: LMToolCallPart,
       LanguageModelToolResultPart: LMToolResultPart,
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: unknown) => ({ role: 'user', content }),
@@ -2642,8 +2741,13 @@ describe('handleChatRequest native Ollama task_complete', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -2755,8 +2859,13 @@ describe('handleChatRequest native Ollama task_complete', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -2900,8 +3009,13 @@ describe('handleBuiltInOllamaConflict', () => {
       LanguageModelTextPart: class {
         constructor(public value: string) {}
       },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {}
     }));
   });
@@ -3314,7 +3428,10 @@ describe('activate noopLogger', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -3479,7 +3596,10 @@ describe('startLogStreaming inner callbacks', () => {
         Assistant: vi.fn()
       },
       LanguageModelTextPart: class {},
-      CancellationToken: class {},
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      },
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       }
@@ -3740,7 +3860,10 @@ describe('handleConnectionTestFailure Open Logs path', () => {
       InlineCompletionItem: class {
         constructor(public readonly insertText: string) {}
       },
-      CancellationToken: class {}
+      CancellationToken: class {
+        isCancellationRequested = false;
+        onCancellationRequested = vi.fn();
+      }
     }));
 
     const showErrorMessage = vi.fn().mockResolvedValue('Open Logs');
@@ -3786,8 +3909,13 @@ describe('handleChatRequest cloud model path (openAiCompatStreamChat)', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -3968,8 +4096,13 @@ describe('handleChatRequest cloud model path (openAiCompatStreamChat)', () => {
         constructor(public value: string) {}
       },
       LanguageModelChatMessageRole: { User: 1, Assistant: 2 },
-      ChatRequestTurn: class {},
-      ChatResponseTurn: class {},
+      ChatRequestTurn: class {
+        prompt = '';
+        reply = '';
+      },
+      ChatResponseTurn: class {
+        response: unknown[] = [];
+      },
       ChatResponseMarkdownPart: class {},
       LanguageModelChatMessage: {
         User: (content: string) => ({ role: 1, content }),
@@ -4022,14 +4155,7 @@ describe('handleChatRequest cloud model path (openAiCompatStreamChat)', () => {
       toolInvocationToken: 'tok-cloud-1'
     };
 
-    await ext.handleChatRequest(
-      request as any,
-      { history: [] } as any,
-      stream as any,
-      token as any,
-      mockClient as any,
-      undefined
-    );
+    await ext.handleChatRequest(request as any, { history: [] } as any, stream as any, token as any, mockClient as any);
 
     expect(chatCompletionsOnce).toHaveBeenCalled();
     const allCalls = mockMarkdown.mock.calls.map((c: any[]) => c[0] as string);
