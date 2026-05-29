@@ -71,7 +71,7 @@ jobs:
           cache: "pnpm"
 
       - name: Setup task runner
-        uses: go-task/setup-task@v2
+        uses: go-task/setup-task@01a4adf9db2d14c1de7a560f09170b6e0df736aa # v2.1.0
         with:
           version: "3.x"
 
@@ -83,6 +83,8 @@ jobs:
 
       - name: Lint
         run: task lint
+        env:
+          PATH: ${{ github.workspace }}/node_modules/@biomejs/biome/bin:${{ env.PATH }}
 
       - name: Compile
         run: task compile
