@@ -3,16 +3,16 @@ name: Tests
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
     paths:
-      - 'src/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
   pull_request:
     paths:
-      - 'src/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 permissions:
@@ -67,8 +67,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
