@@ -63,11 +63,8 @@ export function useOllamaMock(options?: { port?: number; fixtures?: string[] }) 
   };
 }
 
-export function addCustomFixture(
-  mock: LLMock,
-  fixture: { match?: Record<string, unknown>; response?: Record<string, unknown>; status?: number }
-): void {
-  mock.addFixture(fixture as Fixture);
+export function addCustomFixture(mock: LLMock, fixture: Fixture): void {
+  mock.addFixture(fixture);
 }
 
 export function createChatFixture(
