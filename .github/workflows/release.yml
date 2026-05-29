@@ -68,20 +68,34 @@ jobs:
               const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
               const prevVersion = pkg.version;
 
+              // Set git identity
+              const { execSync } = require('child_process');
+              execSync('git config user.name "github-actions[bot]"', { cwd: process.env.GITHUB_WORKSPACE });
+              execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', { cwd: process.env.GITHUB_WORKSPACE });
+
+              const today = new Date().toISOString().split('T')[0];
+              const filesToStage = [];
+
               if (prevVersion !== semver) {
                 pkg.version = semver;
                 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+                filesToStage.push('package.json');
                 core.info(`Bumped package.json: ${prevVersion} → ${semver}`);
-
-                // Set git identity and commit
-                const { execSync } = require('child_process');
-                execSync('git config user.name "github-actions[bot]"', { cwd: process.env.GITHUB_WORKSPACE });
-                execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', { cwd: process.env.GITHUB_WORKSPACE });
-                execSync(`git add package.json && git commit -m "chore(release): bump version to ${semver}"`, { cwd: process.env.GITHUB_WORKSPACE });
-                execSync('git push', { cwd: process.env.GITHUB_WORKSPACE });
-                core.info(`Bump commit pushed to main.`);
               } else {
-                core.info(`package.json version already ${semver}; no bump needed.`);
+                core.info(`package.json version already ${semver}.`);
+              }
+
+              // Update CHANGELOG.md: replace [Unreleased] with versioned heading
+              let changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+              changelog = changelog.replace('## [Unreleased]', `## [Unreleased]\n\n## [${semver}] - ${today}`);
+              fs.writeFileSync('CHANGELOG.md', changelog);
+              filesToStage.push('CHANGELOG.md');
+              core.info(`Updated CHANGELOG.md with ${semver} heading.`);
+
+              if (filesToStage.length > 0) {
+                execSync(`git add ${filesToStage.join(' ')} && git commit -m "chore(release): bump to ${semver}"`, { cwd: process.env.GITHUB_WORKSPACE });
+                execSync('git push', { cwd: process.env.GITHUB_WORKSPACE });
+                core.info(`Release prep commit pushed to main.`);
               }
 
               // Resolve HEAD of main (now includes the bump commit)
@@ -99,13 +113,22 @@ jobs:
 
               // Create the tag via API
               core.info(`Creating tag ${tagName} at ${mainSha}...`);
-              await github.rest.git.createRef({
-                owner,
-                repo,
-                ref: `refs/tags/${tagName}`,
-                sha: mainSha,
-              });
-              core.info(`Tag ${tagName} created.`);
+              try {
+                await github.rest.git.createRef({
+                  owner,
+                  repo,
+                  ref: `refs/tags/${tagName}`,
+                  sha: mainSha,
+                });
+                core.info(`Tag ${tagName} created.`);
+              } catch (createErr) {
+                if (createErr.status === 422) {
+                  core.setFailed(`Release blocked: unable to create tag ${tagName} — likely already exists. Delete the tag first or bump version.`);
+                } else {
+                  throw createErr;
+                }
+                return;
+              }
             } else {
               tagName = context.ref.replace('refs/tags/', '');
             }
@@ -440,32 +463,46 @@ jobs:
               auto_inactive: false,
             });
 
-      - name: Rollback on failure — delete tag and release
+      - name: Rollback on failure — revert bump commit, delete tag and release
         if: failure() && github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@v8
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const tag = '${{ needs.detect-tag.outputs.release_tag }}';
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.detect-tag.outputs.release_tag }}
+        run: |
+          set -e
+          # Revert the bump commit on main (package.json + CHANGELOG.md)
+          git fetch origin main
+          git checkout main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git revert HEAD --no-edit; then
+            git push origin main
+            echo "Bump commit reverted on main."
+          else
+            echo "No bump commit to revert (or revert failed)."
+            git revert --abort 2>/dev/null || true
+          fi
 
-            // Delete the git tag
-            try {
-              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
-              core.info(`Deleted tag ${tag}.`);
-            } catch (e) {
-              core.warning(`Failed to delete tag ${tag}: ${e.message}`);
-            }
+          # Delete the git tag via API
+          owner="${{ github.repository_owner }}"
+          repo="opilot"
+          tag="$TAG"
+          curl -s -X DELETE \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${owner}/${repo}/git/refs/tags/${tag}" \
+            && echo "Deleted tag ${tag}." || echo "Failed to delete tag ${tag}."
 
-            // Delete the GitHub Release if it was created
-            try {
-              const releases = await github.rest.repos.listReleases({ owner, repo, per_page: 30 });
-              const release = releases.data.find(r => r.tag_name === tag);
-              if (release) {
-                await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
-                core.info(`Deleted release ${tag}.`);
-              }
-            } catch (e) {
-              core.warning(`Failed to delete release: ${e.message}`);
-            }
+          # Delete the GitHub Release if it was created
+          release_id=$(curl -s \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}" \
+            | jq -r '.id // empty')
+          if [ -n "$release_id" ] && [ "$release_id" != "null" ]; then
+            curl -s -X DELETE \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${owner}/${repo}/releases/${release_id}" \
+              && echo "Deleted release ${tag}." || echo "Failed to delete release."
+          fi
