@@ -83,8 +83,6 @@ jobs:
 
       - name: Lint
         run: task lint
-        env:
-          PATH: ${{ github.workspace }}/node_modules/.bin:${{ env.PATH }}
 
       - name: Compile
         run: task compile
