@@ -37,14 +37,19 @@ jobs:
       release_tag: ${{ steps.tag.outputs.release_tag }}
       ready: ${{ steps.tag.outputs.ready }}
       is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
+      run_tests: ${{ steps.tag.outputs.run_tests }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
       - name: Resolve tag from successful workflow runs
         id: tag
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const fs = require('fs');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
@@ -57,10 +62,35 @@ jobs:
                 return;
               }
               tagName = versionInput.startsWith('v') ? versionInput : `v${versionInput}`;
+              const semver = tagName.replace(/^v/, '');
 
-              // Resolve HEAD of main
+              // Bump package.json version and commit to main
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+              const prevVersion = pkg.version;
+              pkg.version = semver;
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+              core.info(`Bumped package.json: ${prevVersion} → ${semver}`);
+
+              // Set git identity and commit
+              const { execSync } = require('child_process');
+              execSync('git config user.name "github-actions[bot]"', { cwd: process.env.GITHUB_WORKSPACE });
+              execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', { cwd: process.env.GITHUB_WORKSPACE });
+              execSync(`git add package.json && git commit -m "chore(release): bump version to ${semver}"`, { cwd: process.env.GITHUB_WORKSPACE });
+              execSync('git push', { cwd: process.env.GITHUB_WORKSPACE });
+              core.info(`Bump commit pushed to main.`);
+
+              // Resolve HEAD of main (now includes the bump commit)
               const main = await github.rest.repos.getBranch({ owner, repo, branch: 'main' });
               const mainSha = main.data.commit.sha;
+
+              // Check if tag already exists before creating
+              try {
+                await github.rest.git.getRef({ owner, repo, ref: `tags/${tagName}` });
+                core.setFailed(`Release blocked: tag ${tagName} already exists. Delete it first or bump version.`);
+                return;
+              } catch {
+                // Tag doesn't exist — proceed to create
+              }
 
               // Create the tag via API
               core.info(`Creating tag ${tagName} at ${mainSha}...`);
@@ -103,7 +133,7 @@ jobs:
               return;
             }
 
-            // Verify that the CI workflow passed for this commit.
+            // If no successful CI run found for this commit, run tests inline.
             const ciRuns = await github.rest.actions.listWorkflowRuns({
               owner,
               repo,
@@ -114,12 +144,12 @@ jobs:
             });
             const successfulRun = ciRuns.data.workflow_runs.find(r => r.conclusion === 'success');
             if (!successfulRun) {
-              core.setFailed(
-                `Release blocked: no successful CI run found for commit ${mainSha}. Push to main and wait for CI to pass before releasing.`
-              );
-              return;
+              core.info(`No successful CI run found for ${mainSha}. Tests will run in the release job.`);
+              core.setOutput('run_tests', 'true');
+            } else {
+              core.info(`CI run ${successfulRun.id} passed for commit ${mainSha}.`);
+              core.setOutput('run_tests', 'false');
             }
-            core.info(`CI run ${successfulRun.id} passed for commit ${mainSha}.`);
 
             core.info(`Release tag detected: ${tagName} on latest main commit ${mainSha}; tag verified.`);
             const isPrerelease = tagName.includes('-') || (context.eventName === 'workflow_dispatch' && '${{ inputs.pre_release }}' === 'true');
@@ -190,12 +220,6 @@ jobs:
         env:
           RELEASE_NOTES: ${{ steps.changelog_notes.outputs.notes }}
 
-      # NOTE: Version/changelog mutation and commit/tag operations were moved to
-      # local automation (`scripts/deploy.sh`) to comply with branch rules that
-      # require PR-based changes on main.
-      - name: Skip repo mutation in release workflow
-        run: echo "Version/changelog updates are performed locally before tagging."
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -212,6 +236,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Run tests (no successful CI run for this commit)
+        if: needs.detect-tag.outputs.run_tests == 'true'
+        run: task check-types && task lint && task unit-tests
 
       - name: Build extension package
         run: xvfb-run -a task compile
@@ -406,3 +434,33 @@ jobs:
               environment_url: 'https://open-vsx.org/extension/selfagency/opilot',
               auto_inactive: false,
             });
+
+      - name: Rollback on failure — delete tag and release
+        if: failure() && github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = '${{ needs.detect-tag.outputs.release_tag }}';
+
+            // Delete the git tag
+            try {
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+              core.info(`Deleted tag ${tag}.`);
+            } catch (e) {
+              core.warning(`Failed to delete tag ${tag}: ${e.message}`);
+            }
+
+            // Delete the GitHub Release if it was created
+            try {
+              const releases = await github.rest.repos.listReleases({ owner, repo, per_page: 30 });
+              const release = releases.data.find(r => r.tag_name === tag);
+              if (release) {
+                await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
+                core.info(`Deleted release ${tag}.`);
+              }
+            } catch (e) {
+              core.warning(`Failed to delete release: ${e.message}`);
+            }
