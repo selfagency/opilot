@@ -12,19 +12,19 @@ tasks:
   check:
     desc: Run linter check
     cmds:
-      - pnpm exec ultracite check
+      - ./node_modules/.bin/ultracite check
     silent: false
 
   lint:
     desc: Run linter
     cmds:
-      - pnpm exec ultracite check
+      - ./node_modules/.bin/ultracite check
     silent: false
 
   lint-fix:
     desc: Run linter with auto-fix
     cmds:
-      - pnpm exec ultracite fix
+      - ./node_modules/.bin/ultracite fix
     silent: false
 
   docs-build:
