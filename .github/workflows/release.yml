@@ -74,7 +74,6 @@ jobs:
               execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', { cwd: process.env.GITHUB_WORKSPACE });
 
               const today = new Date().toISOString().split('T')[0];
-              let bumpCommitSha = null;
 
               if (prevVersion !== semver) {
                 pkg.version = semver;
@@ -93,16 +92,11 @@ jobs:
               // Commit files locally
               execSync('git add package.json CHANGELOG.md', { cwd: process.env.GITHUB_WORKSPACE });
               execSync(`git commit -m "chore(release): bump to ${semver}"`, { cwd: process.env.GITHUB_WORKSPACE });
-              bumpCommitSha = execSync('git rev-parse HEAD', { cwd: process.env.GITHUB_WORKSPACE }).toString().trim();
 
               // Push via PR (branch protection blocks direct pushes to main)
               const bumpBranch = `release-bump-${semver}`;
-              try {
-                await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${bumpBranch}`, sha: bumpCommitSha });
-              } catch {
-                // Branch already exists from prior attempt; force-update it
-                await github.rest.git.updateRef({ owner, repo, ref: `heads/${bumpBranch}`, sha: bumpCommitSha, force: true });
-              }
+              execSync(`git push origin HEAD:refs/heads/${bumpBranch} --force`, { cwd: process.env.GITHUB_WORKSPACE });
+              core.info(`Pushed bump commit to ${bumpBranch}.`);
 
               const { data: pr } = await github.rest.pulls.create({
                 owner, repo,
@@ -506,21 +500,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git revert HEAD --no-edit; then
-            revert_sha=$(git rev-parse HEAD)
             revert_branch="rollback-${tag}"
-            # Create/update branch via API
-            curl -s -X POST \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              -H "Content-Type: application/json" \
-              -d "{\"ref\":\"refs/heads/${revert_branch}\",\"sha\":\"${revert_sha}\"}" \
-              "https://api.github.com/repos/${owner}/${repo}/git/refs" > /dev/null 2>&1 || \
-              curl -s -X PATCH \
-                -H "Authorization: token ${GITHUB_TOKEN}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                -H "Content-Type: application/json" \
-                -d "{\"sha\":\"${revert_sha}\",\"force\":true}" \
-                "https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${revert_branch}" > /dev/null 2>&1 || true
+            git push origin HEAD:refs/heads/${revert_branch} --force
+            echo "Pushed revert to ${revert_branch}."
             pr_resp=$(curl -s \
               -H "Authorization: token ${GITHUB_TOKEN}" \
               -H "Accept: application/vnd.github.v3+json" \
