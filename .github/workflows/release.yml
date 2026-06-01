@@ -74,31 +74,57 @@ jobs:
               execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', { cwd: process.env.GITHUB_WORKSPACE });
 
               const today = new Date().toISOString().split('T')[0];
-              const filesToStage = [];
+              let bumpCommitSha = null;
 
               if (prevVersion !== semver) {
                 pkg.version = semver;
                 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-                filesToStage.push('package.json');
                 core.info(`Bumped package.json: ${prevVersion} → ${semver}`);
               } else {
                 core.info(`package.json version already ${semver}.`);
               }
 
-              // Update CHANGELOG.md: replace [Unreleased] with versioned heading
+              // Update CHANGELOG.md: stamp versioned heading before [Unreleased]
               let changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
               changelog = changelog.replace('## [Unreleased]', `## [Unreleased]\n\n## [${semver}] - ${today}`);
               fs.writeFileSync('CHANGELOG.md', changelog);
-              filesToStage.push('CHANGELOG.md');
               core.info(`Updated CHANGELOG.md with ${semver} heading.`);
 
-              if (filesToStage.length > 0) {
-                execSync(`git add ${filesToStage.join(' ')} && git commit -m "chore(release): bump to ${semver}"`, { cwd: process.env.GITHUB_WORKSPACE });
-                execSync('git push', { cwd: process.env.GITHUB_WORKSPACE });
-                core.info(`Release prep commit pushed to main.`);
+              // Commit files locally
+              execSync('git add package.json CHANGELOG.md', { cwd: process.env.GITHUB_WORKSPACE });
+              execSync(`git commit -m "chore(release): bump to ${semver}"`, { cwd: process.env.GITHUB_WORKSPACE });
+              bumpCommitSha = execSync('git rev-parse HEAD', { cwd: process.env.GITHUB_WORKSPACE }).toString().trim();
+
+              // Push via PR (branch protection blocks direct pushes to main)
+              const bumpBranch = `release-bump-${semver}`;
+              try {
+                await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${bumpBranch}`, sha: bumpCommitSha });
+              } catch {
+                // Branch already exists from prior attempt; force-update it
+                await github.rest.git.updateRef({ owner, repo, ref: `heads/${bumpBranch}`, sha: bumpCommitSha, force: true });
               }
 
-              // Resolve HEAD of main (now includes the bump commit)
+              const { data: pr } = await github.rest.pulls.create({
+                owner, repo,
+                title: `chore(release): bump to ${semver}`,
+                head: bumpBranch,
+                base: 'main',
+                body: `Automated version bump for ${semver} release.`
+              });
+              core.info(`Created PR #${pr.number} for version bump.`);
+
+              // Auto-merge the PR
+              try {
+                await github.rest.pulls.merge({ owner, repo, pull_number: pr.number, merge_method: 'merge' });
+                core.info(`Auto-merged PR #${pr.number}.`);
+
+                // Delete the branch
+                try { await github.rest.git.deleteRef({ owner, repo, ref: `heads/${bumpBranch}` }); } catch {}
+              } catch (mergeErr) {
+                core.warning(`Could not auto-merge PR #${pr.number}: ${mergeErr.message}. Manual merge required.`);
+              }
+
+              // Resolve HEAD of main (now includes the bump merge)
               const main = await github.rest.repos.getBranch({ owner, repo, branch: 'main' });
               const mainSha = main.data.commit.sha;
 
@@ -463,30 +489,63 @@ jobs:
               auto_inactive: false,
             });
 
-      - name: Rollback on failure — revert bump commit, delete tag and release
+      - name: Rollback on failure — revert bump via PR, delete tag and release
         if: failure() && github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.detect-tag.outputs.release_tag }}
         run: |
           set -e
-          # Revert the bump commit on main (package.json + CHANGELOG.md)
+          owner="${{ github.repository_owner }}"
+          repo="opilot"
+          tag="$TAG"
+
+          # Revert the bump commit via PR (branch protection blocks direct push)
           git fetch origin main
           git checkout main
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git revert HEAD --no-edit; then
-            git push origin main
-            echo "Bump commit reverted on main."
+            revert_sha=$(git rev-parse HEAD)
+            revert_branch="rollback-${tag}"
+            # Create/update branch via API
+            curl -s -X POST \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Content-Type: application/json" \
+              -d "{\"ref\":\"refs/heads/${revert_branch}\",\"sha\":\"${revert_sha}\"}" \
+              "https://api.github.com/repos/${owner}/${repo}/git/refs" > /dev/null 2>&1 || \
+              curl -s -X PATCH \
+                -H "Authorization: token ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "Content-Type: application/json" \
+                -d "{\"sha\":\"${revert_sha}\",\"force\":true}" \
+                "https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${revert_branch}" > /dev/null 2>&1 || true
+            pr_resp=$(curl -s \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Content-Type: application/json" \
+              -d "{\"title\":\"revert: bump to ${tag} (release failed)\",\"head\":\"${revert_branch}\",\"base\":\"main\",\"body\":\"Reverting automated bump from failed release ${tag}.\"}" \
+              "https://api.github.com/repos/${owner}/${repo}/pulls")
+            pr_number=$(echo "$pr_resp" | jq -r '.number')
+            if [ -n "$pr_number" ] && [ "$pr_number" != "null" ]; then
+              curl -s -X PUT \
+                -H "Authorization: token ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -d '{"merge_method":"merge"}' \
+                "https://api.github.com/repos/${owner}/${repo}/pulls/${pr_number}/merge" > /dev/null 2>&1 && \
+                echo "Revert merged via PR #${pr_number}." || echo "Revert PR auto-merge failed; manual merge required."
+              # Delete the branch
+              curl -s -X DELETE \
+                -H "Authorization: token ${GITHUB_TOKEN}" \
+                "https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${revert_branch}" > /dev/null 2>&1 || true
+            fi
           else
-            echo "No bump commit to revert (or revert failed)."
+            echo "No bump commit to revert."
             git revert --abort 2>/dev/null || true
           fi
 
-          # Delete the git tag via API
-          owner="${{ github.repository_owner }}"
-          repo="opilot"
-          tag="$TAG"
+          # Delete the git tag
           curl -s -X DELETE \
             -H "Authorization: token ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
