@@ -5,22 +5,17 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release — plain major.minor.patch (e.g. 1.2.3). Use odd minor for pre-release (0.1.x), even minor for stable (0.2.x).'
+      tag:
+        description: 'Existing tag to release (e.g. v1.2.3). Tag must already exist — use only for emergency re-runs.'
         required: true
         type: string
-      pre_release:
-        description: 'Publish as pre-release'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -51,26 +46,12 @@ jobs:
             let tagName;
 
             if (context.eventName === 'workflow_dispatch') {
-              const versionInput = '${{ inputs.version }}'.trim();
-              if (!versionInput) {
-                core.setFailed('version input is required for workflow_dispatch.');
+              const tagInput = '${{ inputs.tag }}'.trim();
+              if (!tagInput) {
+                core.setFailed('tag input is required for workflow_dispatch.');
                 return;
               }
-              tagName = versionInput.startsWith('v') ? versionInput : `v${versionInput}`;
-
-              // Resolve HEAD of main
-              const main = await github.rest.repos.getBranch({ owner, repo, branch: 'main' });
-              const mainSha = main.data.commit.sha;
-
-              // Create the tag via API
-              core.info(`Creating tag ${tagName} at ${mainSha}...`);
-              await github.rest.git.createRef({
-                owner,
-                repo,
-                ref: `refs/tags/${tagName}`,
-                sha: mainSha,
-              });
-              core.info(`Tag ${tagName} created.`);
+              tagName = tagInput.startsWith('v') ? tagInput : `v${tagInput}`;
             } else {
               tagName = context.ref.replace('refs/tags/', '');
             }
@@ -103,6 +84,16 @@ jobs:
               return;
             }
 
+            // Guard: fail if a GitHub Release already exists for this tag.
+            try {
+              await github.rest.repos.getReleaseByTag({ owner, repo, tag: tagName });
+              core.setFailed(`Release ${tagName} already exists on GitHub. Delete it first if you want to re-release.`);
+              return;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              // 404 = no release yet, proceed
+            }
+
             // Verify that the CI workflow passed for this commit.
             const ciRuns = await github.rest.actions.listWorkflowRuns({
               owner,
@@ -122,7 +113,7 @@ jobs:
             core.info(`CI run ${successfulRun.id} passed for commit ${mainSha}.`);
 
             core.info(`Release tag detected: ${tagName} on latest main commit ${mainSha}; tag verified.`);
-            const isPrerelease = tagName.includes('-') || (context.eventName === 'workflow_dispatch' && '${{ inputs.pre_release }}' === 'true');
+            const isPrerelease = tagName.includes('-');
             core.setOutput('release_tag', tagName);
             core.setOutput('ready', 'true');
             core.setOutput('is_prerelease', String(isPrerelease));
@@ -202,7 +193,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Setup task runner

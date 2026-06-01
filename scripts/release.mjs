@@ -20,14 +20,20 @@ cd(ROOT);
 // Argument validation
 // ---------------------------------------------------------------------------
 
-const version = argv._[0];
 const isPreRelease = argv['pre-release'] === true || argv.p === true;
 
-if (!(version && /^\d+\.\d+\.\d+$/.test(version))) {
+// Accept X.Y (auto-expanded to X.Y.0) or X.Y.Z.
+const rawVersion = argv._[0];
+let version;
+if (rawVersion && /^\d+\.\d+$/.test(rawVersion)) {
+  version = `${rawVersion}.0`;
+} else if (rawVersion && /^\d+\.\d+\.\d+$/.test(rawVersion)) {
+  version = rawVersion;
+} else {
   console.error(
     isPreRelease
-      ? 'Usage: task prerelease -- <version>   (e.g. task prerelease -- 0.1.0)'
-      : 'Usage: task release -- <version>   (e.g. task release -- 1.0.0)'
+      ? 'Usage: task prerelease -- <version>   (e.g. task prerelease -- 1.70 or 1.70.0)'
+      : 'Usage: task release -- <version>   (e.g. task release -- 1.70 or 1.70.0)',
   );
   console.error('Note: VS Code Marketplace only supports major.minor.patch versions.');
   process.exit(1);
@@ -42,11 +48,13 @@ const tag = `v${version}`;
 // Rollback state
 //   commitLocal  — release commit exists locally but has not been pushed
 //   commitPushed — release commit has been pushed to origin/main
+//   tagPushed    — annotated tag has been pushed to origin
 //   releaseDone  — release CI workflow succeeded; nothing to undo
 // ---------------------------------------------------------------------------
 
 let commitLocal = false;
 let commitPushed = false;
+let tagPushed = false;
 let releaseDone = false;
 let gitCmd = 'git';
 
@@ -101,6 +109,16 @@ async function rollback() {
   }
   $.verbose = false;
   try {
+    if (tagPushed) {
+      console.log('\n⚠️  Deleting pushed tag...');
+      try {
+        runGit(['push', 'origin', '--delete', tag]);
+        runGit(['tag', '-d', tag]);
+        console.log('↩️  Tag deleted from origin and locally.');
+      } catch {
+        console.error(`❌ Tag deletion failed. Manually run: git push origin --delete ${tag} && git tag -d ${tag}`);
+      }
+    }
     if (commitPushed) {
       console.log('\n⚠️  Reverting release commit on origin/main...');
       try {
@@ -306,34 +324,16 @@ async function main() {
     await waitForWorkflow(octokit, name, owner, repo, headSha, spinner);
   }
 
-  // --- Dispatch release CI workflow ----------------------------------------
+  // --- Push tag to trigger the release workflow ----------------------------
 
-  console.log(`🚀 Dispatching release CI workflow for version ${version}${isPreRelease ? ' (pre-release)' : ''}...`);
-
-  const workflowsResp = await octokit.actions.listRepoWorkflows({
-    owner,
-    repo,
-    per_page: 100
-  });
-  const releaseWorkflow = workflowsResp.data.workflows.find(w => w.name === 'Release');
-  if (!releaseWorkflow) {
-    throw new Error(`Release workflow not found in ${owner}/${repo}`);
-  }
-
-  await octokit.actions.createWorkflowDispatch({
-    owner,
-    repo,
-    workflow_id: releaseWorkflow.id,
-    ref: 'main',
-    inputs: {
-      version,
-      pre_release: isPreRelease
-    }
-  });
+  console.log(`🏷️  Tagging ${tag} and pushing to trigger release workflow...`);
+  runGit(['tag', '-a', tag, '-m', `Release ${tag}`]);
+  runGit(['push', 'origin', tag]);
+  tagPushed = true;
 
   // --- Watch the release workflow ------------------------------------------
 
-  // Give GitHub a moment to register the dispatch before we start polling.
+  // Give GitHub a moment to register the tag push before we start polling.
   await sleep(10_000);
 
   spinner.text = 'Release: waiting for workflow to trigger...';

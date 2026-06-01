@@ -3,7 +3,6 @@ name: Tests
 on:
   push:
     branches: [main]
-    tags: ["v*"]
     paths:
       - "src/**"
       - "package.json"
@@ -43,11 +42,8 @@ jobs:
   test:
     name: Test
     needs: changes
-    # Run tests when release-relevant files change, when manually dispatched,
-    # or when a release tag (v*) is pushed. This ensures release-tag runs
-    # execute the full test matrix instead of being skipped by the paths
-    # filter.
-    if: needs.changes.outputs.relevant == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    # Run tests when release-relevant files change or when manually dispatched.
+    if: needs.changes.outputs.relevant == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
