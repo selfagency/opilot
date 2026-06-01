@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-01
+
 ### Code Quality
 
 - refactor: comprehensive lint fixes, file renames, and test infrastructure overhaul (#107)
