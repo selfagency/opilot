@@ -7,22 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.7.0] - 2026-06-01
-
-## What's Changed
-
-- Status bar shows "Ollama offline" when connecting directly to Ollama Cloud by @guzmandrade-dev in https://github.com/selfagency/opilot/pull/99
-- refactor: lint fixes, file renames, test infrastructure, and code quality improvements by @selfagency in https://github.com/selfagency/opilot/pull/107
-- fix: add go-task/setup-task to docs-deploy workflow by @selfagency in https://github.com/selfagency/opilot/pull/109
-
-## New Contributors
-
-- @guzmandrade-dev made their first contribution in https://github.com/selfagency/opilot/pull/99
-
-**Full Changelog**: https://github.com/selfagency/opilot/compare/v1.6.0...v1.7.0
-
-_Source: changes from v1.6.0 to v1.7.0._
-
 ### Code Quality
 
 - refactor: comprehensive lint fixes, file renames, and test infrastructure overhaul (#107)
