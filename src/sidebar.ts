@@ -713,10 +713,10 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   private static readonly LOCAL_CAPABILITIES_STORAGE_KEY = 'ollama.localModelCapabilities.v1';
 
   constructor(
-    private readonly client: Ollama,
-    private readonly context?: ExtensionContext,
-    private readonly logChannel?: DiagnosticsLogger,
-    private readonly onLocalModelsChanged?: () => void
+    private client: Ollama | undefined = undefined,
+    private context?: ExtensionContext,
+    private logChannel?: DiagnosticsLogger,
+    private onLocalModelsChanged?: () => void,
   ) {
     this.hydrateLocalCapabilitiesFromStorage();
     this.startAutoRefresh();
@@ -729,6 +729,24 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
         this.startAutoRefresh();
       }
     });
+  }
+
+  /** Set or replace the Ollama client (used for deferred initialization after async setup). */
+  setClient(client: Ollama): void {
+    this.client = client;
+  }
+
+  /** Set the callback invoked when local models change (wired after eager registration). */
+  setOnLocalModelsChanged(callback: (() => void) | undefined): void {
+    this.onLocalModelsChanged = callback;
+  }
+
+  /** Get the Ollama client, throwing if it hasn't been set yet. */
+  private getClient(): Ollama {
+    if (!this.client) {
+      throw new Error('Ollama client not initialized — call setClient() first');
+    }
+    return this.client;
   }
 
   private hydrateLocalCapabilitiesFromStorage(): void {
@@ -873,7 +891,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   private async getLocalModels(): Promise<ModelTreeItem[]> {
     try {
       this.logChannel?.debug('[client] loading local models via list() and ps()...');
-      const [listResponse, psResponse] = await Promise.all([this.client.list(), this.client.ps()]);
+      const [listResponse, psResponse] = await Promise.all([this.getClient().list(), this.getClient().ps()]);
 
       const runningMap = new Map<string, RunningProcessInfo>();
       for (const model of psResponse.models) {
@@ -977,7 +995,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           } else if (!this.localModelCapabilitiesInFlight.has(model.name)) {
             this.localModelCapabilitiesInFlight.add(model.name);
             // Fetch capabilities once per local model name.
-            void fetchModelCapabilities(this.client, model.name)
+            void fetchModelCapabilities(this.getClient(), model.name)
               .then(caps => {
                 this.localModelCapabilitiesCache.set(model.name, caps);
                 this.persistLocalCapabilitiesToStorage();
@@ -1158,7 +1176,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
   async deleteModel(modelName: string): Promise<void> {
     try {
       this.logChannel?.debug(`[client] deleting model: ${modelName}`);
-      await this.client.delete({ model: modelName });
+      await this.getClient().delete({ model: modelName });
       this.logChannel?.info(`[client] model deleted: ${modelName}`);
       this.refresh();
       window.showInformationMessage(`Model ${modelName} deleted`);
@@ -1177,7 +1195,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
       this.logChannel?.debug(`[client] starting local model: ${modelName}`);
       await window.withProgress({ location: 15, title: `Starting ${modelName}...` }, async () => {
         const isCloudModel = this.isCloudTaggedModel(modelName);
-        const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.client;
+        const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.getClient();
         if (isCloudModel) {
           // Cloud models should be pulled first (same behavior as `ollama run`).
           this.logChannel?.info(`[client] pulling cloud model before start: ${modelName}`);
@@ -1192,7 +1210,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
 
         let running = false;
         try {
-          const { models } = await this.client.ps();
+          const { models } = await this.getClient().ps();
           running = models.some(m => m.name === modelName);
         } catch {
           // If ps() fails, fall back to optimistic status messaging below.
@@ -1314,7 +1332,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           cancellable: false
         },
         async () => {
-          const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.client;
+          const activeClient = isCloudModel && this.context ? await getCloudOllamaClient(this.context) : this.getClient();
           await activeClient.generate({
             model: modelName,
             prompt: '',
@@ -1325,7 +1343,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
           for (let i = 0; i < 30; i++) {
             await new Promise<void>(resolve => setTimeout(resolve, 1000));
             try {
-              const { models } = await this.client.ps();
+              const { models } = await this.getClient().ps();
               if (!models.some(m => m.name === modelName)) {
                 return; // Model stopped successfully
               }
@@ -1364,7 +1382,7 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
               // Wait a moment and verify
               await new Promise(resolve => setTimeout(resolve, 1000));
               try {
-                const { models } = await this.client.ps();
+                const { models } = await this.getClient().ps();
                 if (!models.some(m => m.name === modelName)) {
                   this.logChannel?.info(`[client] model force-killed successfully: ${modelName}`);
                   this.refresh();
@@ -3125,6 +3143,36 @@ async function openCloudCapabilityPicker(cloudProvider: CloudModelsProvider): Pr
   cloudProvider.softRefresh();
 }
 
+/** Providers created by {@link registerSidebarProviders}. */
+export interface SidebarProviders {
+  localProvider: LocalModelsProvider;
+  cloudProvider: CloudModelsProvider;
+  libraryProvider: LibraryModelsProvider;
+}
+
+/**
+ * Eagerly register sidebar tree data providers so VS Code finds them
+ * before the async activation completes. Call this synchronously at the
+ * top of `activate()` — before any `await`.
+ */
+export function registerSidebarProviders(context: ExtensionContext, logChannel?: DiagnosticsLogger): SidebarProviders {
+  const localProvider = new LocalModelsProvider(undefined, context, logChannel);
+  const cloudProvider = new CloudModelsProvider(context, logChannel);
+  const libraryProvider = new LibraryModelsProvider(logChannel);
+  libraryProvider.attachContext(context);
+  libraryProvider.setLocalProvider(localProvider);
+
+  context.subscriptions.push(
+    window.registerTreeDataProvider('ollama-local-models', localProvider),
+    window.registerTreeDataProvider('ollama-cloud-models', cloudProvider),
+    window.registerTreeDataProvider('ollama-library-models', libraryProvider),
+  );
+
+  logChannel?.info('[client] sidebar tree data providers registered (eager)');
+
+  return { localProvider, cloudProvider, libraryProvider };
+}
+
 /**
  * Register sidebar with VS Code
  */
@@ -3133,36 +3181,45 @@ export function registerSidebar(
   client: Ollama,
   logChannel?: DiagnosticsLogger,
   onLocalModelsChanged?: () => void,
-  onCloudModelsChanged?: () => void
+  onCloudModelsChanged?: () => void,
+  providers?: SidebarProviders,
 ): SidebarRegistration {
   hydrateModelPreviewCacheFromStorage(context);
 
   let libraryProvider: LibraryModelsProvider | undefined;
-  const localProvider = new LocalModelsProvider(client, context, logChannel, () => {
-    onLocalModelsChanged?.();
-    libraryProvider?.refreshVariantStates();
-  });
-  const cloudProvider = new CloudModelsProvider(context, logChannel);
-  libraryProvider = new LibraryModelsProvider(logChannel);
+  const localProvider =
+    providers?.localProvider ??
+    new LocalModelsProvider(client, context, logChannel, () => {
+      onLocalModelsChanged?.();
+      libraryProvider?.refreshVariantStates();
+    });
+  const cloudProvider = providers?.cloudProvider ?? new CloudModelsProvider(context, logChannel);
+  libraryProvider = providers?.libraryProvider ?? new LibraryModelsProvider(logChannel);
   libraryProvider.attachContext(context);
   libraryProvider.setLocalProvider(localProvider);
 
+  // Inject the Ollama client if providers were created eagerly without one
+  if (providers) {
+    localProvider.setClient(client);
+    // Wire up the onLocalModelsChanged callback that was not available during eager registration
+    localProvider.setOnLocalModelsChanged(() => {
+      onLocalModelsChanged?.();
+      libraryProvider?.refreshVariantStates();
+    });
+  }
+
   logChannel?.info('[client] sidebar providers initialized');
 
-  const localTreeView = window.createTreeView('ollama-local-models', {
-    treeDataProvider: localProvider
-  });
-  const libraryTreeView = window.createTreeView('ollama-library-models', {
-    treeDataProvider: libraryProvider
-  });
-  const cloudTreeView = window.createTreeView('ollama-cloud-models', {
-    treeDataProvider: cloudProvider
-  });
+  // If providers were not eagerly registered, register tree views now
+  if (!providers) {
+    context.subscriptions.push(
+      window.createTreeView('ollama-local-models', { treeDataProvider: localProvider }),
+      window.createTreeView('ollama-library-models', { treeDataProvider: libraryProvider }),
+      window.createTreeView('ollama-cloud-models', { treeDataProvider: cloudProvider }),
+    );
+  }
 
   context.subscriptions.push(
-    localTreeView,
-    libraryTreeView,
-    cloudTreeView,
     commands.registerCommand('opilot.collapseLocalModels', () =>
       commands.executeCommand('workbench.actions.treeView.ollama-local-models.collapseAll')
     ),

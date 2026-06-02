@@ -33,7 +33,7 @@ import { registerModelfileManager } from './modelfiles.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { affectsSetting, getSetting, migrateLegacySettings, SETTINGS_NAMESPACE } from './settings.js';
 import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settings-webview.js';
-import { registerSidebar, type SidebarProfilingSnapshot } from './sidebar.js';
+import { registerSidebar, registerSidebarProviders, type SidebarProfilingSnapshot } from './sidebar.js';
 import { registerStatusBarHeartbeat } from './status-bar.js';
 import { ThinkingParser } from './thinking-parser.js';
 import {
@@ -1097,6 +1097,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
   diagnostics.info('[client] activating extension...');
 
+  // Eagerly register sidebar tree data providers so VS Code finds them
+  // before async activation completes. This prevents the "no data provider
+  // registered" error when the sidebar is visible on startup.
+  const sidebarProviders = registerSidebarProviders(context, diagnostics);
+
   await migrateLegacySettings(diagnostics);
 
   const client = await getOllamaClient(context);
@@ -1207,9 +1212,8 @@ export async function activate(context: vscode.ExtensionContext) {
       provider.refreshModels();
       statusBarRegistration.triggerCheck();
     },
-    () => {
-      provider.refreshModels();
-    }
+    undefined,
+    sidebarProviders
   );
 
   const subscriptions: vscode.Disposable[] = [
