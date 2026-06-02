@@ -37,6 +37,8 @@ jobs:
       - name: Resolve tag from successful workflow runs
         id: tag
         uses: actions/github-script@v8
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -46,7 +48,7 @@ jobs:
             let tagName;
 
             if (context.eventName === 'workflow_dispatch') {
-              const tagInput = '${{ inputs.tag }}'.trim();
+              const tagInput = process.env.RELEASE_TAG_INPUT?.trim() ?? '';
               if (!tagInput) {
                 core.setFailed('tag input is required for workflow_dispatch.');
                 return;
@@ -77,7 +79,7 @@ jobs:
             const main = await github.rest.repos.getBranch({ owner, repo, branch: 'main' });
             const mainSha = main.data.commit.sha;
 
-            if (taggedSha !== mainSha) {
+            if (context.eventName !== 'workflow_dispatch' && taggedSha !== mainSha) {
               core.setFailed(
                 `Release blocked: tag ${tagName} points to ${taggedSha}, but latest main is ${mainSha}.`
               );
@@ -99,20 +101,20 @@ jobs:
               owner,
               repo,
               workflow_id: 'ci.yml',
-              head_sha: mainSha,
+              head_sha: taggedSha,
               status: 'completed',
               per_page: 5,
             });
             const successfulRun = ciRuns.data.workflow_runs.find(r => r.conclusion === 'success');
             if (!successfulRun) {
               core.setFailed(
-                `Release blocked: no successful CI run found for commit ${mainSha}. Push to main and wait for CI to pass before releasing.`
+                `Release blocked: no successful CI run found for commit ${taggedSha}. Push to main/tag and wait for CI to pass before releasing.`
               );
               return;
             }
-            core.info(`CI run ${successfulRun.id} passed for commit ${mainSha}.`);
+            core.info(`CI run ${successfulRun.id} passed for commit ${taggedSha}.`);
 
-            core.info(`Release tag detected: ${tagName} on latest main commit ${mainSha}; tag verified.`);
+            core.info(`Release tag detected: ${tagName} on commit ${taggedSha}; tag verified.`);
             const isPrerelease = tagName.includes('-');
             core.setOutput('release_tag', tagName);
             core.setOutput('ready', 'true');
@@ -139,12 +141,14 @@ jobs:
       - name: Generate release notes for changelog
         id: changelog_notes
         uses: actions/github-script@v8
+        env:
+          RELEASE_TAG: ${{ needs.detect-tag.outputs.release_tag }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const currentTag = '${{ needs.detect-tag.outputs.release_tag }}';
+            const currentTag = process.env.RELEASE_TAG?.trim() ?? '';
 
             const tagsResp = await github.rest.repos.listTags({
               owner,
