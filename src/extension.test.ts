@@ -130,7 +130,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -268,7 +269,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -412,7 +414,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -569,7 +572,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -719,7 +723,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -857,7 +862,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -990,7 +996,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -1143,7 +1150,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -1285,7 +1293,8 @@ describe('activate', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -1343,7 +1352,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
       },
       isThinkingModelId: (id: string) => /(qwen3|qwq|deepseek-?r1|cogito|phi\d+-reasoning)/i.test(id)
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: class {
@@ -1426,7 +1435,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
       },
       isThinkingModelId: (id: string) => /(qwen3|qwq|deepseek-?r1|cogito|phi\d+-reasoning)/i.test(id)
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: class {
@@ -1515,7 +1524,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
       },
       isThinkingModelId: (id: string) => /(qwen3|qwq|deepseek-?r1|cogito|phi\d+-reasoning)/i.test(id)
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: class {
@@ -1599,7 +1608,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
       },
       isThinkingModelId: (id: string) => /(qwen3|qwq|deepseek-?r1|cogito|phi\d+-reasoning)/i.test(id)
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: class {
@@ -1698,7 +1707,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
       },
       isThinkingModelId: () => false
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
 
     const showErrorMessage = vi.fn().mockResolvedValue(undefined);
@@ -1791,7 +1800,7 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
       },
       isThinkingModelId: () => false
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: class {
@@ -2464,7 +2473,7 @@ describe('handleChatRequest model selection', () => {
       },
       isThinkingModelId: () => false
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
 
     const LMTextPart = class {
@@ -2595,7 +2604,7 @@ describe('handleChatRequest model selection', () => {
       },
       isThinkingModelId: () => false
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
 
     const LMTextPart = class {
@@ -2731,7 +2740,7 @@ describe('handleChatRequest native Ollama task_complete', () => {
       },
       isThinkingModelId: () => false
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
 
     const mockInvokeTool = vi.fn().mockResolvedValue({ content: [] });
@@ -2849,7 +2858,7 @@ describe('handleChatRequest native Ollama task_complete', () => {
       },
       isThinkingModelId: () => false
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
 
     const mockInvokeTool = vi.fn().mockRejectedValue(new Error('tool failed'));
@@ -3465,7 +3474,8 @@ describe('activate noopLogger', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -3633,7 +3643,8 @@ describe('startLogStreaming inner callbacks', () => {
     }));
 
     vi.doMock('./sidebar.js', () => ({
-      registerSidebar: vi.fn()
+      registerSidebar: vi.fn(),
+      registerSidebarProviders: vi.fn()
     }));
 
     vi.doMock('./modelfiles.js', () => ({
@@ -3902,7 +3913,7 @@ describe('handleChatRequest cloud model path (openAiCompatStreamChat)', () => {
       },
       isThinkingModelId: () => false
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
     vi.doMock('vscode', () => ({
       LanguageModelTextPart: class {
@@ -4140,7 +4151,7 @@ describe('handleChatRequest cloud model path (openAiCompatStreamChat)', () => {
       },
       isThinkingModelId: () => false
     }));
-    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
+    vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn(), registerSidebarProviders: vi.fn() }));
     vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
 
     const ext = await import('./extension.js');
