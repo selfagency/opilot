@@ -34,14 +34,14 @@ exports.run = async () => {
   await testCase('contributes sidebar views and activation events', () => {
     const manifest = vscode.extensions.getExtension('selfagency.opilot').packageJSON;
     const views = manifest?.contributes?.views?.['ollama-explorer'] ?? [];
-    const viewIds = views.map(view => view.id);
+    const viewIds = new Set(views.map(view => view.id));
     const activationEvents = manifest?.activationEvents ?? [];
 
-    assert.ok(viewIds.includes('ollama-local-models'), 'Local models view contribution missing');
-    assert.ok(viewIds.includes('ollama-cloud-models'), 'Cloud models view contribution missing');
-    assert.ok(viewIds.includes('ollama-library-models'), 'Library models view contribution missing');
-    assert.ok(viewIds.includes('ollama-modelfiles'), 'Modelfiles view contribution missing');
-    assert.ok(viewIds.includes('ollama-model-settings'), 'Model settings view contribution missing');
+    assert.ok(viewIds.has('ollama-local-models'), 'Local models view contribution missing');
+    assert.ok(viewIds.has('ollama-cloud-models'), 'Cloud models view contribution missing');
+    assert.ok(viewIds.has('ollama-library-models'), 'Library models view contribution missing');
+    assert.ok(viewIds.has('ollama-modelfiles'), 'Modelfiles view contribution missing');
+    assert.ok(viewIds.has('ollama-model-settings'), 'Model settings view contribution missing');
 
     assert.ok(activationEvents.includes('onView:ollama-local-models'), 'Local models onView activation missing');
     assert.ok(activationEvents.includes('onView:ollama-cloud-models'), 'Cloud models onView activation missing');
