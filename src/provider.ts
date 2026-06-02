@@ -25,7 +25,13 @@ import {
   workspace
 } from 'vscode';
 import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chat-utils.js';
-import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost } from './client';
+import {
+  fetchOllamaCloudCatalog,
+  getCloudOllamaClient,
+  getOllamaAuthToken,
+  getOllamaClient,
+  getOllamaHost
+} from './client';
 import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages } from './context-utils.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './error-handler.js';
@@ -144,15 +150,34 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       );
 
       const resolvedModels = models.filter((model): model is LanguageModelChatInformation => Boolean(model));
+
+      // Append cloud models when an API key is present so they appear in the
+      // VS Code Language Model picker alongside local models.
+      const authToken = await getOllamaAuthToken(this.context);
+      const cloudModels: LanguageModelChatInformation[] = [];
+      if (authToken) {
+        const cloudNames = await fetchOllamaCloudCatalog(authToken);
+        for (const name of cloudNames) {
+          const cloudId = `${name}:cloud`;
+          const info = this.getBaseChatModelInfo(cloudId);
+          if (isThinkingModelId(cloudId)) {
+            this.thinkingModels.add(cloudId);
+          }
+          cloudModels.push(info);
+        }
+      }
+
+      const allModels = resolvedModels.concat(cloudModels);
+
       // Only write to the shared cache if no newer refresh has been requested
       // since this fetch started. This prevents a stale in-flight fetch from
       // overwriting the result of a faster post-pull fetch.
       if (generation === this.refreshGeneration) {
-        this.cachedModelList = resolvedModels;
+        this.cachedModelList = allModels;
         this.lastModelListRefreshMs = Date.now();
       }
 
-      return resolvedModels.length > 0 ? resolvedModels : this.cachedModelList;
+      return allModels.length > 0 ? allModels : this.cachedModelList;
     } catch (error) {
       reportError(this.outputChannel, 'Failed to fetch models', error, {
         showToUser: false

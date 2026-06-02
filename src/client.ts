@@ -299,3 +299,26 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
     };
   }
 }
+
+/**
+ * Fetch the Ollama Cloud model catalog using the provided API key.
+ *
+ * Returns a sorted, deduplicated list of model name strings
+ * (e.g. ["gemma3:27b", "llama3.3:latest", ...]).
+ * Returns an empty array on any error.
+ */
+export async function fetchOllamaCloudCatalog(authToken: string): Promise<string[]> {
+  try {
+    const response = await fetch('https://ollama.com/api/tags', {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    if (!response.ok) {
+      return [];
+    }
+    const payload = (await response.json()) as { models?: Array<{ name?: string }> };
+    const names = (payload.models ?? []).map(m => (typeof m.name === 'string' ? m.name.trim() : '')).filter(Boolean);
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}

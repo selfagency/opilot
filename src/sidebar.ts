@@ -20,7 +20,7 @@ import {
   window,
   workspace
 } from 'vscode';
-import { fetchModelCapabilities, getCloudOllamaClient, type ModelCapabilities } from './client.js';
+import { fetchModelCapabilities, getCloudOllamaClient, getOllamaAuthToken, type ModelCapabilities } from './client.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './error-handler.js';
 import { isThinkingModelId } from './provider.js';
@@ -2551,14 +2551,19 @@ export class CloudModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
+    const authToken = await getOllamaAuthToken(this.context);
+    const authHeaders: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+
     try {
       const [tagsResponse, libraryResponse] = await Promise.all([
         fetch('https://ollama.com/api/tags', {
           method: 'GET',
+          headers: authHeaders,
           signal: controller.signal
         }),
         fetch('https://ollama.com/search?c=cloud', {
           method: 'GET',
+          headers: authHeaders,
           signal: controller.signal
         })
       ]);
