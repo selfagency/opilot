@@ -2287,6 +2287,220 @@ describe('Extracted command handlers', () => {
     expect(mockPull).not.toHaveBeenCalled();
   });
 
+  it('LocalModelsProvider.setClient and getClient work correctly', async () => {
+    vi.resetModules();
+
+    vi.doMock('vscode', () => ({
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      window: { registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })) },
+      TreeItem: class { label = ''; },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })) },
+      ProgressLocation: { Notification: 1 },
+    }));
+
+    const { LocalModelsProvider } = await import('./sidebar.js');
+
+    const provider = new LocalModelsProvider();
+    expect(() => (provider as any).getClient()).toThrow('Ollama client not initialized');
+
+    const mockClient = { list: vi.fn(), ps: vi.fn() } as any;
+    provider.setClient(mockClient);
+    expect((provider as any).getClient()).toBe(mockClient);
+  });
+
+  it('LocalModelsProvider.setOnLocalModelsChanged invokes callback when refresh is triggered', async () => {
+    vi.resetModules();
+
+    vi.doMock('vscode', () => ({
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      window: { registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })) },
+      TreeItem: class { label = ''; },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      ProgressLocation: { Notification: 1 },
+    }));
+
+    const { LocalModelsProvider } = await import('./sidebar.js');
+
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      ps: vi.fn().mockResolvedValue({ models: [] }),
+    } as any;
+    const provider = new LocalModelsProvider();
+    provider.setClient(mockClient);
+
+    const callback = vi.fn();
+    provider.setOnLocalModelsChanged(callback);
+
+    provider.refresh();
+    // Allow async getLocalModels to settle
+    await vi.waitFor(() => { expect(callback).toHaveBeenCalled(); });
+  });
+
+  it('registerSidebarProviders registers tree data providers and returns them', async () => {
+    vi.resetModules();
+
+    const registerTreeDataProvider = vi.fn(() => ({ dispose: vi.fn() }));
+    vi.doMock('vscode', () => ({
+      TreeItem: class { label = ''; },
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      ThemeIcon: class {},
+      window: { registerTreeDataProvider, createTreeView: vi.fn() },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })) },
+      ProgressLocation: { Notification: 1 },
+    }));
+
+    const { registerSidebarProviders } = await import('./sidebar.js');
+    const context = {
+      subscriptions: { push: vi.fn() },
+      globalState: { get: vi.fn().mockReturnValue(undefined), update: vi.fn() },
+    } as any;
+    const result = registerSidebarProviders(context);
+
+    expect(registerTreeDataProvider).toHaveBeenCalledTimes(3);
+    expect(registerTreeDataProvider).toHaveBeenCalledWith('ollama-local-models', expect.anything());
+    expect(registerTreeDataProvider).toHaveBeenCalledWith('ollama-cloud-models', expect.anything());
+    expect(registerTreeDataProvider).toHaveBeenCalledWith('ollama-library-models', expect.anything());
+    expect(result).toHaveProperty('localProvider');
+    expect(result).toHaveProperty('cloudProvider');
+    expect(result).toHaveProperty('libraryProvider');
+  });
+
+  it('registerSidebar accepts pre-created providers and does not create duplicate tree views', async () => {
+    vi.resetModules();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class { label = ''; },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      window: { createTreeView: vi.fn(() => ({ dispose: vi.fn() })), registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })) },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const vscode = await import('vscode');
+    const { registerSidebar, registerSidebarProviders } = await import('./sidebar.js');
+
+    const mockContext = {
+      subscriptions: { push: vi.fn() },
+      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
+      globalState: { get: vi.fn(), update: vi.fn() },
+    } as any;
+
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      generate: vi.fn(),
+    } as any;
+
+    const providers = registerSidebarProviders(mockContext);
+    const logChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+    registerSidebar(mockContext, mockClient, logChannel, undefined, undefined, providers);
+
+    expect(vscode.window.createTreeView).not.toHaveBeenCalled();
+  });
+
+  it('registerSidebar returns getProfilingSnapshot and dispose works for eager providers', async () => {
+    vi.resetModules();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class { label = ''; },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      window: { createTreeView: vi.fn(() => ({ dispose: vi.fn() })), registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })) },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { registerSidebar, registerSidebarProviders } = await import('./sidebar.js');
+
+    const mockContext: any = {
+      subscriptions: { push: vi.fn() },
+      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
+      globalState: { get: vi.fn(), update: vi.fn() },
+    };
+
+    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as any;
+
+    const providers = registerSidebarProviders(mockContext);
+    const logChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+    const result = registerSidebar(mockContext, mockClient, logChannel, undefined, undefined, providers);
+
+    const snapshot = result.getProfilingSnapshot();
+    expect(snapshot).toHaveProperty('local');
+    expect(snapshot).toHaveProperty('library');
+    expect(snapshot).toHaveProperty('cloud');
+    expect(snapshot).toHaveProperty('preview');
+  });
+
+  it('registerSidebar without pre-created providers falls back to createTreeView', async () => {
+    vi.resetModules();
+
+    const createTreeView = vi.fn(() => ({ dispose: vi.fn() }));
+    vi.doMock('vscode', () => ({
+      TreeItem: class { label = ''; },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class { event = {}; fire = vi.fn(); },
+      window: { createTreeView, registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })) },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      },
+      commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+    }));
+
+    const { registerSidebar } = await import('./sidebar.js');
+
+    const mockContext: any = {
+      subscriptions: { push: vi.fn() },
+      secrets: { get: vi.fn().mockResolvedValue(undefined), store: vi.fn(), delete: vi.fn() },
+      globalState: { get: vi.fn(), update: vi.fn() },
+    };
+
+    const mockClient = { list: vi.fn().mockResolvedValue({ models: [] }), generate: vi.fn() } as any;
+
+    registerSidebar(mockContext, mockClient);
+
+    // Without providers, createTreeView should be called for each view
+    expect(createTreeView).toHaveBeenCalledTimes(3);
+    expect(createTreeView).toHaveBeenCalledWith('ollama-local-models', expect.anything());
+    expect(createTreeView).toHaveBeenCalledWith('ollama-library-models', expect.anything());
+    expect(createTreeView).toHaveBeenCalledWith('ollama-cloud-models', expect.anything());
+  });
+
   it('registerSidebar registers collapse commands for all three views', async () => {
     vi.resetModules();
 

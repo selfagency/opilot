@@ -714,8 +714,8 @@ export class LocalModelsProvider implements TreeDataProvider<ModelTreeItem>, Dis
 
   constructor(
     private client: Ollama | undefined = undefined,
-    private context?: ExtensionContext,
-    private logChannel?: DiagnosticsLogger,
+    private readonly context?: ExtensionContext,
+    private readonly logChannel?: DiagnosticsLogger,
     private onLocalModelsChanged?: () => void,
   ) {
     this.hydrateLocalCapabilitiesFromStorage();
