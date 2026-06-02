@@ -2770,8 +2770,12 @@ export function handleRefreshLibrary(libraryProvider: LibraryModelsProvider): vo
 /**
  * Command handler: refresh cloud models
  */
-export function handleRefreshCloudModels(cloudProvider: CloudModelsProvider): void {
+export function handleRefreshCloudModels(
+  cloudProvider: CloudModelsProvider,
+  onCloudModelsChanged?: () => void
+): void {
   cloudProvider.refresh();
+  onCloudModelsChanged?.();
   window.showInformationMessage('Cloud models refreshed');
 }
 
@@ -2782,9 +2786,11 @@ export async function handleManageCloudApiKey(
   _context: ExtensionContext,
   _cloudProvider: CloudModelsProvider,
   _libraryProvider: LibraryModelsProvider,
-  _logChannel?: DiagnosticsLogger
+  _logChannel?: DiagnosticsLogger,
+  onCloudModelsChanged?: () => void
 ): Promise<void> {
   // Back-compat shim: old command now routes to login flow.
+  onCloudModelsChanged?.();
   handleLoginToCloud();
 }
 
@@ -3126,7 +3132,8 @@ export function registerSidebar(
   context: ExtensionContext,
   client: Ollama,
   logChannel?: DiagnosticsLogger,
-  onLocalModelsChanged?: () => void
+  onLocalModelsChanged?: () => void,
+  onCloudModelsChanged?: () => void
 ): SidebarRegistration {
   hydrateModelPreviewCacheFromStorage(context);
 
@@ -3309,9 +3316,9 @@ export function registerSidebar(
     commands.registerCommand('opilot.refreshSidebar', () => handleRefreshLocalModels(localProvider)),
     commands.registerCommand('opilot.refreshLocalModels', () => handleRefreshLocalModels(localProvider)),
     commands.registerCommand('opilot.refreshLibrary', () => handleRefreshLibrary(libraryProvider)),
-    commands.registerCommand('opilot.refreshCloudModels', () => handleRefreshCloudModels(cloudProvider)),
+    commands.registerCommand('opilot.refreshCloudModels', () => handleRefreshCloudModels(cloudProvider, onCloudModelsChanged)),
     commands.registerCommand('opilot.manageCloudApiKey', async () =>
-      handleManageCloudApiKey(context, cloudProvider, libraryProvider, logChannel)
+      handleManageCloudApiKey(context, cloudProvider, libraryProvider, logChannel, onCloudModelsChanged)
     ),
     commands.registerCommand('opilot.loginCloud', () => handleLoginToCloud()),
     commands.registerCommand('opilot.openCloudModel', (item: ModelTreeItem) => handleOpenCloudModel(item)),

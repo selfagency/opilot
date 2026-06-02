@@ -1199,10 +1199,18 @@ export async function activate(context: vscode.ExtensionContext) {
   })();
 
   const statusBarRegistration = registerStatusBarHeartbeat(client, host, diagnostics);
-  const sidebarRegistration = registerSidebar(context, client, diagnostics, () => {
-    provider.refreshModels();
-    statusBarRegistration.triggerCheck();
-  });
+  const sidebarRegistration = registerSidebar(
+    context,
+    client,
+    diagnostics,
+    () => {
+      provider.refreshModels();
+      statusBarRegistration.triggerCheck();
+    },
+    () => {
+      provider.refreshModels();
+    }
+  );
 
   const subscriptions: vscode.Disposable[] = [
     vscode.commands.registerCommand('opilot.manageAuthToken', async () => {

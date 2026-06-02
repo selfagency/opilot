@@ -2352,6 +2352,70 @@ describe('Extracted command handlers', () => {
     expect(executeCommandMock).toHaveBeenCalledWith('workbench.actions.treeView.ollama-library-models.collapseAll');
   });
 
+  it('registerSidebar refreshes cloud language model provider when cloud models refresh', async () => {
+    vi.resetModules();
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        label: string;
+        constructor(label: string) {
+          this.label = label;
+        }
+      },
+      ThemeIcon: class {},
+      TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
+        withProgress: vi.fn(),
+        showInputBox: vi.fn(),
+        showErrorMessage: vi.fn(),
+        showInformationMessage: vi.fn(),
+        showWarningMessage: vi.fn()
+      },
+      commands: {
+        registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+        executeCommand: vi.fn()
+      },
+      env: { openExternal: vi.fn() },
+      Uri: { parse: vi.fn((v: string) => ({ value: v })) },
+      ProgressLocation: { Notification: 15 },
+      workspace: {
+        getConfiguration: vi.fn(() => ({ get: vi.fn(), update: vi.fn() })),
+        onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() }))
+      }
+    }));
+
+    const vscode = await import('vscode');
+    const { registerSidebar } = await import('./sidebar.js');
+
+    const mockContext = {
+      subscriptions: { push: vi.fn() },
+      secrets: {
+        get: vi.fn().mockResolvedValue(undefined),
+        store: vi.fn(),
+        delete: vi.fn()
+      },
+      globalState: { get: vi.fn(), update: vi.fn() }
+    } as unknown as ExtensionContext;
+
+    const mockClient = {
+      list: vi.fn().mockResolvedValue({ models: [] }),
+      generate: vi.fn()
+    } as unknown as Ollama;
+
+    const onCloudModelsChanged = vi.fn();
+    registerSidebar(mockContext, mockClient, undefined, undefined, onCloudModelsChanged);
+
+    const registerCommandMock = vi.mocked(vscode.commands.registerCommand);
+    const entry = registerCommandMock.mock.calls.find(([cmd]) => cmd === 'opilot.refreshCloudModels');
+    await (entry?.[1] as (() => void) | undefined)?.();
+
+    expect(onCloudModelsChanged).toHaveBeenCalledTimes(1);
+  });
+
   it('registerSidebar registers filter and clear-filter commands for all three views', async () => {
     vi.resetModules();
     vi.doMock('vscode', () => ({
@@ -3089,6 +3153,19 @@ describe('sidebar command handlers', () => {
     expect(mockVscode.window.showInformationMessage).toHaveBeenCalledWith('Cloud models refreshed');
   });
 
+  it('handleRefreshCloudModels: notifies cloud refresh callback', () => {
+    const { handleRefreshCloudModels } = sidebarModule;
+    const cloudProvider = {
+      refresh: vi.fn()
+    } as unknown as CloudModelsProvider;
+    const onCloudModelsChanged = vi.fn();
+
+    handleRefreshCloudModels(cloudProvider, onCloudModelsChanged);
+
+    expect(cloudProvider.refresh).toHaveBeenCalled();
+    expect(onCloudModelsChanged).toHaveBeenCalledTimes(1);
+  });
+
   // --- handleLoginToCloud ---
   it('handleLoginToCloud: creates terminal, shows it, and sends ollama login', () => {
     const { handleLoginToCloud } = sidebarModule;
@@ -3105,7 +3182,7 @@ describe('sidebar command handlers', () => {
   });
 
   // --- handleManageCloudApiKey ---
-  it('handleManageCloudApiKey: delegates to handleLoginToCloud (creates terminal)', async () => {
+  it('handleManageCloudApiKey: notifies cloud refresh callback before login flow', async () => {
     const { handleManageCloudApiKey } = sidebarModule;
     const fakeTerminal = { show: vi.fn(), sendText: vi.fn() };
     mockVscode.window.createTerminal = vi.fn(() => fakeTerminal);
@@ -3113,12 +3190,30 @@ describe('sidebar command handlers', () => {
     const mockContext = {} as unknown as ExtensionContext;
     const cloudProvider = {} as unknown as CloudModelsProvider;
     const libraryProvider = {} as unknown as LibraryModelsProvider;
+    const onCloudModelsChanged = vi.fn();
 
-    await handleManageCloudApiKey(mockContext, cloudProvider, libraryProvider);
+    await handleManageCloudApiKey(mockContext, cloudProvider, libraryProvider, undefined, onCloudModelsChanged);
 
+    expect(onCloudModelsChanged).toHaveBeenCalledTimes(1);
     expect(mockVscode.window.createTerminal).toHaveBeenCalledWith({
       name: 'Ollama Cloud Login'
     });
+    expect(fakeTerminal.sendText).toHaveBeenCalledWith('ollama login', true);
+  });
+
+  it('handleManageCloudApiKey: refreshes cloud models before opening login terminal', async () => {
+    const { handleManageCloudApiKey } = sidebarModule;
+    const fakeTerminal = { show: vi.fn(), sendText: vi.fn() };
+    mockVscode.window.createTerminal = vi.fn(() => fakeTerminal);
+
+    const mockContext = {} as unknown as ExtensionContext;
+    const cloudProvider = {} as unknown as CloudModelsProvider;
+    const libraryProvider = {} as unknown as LibraryModelsProvider;
+    const onCloudModelsChanged = vi.fn();
+
+    await handleManageCloudApiKey(mockContext, cloudProvider, libraryProvider, undefined, onCloudModelsChanged);
+
+    expect(onCloudModelsChanged).toHaveBeenCalledTimes(1);
     expect(fakeTerminal.sendText).toHaveBeenCalledWith('ollama login', true);
   });
 
