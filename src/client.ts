@@ -308,9 +308,12 @@ export async function fetchModelCapabilities(client: Ollama, modelId: string): P
  * Returns an empty array on any error.
  */
 export async function fetchOllamaCloudCatalog(authToken: string): Promise<string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
     const response = await fetch('https://ollama.com/api/tags', {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${authToken}` },
+      signal: controller.signal
     });
     if (!response.ok) {
       return [];
@@ -320,5 +323,7 @@ export async function fetchOllamaCloudCatalog(authToken: string): Promise<string
     return [...new Set(names)].sort((a, b) => a.localeCompare(b));
   } catch {
     return [];
+  } finally {
+    clearTimeout(timeout);
   }
 }

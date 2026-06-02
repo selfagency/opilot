@@ -40,7 +40,9 @@ function makeContext(): ExtensionContext {
 
 vi.mock('./client.js', () => ({
   getOllamaClient: vi.fn(),
-  getCloudOllamaClient: vi.fn()
+  getCloudOllamaClient: vi.fn(),
+  getOllamaAuthToken: vi.fn(),
+  fetchOllamaCloudCatalog: vi.fn().mockResolvedValue([])
 }));
 
 // Mock vscode

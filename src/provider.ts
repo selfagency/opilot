@@ -158,7 +158,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       if (authToken) {
         const cloudNames = await fetchOllamaCloudCatalog(authToken);
         for (const name of cloudNames) {
-          const cloudId = `${name}:cloud`;
+          const cloudId = name.endsWith(':cloud') ? name : `${name}:cloud`;
           const info = this.getBaseChatModelInfo(cloudId);
           if (isThinkingModelId(cloudId)) {
             this.thinkingModels.add(cloudId);

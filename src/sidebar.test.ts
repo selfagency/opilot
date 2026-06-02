@@ -303,6 +303,8 @@ describe('LocalModelsProvider', () => {
         }),
         ps: vi.fn().mockResolvedValue({ models: [] })
       }),
+      getOllamaAuthToken: vi.fn().mockResolvedValue('token'),
+      fetchOllamaCloudCatalog: vi.fn().mockResolvedValue(['llama3:cloud']),
       fetchModelCapabilities: vi.fn().mockResolvedValue({
         toolCalling: false,
         imageInput: false,
@@ -371,9 +373,19 @@ describe('LocalModelsProvider', () => {
 
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        text: async () => '<a href="/library/llama3">llama3</a>'
+      vi.fn((input: string | URL) => {
+        const url = String(input);
+        if (url.includes('/api/tags')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ models: [{ name: 'llama3:cloud' }] })
+          } as Response);
+        }
+
+        return Promise.resolve({
+          ok: true,
+          text: async () => '<a href="/library/llama3"><span>Tools</span></a>'
+        } as Response);
       })
     );
 
@@ -457,6 +469,8 @@ describe('LocalModelsProvider', () => {
         list: vi.fn().mockResolvedValue({ models: [] }),
         ps: vi.fn().mockResolvedValue({ models: [] })
       }),
+      getOllamaAuthToken: vi.fn().mockResolvedValue(undefined),
+      fetchOllamaCloudCatalog: vi.fn().mockResolvedValue([]),
       fetchModelCapabilities: vi.fn().mockResolvedValue({
         toolCalling: false,
         imageInput: false,
@@ -661,6 +675,8 @@ describe('LocalModelsProvider', () => {
         generate: cloudGenerate,
         ps: vi.fn().mockResolvedValue({ models: [] })
       }),
+      getOllamaAuthToken: vi.fn().mockResolvedValue(undefined),
+      fetchOllamaCloudCatalog: vi.fn().mockResolvedValue([]),
       fetchModelCapabilities: vi.fn().mockResolvedValue({
         toolCalling: false,
         imageInput: false,
@@ -3759,6 +3775,8 @@ describe('LibraryModelsProvider HTTP (MSW)', () => {
         imageInput: false,
         maxInputTokens: null
       }),
+      getOllamaAuthToken: vi.fn().mockResolvedValue(undefined),
+      fetchOllamaCloudCatalog: vi.fn().mockResolvedValue([]),
       getCloudOllamaClient: vi.fn().mockResolvedValue(null)
     }));
     ({ LibraryModelsProvider } = await import('./sidebar.js'));
@@ -3840,6 +3858,8 @@ describe('CloudModelsProvider loadCloudCatalogFromNetwork (MSW)', () => {
         imageInput: false,
         maxInputTokens: null
       }),
+      getOllamaAuthToken: vi.fn().mockResolvedValue('token'),
+      fetchOllamaCloudCatalog: vi.fn().mockResolvedValue(['llama3:cloud']),
       getCloudOllamaClient: vi.fn().mockResolvedValue({
         list: vi.fn().mockResolvedValue({ models: [] }),
         ps: vi.fn().mockResolvedValue({ models: [] })

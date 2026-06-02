@@ -39,10 +39,7 @@ if (rawVersion && /^\d+\.\d+$/.test(rawVersion)) {
   process.exit(1);
 }
 
-// Tag always uses plain major.minor.patch; the pre-release flag is passed as a
-// workflow input so CI can distinguish pre-release from stable without needing
-// a version suffix.
-const tag = `v${version}`;
+const tag = isPreRelease ? `v${version}-pre` : `v${version}`;
 
 // ---------------------------------------------------------------------------
 // Rollback state
