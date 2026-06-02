@@ -33,7 +33,7 @@ if (rawVersion && /^\d+\.\d+$/.test(rawVersion)) {
   console.error(
     isPreRelease
       ? 'Usage: task prerelease -- <version>   (e.g. task prerelease -- 1.70 or 1.70.0)'
-      : 'Usage: task release -- <version>   (e.g. task release -- 1.70 or 1.70.0)',
+      : 'Usage: task release -- <version>   (e.g. task release -- 1.70 or 1.70.0)'
   );
   console.error('Note: VS Code Marketplace only supports major.minor.patch versions.');
   process.exit(1);
