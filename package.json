@@ -770,6 +770,11 @@
   "activationEvents": [
     "onChatParticipant:opilot.ollama",
     "onLanguageModelChatProvider:selfagency-opilot",
+    "onView:ollama-local-models",
+    "onView:ollama-cloud-models",
+    "onView:ollama-library-models",
+    "onView:ollama-modelfiles",
+    "onView:ollama-model-settings",
     "onStartupFinished"
   ],
   "lint-staged": {

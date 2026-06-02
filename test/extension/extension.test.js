@@ -76,6 +76,23 @@ exports.run = async () => {
   // Sidebar/Tree View Providers
   // ---------------------------------------------------------------------------
 
+  const views =
+    vscode.extensions.getExtension('selfagency.opilot').packageJSON?.contributes?.views?.['ollama-explorer'] ?? [];
+  const viewIds = views.map(view => view.id);
+
+  assert.ok(viewIds.includes('ollama-local-models'), 'Local models view contribution missing');
+  assert.ok(viewIds.includes('ollama-cloud-models'), 'Cloud models view contribution missing');
+  assert.ok(viewIds.includes('ollama-library-models'), 'Library models view contribution missing');
+  assert.ok(viewIds.includes('ollama-modelfiles'), 'Modelfiles view contribution missing');
+  assert.ok(viewIds.includes('ollama-model-settings'), 'Model settings view contribution missing');
+
+  const activationEvents = vscode.extensions.getExtension('selfagency.opilot').packageJSON?.activationEvents ?? [];
+  assert.ok(activationEvents.includes('onView:ollama-local-models'), 'Local models onView activation missing');
+  assert.ok(activationEvents.includes('onView:ollama-cloud-models'), 'Cloud models onView activation missing');
+  assert.ok(activationEvents.includes('onView:ollama-library-models'), 'Library models onView activation missing');
+  assert.ok(activationEvents.includes('onView:ollama-modelfiles'), 'Modelfiles onView activation missing');
+  assert.ok(activationEvents.includes('onView:ollama-model-settings'), 'Model settings onView activation missing');
+
   assert.ok(commands.includes('opilot.refreshLocalModels'), 'Local models tree view not properly initialized');
   console.log('✓ Local models tree view initialized');
 
