@@ -2427,7 +2427,7 @@ describe('Extracted command handlers', () => {
 
     const registerCommandMock = vi.mocked(vscode.commands.registerCommand);
     const entry = registerCommandMock.mock.calls.find(([cmd]) => cmd === 'opilot.refreshCloudModels');
-    await (entry?.[1] as (() => void) | undefined)?.();
+    (entry?.[1] as (() => void) | undefined)?.();
 
     expect(onCloudModelsChanged).toHaveBeenCalledTimes(1);
   });
@@ -2441,7 +2441,9 @@ describe('Extracted command handlers', () => {
           this.label = label;
         }
       },
-      ThemeIcon: class {},
+      ThemeIcon: class {
+        constructor() {}
+      },
       TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
       EventEmitter: class {
         event = {};
