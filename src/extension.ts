@@ -29,7 +29,7 @@ import {
   type ModelSettingsStore,
   saveModelSettings
 } from './model-settings.js';
-import { registerModelfileManager } from './modelfiles.js';
+import { registerModelfileCommands, registerModelfilesProvider } from './modelfiles.js';
 import { isThinkingModelId, OllamaChatModelProvider } from './provider.js';
 import { affectsSetting, getSetting, migrateLegacySettings, SETTINGS_NAMESPACE } from './settings.js';
 import { createModelSettingsViewProvider, MODEL_SETTINGS_VIEW_ID } from './settings-webview.js';
@@ -1097,11 +1097,48 @@ export async function activate(context: vscode.ExtensionContext) {
 
   diagnostics.info('[client] activating extension...');
 
-  // Eagerly register sidebar tree data providers so VS Code finds them
-  // before async activation completes. This prevents the "no data provider
-  // registered" error when the sidebar is visible on startup.
+  // ─── Eager (sync) registrations ───────────────────────────────────────────
+  // Everything here runs BEFORE the first `await` so VS Code finds a provider
+  // for every declared view the instant the sidebar is shown on startup.
+  // Without this, views that VS Code tries to render during the async gap show
+  // "There is no data provider registered that can provide view data."
+
+  // Sidebar tree views (local / cloud / library models)
   const sidebarProviders = registerSidebarProviders(context, diagnostics);
 
+  // Modelfiles tree view — provider only; commands that need the Ollama client
+  // are wired below after the async setup resolves.
+  const modelfilesProvider = registerModelfilesProvider(context, diagnostics);
+
+  // Model Settings webview — constructed with stub callbacks; the real store
+  // and model-name getter are injected via bindOptions() once async setup done.
+  let modelSettingsStore: ModelSettingsStore = {};
+  let saveDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const modelSettingsViewProvider = createModelSettingsViewProvider({
+    context,
+    initialStore: modelSettingsStore,
+    // Stubs — replaced by bindOptions() after awaits; safe to call before then
+    // because the webview only renders when the user focuses the panel.
+    getAvailableModels: () => Promise.resolve([]),
+    onStoreChanged: () => Promise.resolve(),
+    diagnostics
+  });
+
+  diagnostics.info(`[model-settings] Registering webview view provider with ID: ${MODEL_SETTINGS_VIEW_ID}`);
+  const modelSettingsViewRegistration =
+    typeof vscode.window.registerWebviewViewProvider === 'function'
+      ? vscode.window.registerWebviewViewProvider(MODEL_SETTINGS_VIEW_ID, modelSettingsViewProvider, {
+          webviewOptions: { retainContextWhenHidden: true }
+        })
+      : {
+          dispose: () => {
+            /* noop for tests/mocks */
+          }
+        };
+  diagnostics.info('[model-settings] View provider registered (eager)');
+
+  // ─── Async setup ──────────────────────────────────────────────────────────
   await migrateLegacySettings(diagnostics);
 
   const client = await getOllamaClient(context);
@@ -1111,7 +1148,6 @@ export async function activate(context: vscode.ExtensionContext) {
   diagnostics.info(`[client] auto-start log streaming: ${autoStartLogStreaming ? 'enabled' : 'disabled'}`);
   diagnostics.info(`[client] diagnostics log level: ${getConfiguredLogLevel()}`);
 
-  let modelSettingsStore: ModelSettingsStore = {};
   if (context.globalStorageUri?.fsPath) {
     modelSettingsStore = await loadModelSettings(context.globalStorageUri, diagnostics);
   } else {
@@ -1138,38 +1174,20 @@ export async function activate(context: vscode.ExtensionContext) {
     return Array.from(names);
   };
 
-  let saveDebounceTimer: ReturnType<typeof setTimeout> | undefined;
-  const modelSettingsViewProvider = createModelSettingsViewProvider({
-    context,
-    initialStore: modelSettingsStore,
-    getAvailableModels: getAvailableModelNames,
-    onStoreChanged: nextStore => {
-      modelSettingsStore = nextStore;
-      if (context.globalStorageUri?.fsPath) {
-        // Debounce writes: sliders fire many rapid patches; batch into a single save after 500 ms.
-        clearTimeout(saveDebounceTimer);
-        saveDebounceTimer = setTimeout(() => {
-          void saveModelSettings(context.globalStorageUri, modelSettingsStore, diagnostics);
-        }, 500);
-      }
-
-      return Promise.resolve();
-    },
-    diagnostics
+  // Now that client and storage are ready, bind real callbacks into the eagerly-
+  // registered webview provider so it serves live data when the user opens it.
+  modelSettingsViewProvider.bindOptions(modelSettingsStore, getAvailableModelNames, nextStore => {
+    modelSettingsStore = nextStore;
+    if (context.globalStorageUri?.fsPath) {
+      // Debounce writes: sliders fire many rapid patches; batch into a single save after 500 ms.
+      clearTimeout(saveDebounceTimer);
+      saveDebounceTimer = setTimeout(() => {
+        void saveModelSettings(context.globalStorageUri, modelSettingsStore, diagnostics);
+      }, 500);
+    }
+    return Promise.resolve();
   });
-
-  diagnostics.info(`[model-settings] Registering webview view provider with ID: ${MODEL_SETTINGS_VIEW_ID}`);
-  const modelSettingsViewRegistration =
-    typeof vscode.window.registerWebviewViewProvider === 'function'
-      ? vscode.window.registerWebviewViewProvider(MODEL_SETTINGS_VIEW_ID, modelSettingsViewProvider, {
-          webviewOptions: { retainContextWhenHidden: true }
-        })
-      : {
-          dispose: () => {
-            /* noop for tests/mocks */
-          }
-        };
-  diagnostics.info('[model-settings] View provider registered');
+  diagnostics.info('[model-settings] View provider options bound (async setup complete)');
 
   const provider = new OllamaChatModelProvider(context, client, diagnostics, () => modelSettingsStore);
   let lmProviderDisposable: vscode.Disposable | undefined;
@@ -1272,8 +1290,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(...subscriptions);
 
-  // Register modelfile manager
-  registerModelfileManager(context, client, diagnostics);
+  // Wire client-dependent modelfile commands (provider was registered eagerly above).
+  registerModelfileCommands(context, modelfilesProvider, client, diagnostics);
 
   // Register inline completion provider
   const completionProvider = new OllamaInlineCompletionProvider(client, diagnostics);

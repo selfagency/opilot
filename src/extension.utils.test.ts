@@ -91,7 +91,10 @@ beforeEach(() => {
   }));
 
   vi.doMock('./sidebar.js', () => ({ registerSidebar: vi.fn() }));
-  vi.doMock('./modelfiles.js', () => ({ registerModelfileManager: vi.fn() }));
+  vi.doMock('./modelfiles.js', () => ({
+    registerModelfilesProvider: vi.fn(() => ({ refresh: vi.fn() })),
+    registerModelfileCommands: vi.fn()
+  }));
 });
 
 describe('extension utility helpers', () => {

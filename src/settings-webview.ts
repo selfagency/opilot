@@ -586,6 +586,21 @@ export class ModelSettingsViewProvider implements vscode.WebviewViewProvider {
     void this.pushHydrateMessage();
   }
 
+  /**
+   * Bind the real async dependencies (store and model-name getter) that were
+   * not available when the provider was registered eagerly at extension startup.
+   * Safe to call multiple times; each call replaces the previous binding.
+   */
+  bindOptions(
+    nextStore: ModelSettingsStore,
+    getAvailableModels: () => Promise<string[]>,
+    onStoreChanged: (nextStore: ModelSettingsStore) => Promise<void>
+  ): void {
+    this.store = { ...nextStore };
+    (this.options as ModelSettingsViewProviderOptions).getAvailableModels = getAvailableModels;
+    (this.options as ModelSettingsViewProviderOptions).onStoreChanged = onStoreChanged;
+  }
+
   private async pushHydrateMessage(): Promise<void> {
     if (!this.webviewView) {
       return;

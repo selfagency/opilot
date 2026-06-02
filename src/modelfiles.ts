@@ -609,15 +609,34 @@ export function createCompletionProvider(): vscode.CompletionItemProvider {
 // Registration
 // ---------------------------------------------------------------------------
 
-export function registerModelfileManager(
+/**
+ * Register the Modelfiles tree data provider synchronously, without requiring
+ * the Ollama client. Call this at the top of `activate()` before any `await`
+ * so VS Code finds a provider for the `ollama-modelfiles` view immediately.
+ * Returns the provider so commands can be wired later via
+ * {@link registerModelfileCommands}.
+ */
+export function registerModelfilesProvider(
   context: vscode.ExtensionContext,
+  log?: DiagnosticsLogger
+): ModelfilesProvider {
+  const provider = new ModelfilesProvider(context, log);
+  context.subscriptions.push(vscode.window.registerTreeDataProvider('ollama-modelfiles', provider));
+  return provider;
+}
+
+/**
+ * Register client-dependent Modelfile commands and language features.
+ * Call this after the Ollama client is available (i.e. after the async
+ * setup in `activate()` completes).
+ */
+export function registerModelfileCommands(
+  context: vscode.ExtensionContext,
+  provider: ModelfilesProvider,
   client: Ollama,
   log?: DiagnosticsLogger
 ): void {
-  const provider = new ModelfilesProvider(context, log);
-
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('ollama-modelfiles', provider),
     vscode.commands.registerCommand('opilot.refreshModelfiles', () => provider.refresh()),
     vscode.commands.registerCommand('opilot.newModelfile', () => handleNewModelfile(provider.getFolderPath(), client)),
     vscode.commands.registerCommand('opilot.editModelfile', (item: ModelfileItem) =>
@@ -632,4 +651,19 @@ export function registerModelfileManager(
     vscode.languages.registerHoverProvider({ language: 'modelfile' }, createHoverProvider()),
     vscode.languages.registerCompletionItemProvider({ language: 'modelfile' }, createCompletionProvider(), ' ')
   );
+}
+
+/**
+ * @deprecated Use {@link registerModelfilesProvider} + {@link registerModelfileCommands} instead.
+ * Kept for backwards compatibility — callers that cannot split registration
+ * may still use this, but the view will suffer the async-gap "no data provider"
+ * error if the sidebar is visible on startup.
+ */
+export function registerModelfileManager(
+  context: vscode.ExtensionContext,
+  client: Ollama,
+  log?: DiagnosticsLogger
+): void {
+  const provider = registerModelfilesProvider(context, log);
+  registerModelfileCommands(context, provider, client, log);
 }
