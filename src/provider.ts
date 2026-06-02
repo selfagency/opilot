@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { normalizeOllamaChatChunk } from '@agentsy/core/normalizers';
 import type { ProcessedOutput } from '@agentsy/core/processor';
 import { LLMStreamProcessor } from '@agentsy/core/processor';
+import { normalizeOllamaChatChunk } from '@agentsy/providers/normalizers';
 import type { ChatResponse, Message, Ollama, ShowResponse } from 'ollama';
 import {
   type CancellationToken,

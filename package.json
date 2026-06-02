@@ -781,7 +781,8 @@
     ]
   },
   "dependencies": {
-    "@agentsy/core": "^0.1.0",
+    "@agentsy/core": "^0.2.0",
+    "@agentsy/providers": "^0.2.0",
     "ollama": "^0.6.3",
     "undici": "^8.3.0"
   },

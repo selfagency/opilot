@@ -15,8 +15,11 @@ importers:
   .:
     dependencies:
       '@agentsy/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.0
+        version: 0.2.0
+      '@agentsy/providers':
+        specifier: ^0.2.0
+        version: 0.2.0
       ollama:
         specifier: ^0.6.3
         version: 0.6.3
@@ -99,8 +102,11 @@ importers:
 
 packages:
 
-  '@agentsy/core@0.1.0':
-    resolution: {integrity: sha512-oZDMBSD4Ccty5+up5tupc9DczyqvvM2P8LCVjSX3VTIUc9PMmUTH2NDKKfCrfYKxBj0PYoX+5pw3F5b55Td9dw==}
+  '@agentsy/core@0.2.0':
+    resolution: {integrity: sha512-yZqWusdyyJ/mSQ3X63gaw/G5vjXE8tJg/8p73e1jGOWtcZLNakjSgL/GLs8SGuDUmHQWiIHuYGcggxfzDMbxtg==}
+
+  '@agentsy/providers@0.2.0':
+    resolution: {integrity: sha512-4hXZW5E/xNqzc0gqf5GaUh+F+gU9R/SBwlhqj80dwYV76JECJbo+7ZBLy7zffgAjjs16x9OputkSz8zx5+MgSA==}
 
   '@algolia/abtesting@1.15.2':
     resolution: {integrity: sha512-rF7vRVE61E0QORw8e2NNdnttcl3jmFMWS9B4hhdga12COe+lMa26bQLfcBn/Nbp9/AF/8gXdaRCPsVns3CnjsA==}
@@ -3793,7 +3799,9 @@ packages:
 
 snapshots:
 
-  '@agentsy/core@0.1.0': {}
+  '@agentsy/core@0.2.0': {}
+
+  '@agentsy/providers@0.2.0': {}
 
   '@algolia/abtesting@1.15.2':
     dependencies:
