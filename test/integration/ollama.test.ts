@@ -276,6 +276,16 @@ describe('Local model generate', () => {
 
 describe('Local model embeddings', () => {
   it('produces an embedding vector', async () => {
+    const info = await client.show({ model: LOCAL_MODEL });
+    const supportsEmbeddings = Array.isArray((info as Record<string, unknown>).capabilities)
+      ? (info as Record<string, unknown>).capabilities.some(cap => String(cap).toLowerCase().includes('embed'))
+      : false;
+
+    if (!supportsEmbeddings) {
+      console.log(`Local model ${LOCAL_MODEL} does not advertise embeddings — skipping.`);
+      return;
+    }
+
     const response = await client.embed({
       model: LOCAL_MODEL,
       input: 'Hello, world!'
