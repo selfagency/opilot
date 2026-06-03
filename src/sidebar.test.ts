@@ -218,7 +218,7 @@ describe('LocalModelsProvider', () => {
     };
     for (let i = 0; i < 3; i++) {
       // Fire ALL current listeners (simulates VS Code dispatching the event)
-      for (const l of [...onDidChangeConfigListeners]) {
+      for (const l of onDidChangeConfigListeners) {
         l(fakeEvent);
       }
       // Give time for any async operations
@@ -986,7 +986,7 @@ describe('LocalModelsProvider', () => {
     const downloaded = children.find((c: any) => c.label === 'llama3.2:1b');
     expect(downloaded?.contextValue).toBe('library-model-downloaded-variant');
     expect(downloaded).toBeDefined();
-    expect((downloaded?.iconPath as { id: string }).id).toBe('check');
+    expect((downloaded!.iconPath as { id: string }).id).toBe('check');
     libraryProvider.dispose();
   });
 
