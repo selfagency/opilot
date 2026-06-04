@@ -793,7 +793,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
-    "@copilotkit/aimock": "^1.27.3",
+    "@copilotkit/aimock": "^1.28.0",
     "@go-task/cli": "^3.51.1",
     "@octokit/rest": "^22.0.1",
     "@types/node": "^25.9.1",
