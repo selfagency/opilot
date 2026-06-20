@@ -789,7 +789,7 @@
     "@agentsy/core": "^0.2.0",
     "@agentsy/providers": "^0.2.0",
     "ollama": "^0.6.3",
-    "undici": "^8.3.0"
+    "undici": "^8.5.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
