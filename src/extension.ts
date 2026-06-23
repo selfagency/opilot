@@ -4,10 +4,12 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ChatResponse, Message, Ollama, Tool } from 'ollama';
 import * as vscode from 'vscode';
+
 import { nativeSdkChatOnce, nativeSdkStreamChat, openAiCompatChatOnce, openAiCompatStreamChat } from './chat-utils.js';
 import { getCloudOllamaClient, getOllamaAuthToken, getOllamaClient, getOllamaHost, testConnection } from './client.js';
 import { OllamaInlineCompletionProvider } from './completions.js';
-import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages } from './context-utils.js';
+import { compressToContext } from './compression.js';
+import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit } from './context-utils.js';
 import { createDiagnosticsLogger, type DiagnosticsLogger, getConfiguredLogLevel } from './diagnostics.js';
 import { reportError } from './error-handler.js';
 import {
@@ -22,7 +24,7 @@ import {
   dedupeXmlContextBlocksByTag,
   sanitizeNonStreamingModelOutput,
   splitLeadingXmlContextBlocks
-} from './formatting';
+} from './formatting.js';
 import {
   getModelOptionsForModel,
   loadModelSettings,
@@ -432,8 +434,8 @@ export async function handleChatRequest(
         getSetting<number>('maxContextTokens', 0)
       );
       if (maxInputTokens > 0) {
-        const truncated = truncateMessages(ollamaMessages as Message[], maxInputTokens);
-        ollamaMessages.splice(0, ollamaMessages.length, ...truncated);
+        const compressed = await compressToContext(ollamaMessages as Message[], maxInputTokens);
+        ollamaMessages.splice(0, ollamaMessages.length, ...compressed);
       }
 
       // Tool invocation loop — only when VS Code tools and an invocation token are available.
