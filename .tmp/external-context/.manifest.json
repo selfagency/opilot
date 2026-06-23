@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-06-04T10:45:00Z",
+  "libraries": {
+    "agentsy-context": {
+      "files": [
+        {
+          "filename": "compression-options.md",
+          "topic": "CompressionOptions Interface",
+          "tech_stack": "TypeScript",
+          "fetched": "2026-06-04T10:45:00Z",
+          "source": "Web search"
+        }
+      ]
+    }
+  }
+}

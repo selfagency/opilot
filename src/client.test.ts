@@ -249,6 +249,48 @@ describe('getOllamaHost / getOllamaAuthToken / getOllamaAuthHeaders / getCloudOl
 });
 
 // ---------------------------------------------------------------------------
+// fetchOllamaCloudCatalog
+// ---------------------------------------------------------------------------
+
+describe('fetchOllamaCloudCatalog', () => {
+  it('returns sorted unique names on success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ models: [{ name: 'llama3:8b' }, { name: 'gemma3:27b ' }, { name: 'llama3:8b' }] })
+      })
+    );
+
+    const { fetchOllamaCloudCatalog } = await import('./client.js');
+    const result = await fetchOllamaCloudCatalog('test-token');
+    expect(result).toEqual(['gemma3:27b', 'llama3:8b']);
+
+    vi.stubGlobal('fetch', undefined);
+  });
+
+  it('returns empty array on non-ok response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const { fetchOllamaCloudCatalog } = await import('./client.js');
+    const result = await fetchOllamaCloudCatalog('test-token');
+    expect(result).toEqual([]);
+
+    vi.stubGlobal('fetch', undefined);
+  });
+
+  it('returns empty array on fetch error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
+
+    const { fetchOllamaCloudCatalog } = await import('./client.js');
+    const result = await fetchOllamaCloudCatalog('test-token');
+    expect(result).toEqual([]);
+
+    vi.stubGlobal('fetch', undefined);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // testConnection
 // ---------------------------------------------------------------------------
 

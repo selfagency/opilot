@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  appendToBlockquote,
   createXmlStreamFilter,
   dedupeXmlContextBlocksByTag,
   formatXmlLikeResponseForDisplay,
@@ -250,5 +251,24 @@ describe('dedupeXmlContextBlocksByTag', () => {
 
     const deduped = dedupeXmlContextBlocksByTag(blocks);
     expect(deduped).toEqual(['<workspace_info>w1</workspace_info>', '<selection>s2</selection>']);
+  });
+});
+
+describe('appendToBlockquote', () => {
+  it('returns empty string for empty input', () => {
+    expect(appendToBlockquote('', true)).toBe('');
+    expect(appendToBlockquote('', false)).toBe('');
+  });
+
+  it('prefixes with > when atLineStart is true', () => {
+    expect(appendToBlockquote('hello', true)).toBe('> hello');
+  });
+
+  it('does not prefix when atLineStart is false', () => {
+    expect(appendToBlockquote('hello', false)).toBe('hello');
+  });
+
+  it('adds > after each newline', () => {
+    expect(appendToBlockquote('line1\nline2', true)).toBe('> line1\n> line2');
   });
 });

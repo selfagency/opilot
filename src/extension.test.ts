@@ -1918,6 +1918,10 @@ describe('handleChatRequest direct Ollama path (thinking + tools)', () => {
 });
 
 describe('handleConnectionTestFailure', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('shows error message and executes command when Open Settings selected', async () => {
     const showErrorMessage = vi.fn().mockResolvedValue('Open Settings');
     const executeCommand = vi.fn().mockResolvedValue(undefined);
@@ -3928,6 +3932,64 @@ describe('handleConnectionTestFailure Open Logs path', () => {
     if (platformDesc) {
       Object.defineProperty(process, 'platform', platformDesc);
     }
+  });
+
+  it('shows warning when getOllamaServerLogPath returns null (Linux)', async () => {
+    const platformDesc = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+    const showErrorMessage = vi.fn().mockResolvedValue('Open Logs');
+    const showWarningMessage = vi.fn();
+
+    vi.doMock('vscode', () => ({
+      TreeItem: class {
+        constructor(public label: string) {}
+      },
+      TreeItemCollapsibleState: { None: 0 },
+      EventEmitter: class {
+        event = {};
+        fire = vi.fn();
+      },
+      window: {
+        showErrorMessage,
+        showWarningMessage,
+        showInformationMessage: vi.fn(),
+        showTextDocument: vi.fn(),
+        createOutputChannel: vi.fn()
+      },
+      workspace: { openTextDocument: vi.fn(), getConfiguration: vi.fn(() => ({ get: vi.fn() })) },
+      commands: { executeCommand: vi.fn() },
+      Uri: { file: vi.fn() },
+      env: {}
+    }));
+
+    const ext = await import('./extension.js');
+    await ext.handleConnectionTestFailure('http://localhost:11434', { showErrorMessage, showWarningMessage });
+
+    expect(showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('not available on this platform'));
+
+    if (platformDesc) {
+      Object.defineProperty(process, 'platform', platformDesc);
+    }
+  });
+
+  it('suppresses popup when showConnectionFailurePopup is disabled', async () => {
+    vi.doMock('./settings.js', () => ({
+      getSetting: vi.fn((key: string, _default: unknown) => {
+        if (key === 'showConnectionFailurePopup') {
+          return false;
+        }
+        return _default;
+      }),
+      SETTINGS_NAMESPACE: 'opilot',
+      SUPPORTED_SETTING_KEYS: ['showConnectionFailurePopup']
+    }));
+
+    const showErrorMessage = vi.fn();
+    const ext = await import('./extension.js');
+    await ext.handleConnectionTestFailure('http://localhost:11434', { showErrorMessage });
+
+    expect(showErrorMessage).not.toHaveBeenCalled();
   });
 });
 
