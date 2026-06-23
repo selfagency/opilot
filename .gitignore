@@ -246,3 +246,4 @@ package-lock.json
 **/cache
 .remindb/memory.*
 .remindb/sessions
+.tmp
