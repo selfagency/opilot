@@ -82,7 +82,9 @@ describe('OllamaWebSearchTool', () => {
     (client as any).webSearch.mockRejectedValue(new Error('network error'));
     const tool = new OllamaWebSearchTool(client);
 
-    await expect(tool.invoke({ input: { query: 'test' } } as never, {} as never)).rejects.toThrow(/Web search failed/);
+    await expect(tool.invoke({ input: { query: 'test' } } as never, {} as never)).rejects.toThrow(
+      /failed: network error/
+    );
   });
 
   it('includes API key hint on auth errors', async () => {
@@ -132,7 +134,7 @@ describe('OllamaWebFetchTool', () => {
     const tool = new OllamaWebFetchTool(client);
 
     await expect(tool.invoke({ input: { url: 'https://example.com' } } as never, {} as never)).rejects.toThrow(
-      /Web fetch failed/
+      /failed: network error/
     );
   });
 

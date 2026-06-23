@@ -763,7 +763,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
                 `[client] cloud model ${runtimeModelId} failed with tools after think retry; retrying without tools`
               );
               effectiveTools = undefined;
-              response = await streamFn(undefined, undefined);
+              response = await streamFn(effectiveThink);
             } else {
               throw retryError;
             }
@@ -771,11 +771,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         } else if (isCloudModel && tools && this.isThinkingInternalServerError(innerError)) {
           this.outputChannel.warn(`[client] cloud model ${runtimeModelId} failed with tools; retrying without tools`);
           effectiveTools = undefined;
-          response = await streamFn(effectiveThink, undefined);
+          response = await streamFn(effectiveThink);
         } else if (tools && isToolsNotSupportedError(innerError)) {
           this.outputChannel.warn(`[client] model ${runtimeModelId} rejected tools; retrying without tools`);
           effectiveTools = undefined;
-          response = await streamFn(effectiveThink, undefined);
+          response = await streamFn(effectiveThink);
         } else {
           throw innerError;
         }
@@ -810,8 +810,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
         // but we check explicitly in case the error arrives as a regular chunk.
         const errorField = (chunk as { error?: unknown }).error;
         if (errorField) {
-          this.outputChannel.error(`[client] stream error: ${String(errorField)}`);
-          progress.report(new LanguageModelTextPart(`\n\n*Error: ${String(errorField)}*`));
+          const errorText =
+            typeof errorField === 'object' && errorField !== null ? JSON.stringify(errorField) : String(errorField);
+          this.outputChannel.error(`[client] stream error: ${errorText}`);
+          progress.report(new LanguageModelTextPart(`\n\n*Error: ${errorText}*`));
           emittedOutput ||= true;
           break;
         }
@@ -925,7 +927,6 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       if (final.content) {
         if (thinkingStarted && !contentStarted) {
           progress.report(new LanguageModelTextPart('\n\n\n\n'));
-          contentStarted = true;
           emittedOutput ||= true;
         }
         progress.report(new LanguageModelTextPart(final.content));
@@ -1611,7 +1612,7 @@ function extractTextFromTokenCountInput(text: string | LanguageModelChatRequestM
     .join('');
 }
 
-const THINKING_MODEL_PATTERN = /qwen3|qwq|deepseek-?r1|phi\d+-reasoning|kimi|gpt-oss|thinking/i;
+const THINKING_MODEL_PATTERN = /qwen3|qwq|deepseek-?r1|phi[0-9]+-reasoning|kimi|gpt-oss|thinking/i;
 
 export function isThinkingModelId(modelId: string): boolean {
   return THINKING_MODEL_PATTERN.test(modelId);

@@ -3,6 +3,28 @@ import * as vscode from 'vscode';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { getSetting } from './settings.js';
 
+function buildWebToolError(error: unknown, tool: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  const isAuthError =
+    normalized.includes('401') ||
+    normalized.includes('403') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('api key');
+  if (isAuthError) {
+    return new Error(
+      tool +
+        ' failed: ' +
+        message +
+        ' The ' +
+        tool +
+        ' API requires an API key. Configure one via `ollama login` or the OLLAMA_API_KEY environment variable.'
+    );
+  }
+  return new Error(`${tool} failed: ${message}`);
+}
+
 /**
  * Language model tool that calls Ollama's webSearch API.
  * Registered as `ollama_webSearch` for use in agent mode.
@@ -28,23 +50,12 @@ export class OllamaWebSearchTool implements vscode.LanguageModelTool<{ query: st
 
     try {
       const result: WebSearchResponse = await this.client.webSearch(query, { max_results });
-
       const text = JSON.stringify(result, null, 2);
       return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logChannel?.error(`[websearch] failed: ${message}`);
-      const normalized = message.toLowerCase();
-      const isAuthError =
-        normalized.includes('401') ||
-        normalized.includes('403') ||
-        normalized.includes('unauthorized') ||
-        normalized.includes('forbidden') ||
-        normalized.includes('api key');
-      const hint = isAuthError
-        ? 'The Ollama web search API requires an API key. Configure one via `ollama login` or the OLLAMA_API_KEY environment variable.'
-        : '';
-      throw new Error(`Web search failed: ${message}${hint ? ` ${hint}` : ''}`);
+      throw buildWebToolError(error, 'web search');
     }
   }
 }
@@ -74,23 +85,12 @@ export class OllamaWebFetchTool implements vscode.LanguageModelTool<{ url: strin
 
     try {
       const result: WebFetchResponse = await this.client.webFetch(url);
-
       const text = JSON.stringify(result, null, 2);
       return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logChannel?.error(`[webfetch] failed: ${message}`);
-      const normalized = message.toLowerCase();
-      const isAuthError =
-        normalized.includes('401') ||
-        normalized.includes('403') ||
-        normalized.includes('unauthorized') ||
-        normalized.includes('forbidden') ||
-        normalized.includes('api key');
-      const hint = isAuthError
-        ? 'The Ollama web fetch API requires an API key. Configure one via `ollama login` or the OLLAMA_API_KEY environment variable.'
-        : '';
-      throw new Error(`Web fetch failed: ${message}${hint ? ` ${hint}` : ''}`);
+      throw buildWebToolError(error, 'web fetch');
     }
   }
 }
