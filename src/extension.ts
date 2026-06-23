@@ -466,7 +466,7 @@ export async function handleChatRequest(
                   modelId,
                   messages: ollamaMessages as Message[],
                   tools: ollamaTools,
-                  shouldThink: shouldThinkInToolLoop,
+                  think: shouldThinkInToolLoop,
                   effectiveClient,
                   // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
                   baseUrl: baseUrl!,
@@ -478,7 +478,7 @@ export async function handleChatRequest(
                   modelId,
                   messages: ollamaMessages as Message[],
                   tools: ollamaTools,
-                  shouldThink: shouldThinkInToolLoop,
+                  think: shouldThinkInToolLoop,
                   effectiveClient,
                   modelOptions
                 }));
@@ -595,7 +595,7 @@ export async function handleChatRequest(
             ? openAiCompatChatOnce({
                 modelId,
                 messages: xmlConversation,
-                shouldThink: false,
+                think: false,
                 effectiveClient,
                 // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
                 baseUrl: baseUrl!,
@@ -606,7 +606,7 @@ export async function handleChatRequest(
             : nativeSdkChatOnce({
                 modelId,
                 messages: xmlConversation,
-                shouldThink: false,
+                think: false,
                 effectiveClient,
                 modelOptions
               }));
@@ -691,7 +691,7 @@ export async function handleChatRequest(
             openAiCompatStreamChat({
               modelId,
               messages: ollamaMessages as Message[],
-              shouldThink: think,
+              think,
               effectiveClient,
               // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
               baseUrl: baseUrl!,
@@ -703,7 +703,7 @@ export async function handleChatRequest(
             nativeSdkStreamChat({
               modelId,
               messages: ollamaMessages as Message[],
-              shouldThink: think,
+              think,
               effectiveClient,
               modelOptions
             });
@@ -837,7 +837,7 @@ export async function handleChatRequest(
           ? openAiCompatChatOnce({
               modelId,
               messages: ollamaMessages as Message[],
-              shouldThink,
+              think: shouldThink,
               effectiveClient,
               // biome-ignore lint/style/noNonNullAssertion: validated in enclosing if-block
               baseUrl: baseUrl!,
@@ -848,7 +848,7 @@ export async function handleChatRequest(
           : nativeSdkChatOnce({
               modelId,
               messages: ollamaMessages as Message[],
-              shouldThink,
+              think: shouldThink,
               effectiveClient,
               modelOptions
             }));

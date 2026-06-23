@@ -1,5 +1,5 @@
 import type { ChatResponse, Message, Ollama, Options, Tool } from 'ollama';
-import type { ModelOptionOverrides } from './model-settings.js';
+import type { ModelOptionOverrides, ThinkValue } from './model-settings.js';
 import { chatCompletionsOnce, initiateChatCompletionsStream } from './openai-compat.js';
 import { ollamaMessagesToOpenAICompat, ollamaToolsToOpenAICompat } from './openai-compat-mapping.js';
 
@@ -94,7 +94,7 @@ function buildOpenAiCompatRequest(params: {
   modelId: string;
   messages: Message[];
   tools?: Tool[];
-  shouldThink: boolean;
+  think?: ThinkValue;
   modelOptions?: ModelOptionOverrides;
 }) {
   const { temperature, top_p, num_predict, top_k, num_ctx, think_budget } = params.modelOptions ?? {};
@@ -102,7 +102,9 @@ function buildOpenAiCompatRequest(params: {
     model: params.modelId,
     messages: ollamaMessagesToOpenAICompat(params.messages),
     tools: ollamaToolsToOpenAICompat(params.tools),
-    ...(params.shouldThink ? { think: true } : {}),
+    ...(params.think !== undefined && params.think !== false ? { think: params.think } : {}),
+    // Forward reasoning_effort for OpenAI-compat requests using string effort levels
+    ...(typeof params.think === 'string' ? { reasoning_effort: params.think } : {}),
     ...(temperature === undefined ? {} : { temperature }),
     ...(top_p === undefined ? {} : { top_p }),
     ...(num_predict === undefined ? {} : { max_tokens: num_predict }),
@@ -116,7 +118,7 @@ export async function openAiCompatStreamChat(params: {
   modelId: string;
   messages: Message[];
   tools?: Tool[];
-  shouldThink: boolean;
+  think?: ThinkValue;
   effectiveClient: Ollama;
   baseUrl: string;
   authToken?: string;
@@ -159,7 +161,7 @@ export async function openAiCompatStreamChat(params: {
       messages: params.messages,
       stream: true,
       ...(params.tools ? { tools: params.tools } : {}),
-      ...(params.shouldThink ? { think: true } : {}),
+      ...(params.think !== undefined && params.think !== false ? { think: params.think } : {}),
       ...(sdkOptions ? { options: sdkOptions } : {})
     });
   }
@@ -169,7 +171,7 @@ export async function openAiCompatChatOnce(params: {
   modelId: string;
   messages: Message[];
   tools?: Tool[];
-  shouldThink: boolean;
+  think?: ThinkValue;
   effectiveClient: Ollama;
   baseUrl: string;
   authToken?: string;
@@ -207,7 +209,7 @@ export async function openAiCompatChatOnce(params: {
       messages: params.messages,
       stream: false,
       ...(params.tools ? { tools: params.tools } : {}),
-      ...(params.shouldThink ? { think: true } : {}),
+      ...(params.think !== undefined && params.think !== false ? { think: params.think } : {}),
       ...(sdkOptions ? { options: sdkOptions } : {})
     })) as ChatResponse;
   }
@@ -217,7 +219,7 @@ export function nativeSdkStreamChat(params: {
   modelId: string;
   messages: Message[];
   tools?: Tool[];
-  shouldThink: boolean;
+  think?: ThinkValue;
   effectiveClient: Ollama;
   modelOptions?: ModelOptionOverrides;
 }): Promise<AsyncIterable<ChatResponse>> {
@@ -227,7 +229,7 @@ export function nativeSdkStreamChat(params: {
     messages: params.messages,
     stream: true,
     ...(params.tools ? { tools: params.tools } : {}),
-    ...(params.shouldThink ? { think: true } : {}),
+    ...(params.think !== undefined && params.think !== false ? { think: params.think } : {}),
     ...(sdkOptions ? { options: sdkOptions } : {})
   });
 }
@@ -236,7 +238,7 @@ export async function nativeSdkChatOnce(params: {
   modelId: string;
   messages: Message[];
   tools?: Tool[];
-  shouldThink: boolean;
+  think?: ThinkValue;
   effectiveClient: Ollama;
   modelOptions?: ModelOptionOverrides;
 }): Promise<ChatResponse> {
@@ -246,7 +248,7 @@ export async function nativeSdkChatOnce(params: {
     messages: params.messages,
     stream: false,
     ...(params.tools ? { tools: params.tools } : {}),
-    ...(params.shouldThink ? { think: true } : {}),
+    ...(params.think !== undefined && params.think !== false ? { think: params.think } : {}),
     ...(sdkOptions ? { options: sdkOptions } : {})
   })) as ChatResponse;
 }

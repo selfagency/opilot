@@ -2842,6 +2842,11 @@ describe('isThinkingModelId', () => {
     expect(isThinkingModelId('kimi-k2:latest')).toBe(true);
   });
 
+  it('returns true for gpt-oss models', () => {
+    expect(isThinkingModelId('gpt-oss')).toBe(true);
+    expect(isThinkingModelId('gpt-oss:20b')).toBe(true);
+  });
+
   it('returns true for models with "thinking" in the name', () => {
     expect(isThinkingModelId('some-model-thinking:cloud')).toBe(true);
     expect(isThinkingModelId('mythinking-model:latest')).toBe(true);

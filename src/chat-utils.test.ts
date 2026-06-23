@@ -102,7 +102,7 @@ describe('nativeSdkStreamChat', () => {
     await nativeSdkStreamChat({
       modelId: 'test-model',
       messages: [{ role: 'user', content: 'hi' }] as Message[],
-      shouldThink: true,
+      think: true,
       effectiveClient: client,
       modelOptions: { temperature: 0.5, num_ctx: 2048 }
     });
@@ -126,7 +126,7 @@ describe('nativeSdkStreamChat', () => {
     await nativeSdkStreamChat({
       modelId: 'test-model',
       messages: [{ role: 'user', content: 'hi' }] as Message[],
-      shouldThink: false,
+      think: false,
       effectiveClient: client
     });
     const args = chat.mock.calls[0][0] as Record<string, unknown>;
@@ -142,7 +142,7 @@ describe('nativeSdkChatOnce', () => {
     await nativeSdkChatOnce({
       modelId: 'test-model',
       messages: [{ role: 'user', content: 'hi' }] as Message[],
-      shouldThink: false,
+      think: false,
       effectiveClient: client,
       tools: [{ type: 'function', function: { name: 'foo', description: '', parameters: {} } }],
       modelOptions: { top_k: 20 }
@@ -177,7 +177,7 @@ describe('openAiCompatStreamChat', () => {
     const response = await openAiCompatStreamChat({
       modelId: 'test-model',
       messages: [{ role: 'user', content: 'hi' }] as Message[],
-      shouldThink: true,
+      think: true,
       effectiveClient: {} as never,
       baseUrl: 'http://localhost:11434',
       authToken: 'test-token'
@@ -207,7 +207,7 @@ describe('openAiCompatStreamChat', () => {
     const response = await openAiCompatStreamChat({
       modelId: 'test-model',
       messages: [{ role: 'user', content: 'hi' }] as Message[],
-      shouldThink: false,
+      think: false,
       effectiveClient: { chat: fallbackChat } as never,
       baseUrl: 'http://localhost:11434',
       onOpenAiCompatFallback: onFallback
@@ -243,7 +243,7 @@ describe('openAiCompatChatOnce', () => {
     const result = await openAiCompatChatOnce({
       modelId: 'test-model',
       messages: [{ role: 'user', content: 'hi' }] as Message[],
-      shouldThink: true,
+      think: true,
       effectiveClient: {} as never,
       baseUrl: 'http://localhost:11434'
     });
@@ -262,7 +262,7 @@ describe('openAiCompatChatOnce', () => {
     const result = await openAiCompatChatOnce({
       modelId: 'test-model',
       messages: [{ role: 'user', content: 'hi' }] as Message[],
-      shouldThink: false,
+      think: false,
       effectiveClient: { chat: fallbackChat } as never,
       baseUrl: 'http://localhost:11434',
       onOpenAiCompatFallback: onFallback

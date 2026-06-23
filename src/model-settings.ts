@@ -13,6 +13,14 @@ export interface ModelSettingsContext {
 }
 
 /**
+ * Thinking effort level.
+ * - `true` / `false`: standard boolean toggle (most models)
+ * - `'low' | 'medium' | 'high'`: effort level for GPT-OSS and similar models
+ * - `undefined`: model default
+ */
+export type ThinkValue = boolean | 'low' | 'medium' | 'high';
+
+/**
  * Per-model generation options that can be persisted per model ID.
  * All fields are optional; only set values override Ollama defaults.
  */
@@ -20,7 +28,7 @@ export interface ModelOptions {
   num_ctx?: number;
   num_predict?: number;
   temperature?: number;
-  think?: boolean;
+  think?: ThinkValue;
   think_budget?: number;
   top_k?: number;
   top_p?: number;
@@ -59,7 +67,12 @@ function sanitizeModelOptions(value: unknown): ModelOptionOverrides {
   if (isFiniteNumber(candidate.num_predict)) {
     sanitized.num_predict = candidate.num_predict;
   }
-  if (typeof candidate.think === 'boolean') {
+  if (
+    typeof candidate.think === 'boolean' ||
+    candidate.think === 'low' ||
+    candidate.think === 'medium' ||
+    candidate.think === 'high'
+  ) {
     sanitized.think = candidate.think;
   }
   if (isFiniteNumber(candidate.think_budget)) {
