@@ -837,11 +837,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             if (output.content) {
               // When using the native thinking part, VS Code handles the visual
               // separation between thinking and response; no manual separator needed.
-              if (thinkingStarted && !contentStarted && !useNativeThinkingPart) {
-                progress.report(new LanguageModelTextPart('\n\n\n\n'));
-                contentStarted = true;
-                emittedOutput ||= true;
-              } else if (thinkingStarted && !contentStarted) {
+              if (thinkingStarted && !contentStarted) {
+                if (!useNativeThinkingPart) {
+                  progress.report(new LanguageModelTextPart('\n\n\n\n'));
+                  emittedOutput ||= true;
+                }
                 contentStarted = true;
               }
               this.outputChannel.debug(`[client] streaming chunk: ${output.content.slice(0, 50)}`);
