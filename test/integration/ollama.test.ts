@@ -540,7 +540,7 @@ describe('XML context tag extraction', () => {
     XML_CONTEXT_TAG_RE.lastIndex = 0;
     while (true) {
       const match = XML_CONTEXT_TAG_RE.exec(remaining);
-      if (!match || match.index !== 0) {
+      if (match?.index !== 0) {
         break;
       }
       blocks.push(match[0].trim());
