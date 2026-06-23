@@ -15,9 +15,19 @@ export default defineConfig({
     restoreMocks: true,
     unstubGlobals: true,
     setupFiles: ['./src/test/setup.ts'],
-    exclude: ['node_modules/**', 'dist/**', 'out/**', 'scripts/**', 'test/integration/**'],
+    exclude: [
+      'node_modules/**',
+      '.opencode/**',
+      'dist/**',
+      'out/**',
+      'scripts/**',
+      'test/integration/**',
+      'test/aimock-examples.test.ts',
+      'test/extension/**'
+    ],
     coverage: {
-      exclude: ['scripts/**', '**/test/**']
+      exclude: ['scripts/**', '**/test/**'],
+      reporter: ['text', 'html', 'clover']
     }
   }
 });
