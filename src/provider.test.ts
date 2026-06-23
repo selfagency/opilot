@@ -282,6 +282,41 @@ describe('OllamaChatModelProvider utility flows', () => {
     );
     expect(count).toBeGreaterThan(0);
   });
+
+  it('returns 0 for empty text', async () => {
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger()
+    );
+
+    const count = await provider.provideTokenCount(
+      { id: 'ollama:smollm:135m' } as unknown as LanguageModelChatInformation,
+      '',
+      {} as unknown as CancellationToken
+    );
+    expect(count).toBe(0);
+  });
+
+  it('falls back to heuristic on fetch failure', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network error'));
+
+    const provider = new OllamaChatModelProvider(
+      makeContext(),
+      { list: vi.fn(), show: vi.fn() } as unknown as Ollama,
+      makeLogger()
+    );
+
+    const count = await provider.provideTokenCount(
+      { id: 'ollama:smollm:135m' } as unknown as LanguageModelChatInformation,
+      '12345678',
+      {} as unknown as CancellationToken
+    );
+    expect(count).toBe(2);
+
+    globalThis.fetch = originalFetch;
+  });
 });
 
 describe('OllamaChatModelProvider model detection', () => {
