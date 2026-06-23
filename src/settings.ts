@@ -17,7 +17,8 @@ export const SUPPORTED_SETTING_KEYS = [
   'repetitionDetection',
   'maxContextTokens',
   'showConnectionFailurePopup',
-  'experimental.nativeThinkingPart'
+  'experimental.nativeThinkingPart',
+  'experimental.webSearch'
 ] as const;
 
 type SupportedSettingKey = (typeof SUPPORTED_SETTING_KEYS)[number];

@@ -38,11 +38,11 @@ import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit } from './co
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './error-handler.js';
 import {
+  appendToBlockquote,
   dedupeXmlContextBlocksByTag,
   sanitizeNonStreamingModelOutput,
   splitLeadingXmlContextBlocks
-} from './formatting';
-import { appendToBlockquote } from './formatting.js';
+} from './formatting.js';
 import {
   getModelOptionsForModel,
   type ModelOptionOverrides,

@@ -433,6 +433,11 @@
           "default": false,
           "markdownDescription": "**EXPERIMENTAL** — Use VS Code's native expandable thinking widget instead of the inline blockquote for reasoning content (requires VS Code proposed API support)."
         },
+        "opilot.experimental.webSearch": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "**EXPERIMENTAL** — Enable web search and web fetch tools for use in agent mode. Tools are registered as `@ollama webSearch` and `@ollama webFetch`. Requires an [Ollama API key](https://ollama.com/settings/keys) and authorization must be configured via `ollama login` or the `OLLAMA_API_KEY` environment variable."
+        },
         "opilot.showConnectionFailurePopup": {
           "type": "boolean",
           "default": true,
