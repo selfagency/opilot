@@ -44,6 +44,7 @@ import {
   isToolsNotSupportedError,
   normalizeToolParameters
 } from './tool-utils.js';
+import { registerOllamaWebTools } from './web-search-tools.js';
 
 const LANGUAGE_MODEL_VENDOR = 'selfagency-opilot';
 const PROVIDER_MODEL_ID_PREFIX = 'ollama:';
@@ -1300,6 +1301,9 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, completionProvider)
   );
+
+  // Register LM tools for agent mode (web search, web fetch)
+  registerOllamaWebTools(context, client, diagnostics);
 
   // Test connection to Ollama server on startup (non-blocking)
   void (async () => {

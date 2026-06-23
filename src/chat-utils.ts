@@ -66,8 +66,8 @@ export function mapOpenAiToolCallsToOllamaLike(toolCalls: unknown):
  * Returns undefined when no overrides are set so callers can omit the field entirely.
  */
 export function buildSdkOptions(overrides: ModelOptionOverrides): Partial<Options> | undefined {
-  const { temperature, top_p, top_k, num_ctx, num_predict, think_budget } = overrides;
-  const opts: Record<string, number> = {};
+  const { temperature, top_p, top_k, num_ctx, num_predict, think_budget, seed, stop } = overrides;
+  const opts: Record<string, unknown> = {};
   if (temperature !== undefined) {
     opts.temperature = temperature;
   }
@@ -87,6 +87,12 @@ export function buildSdkOptions(overrides: ModelOptionOverrides): Partial<Option
   if (think_budget !== undefined) {
     opts.think_budget = think_budget;
   }
+  if (seed !== undefined) {
+    opts.seed = seed;
+  }
+  if (stop !== undefined) {
+    opts.stop = stop;
+  }
   return Object.keys(opts).length > 0 ? (opts as Partial<Options>) : undefined;
 }
 
@@ -97,7 +103,18 @@ function buildOpenAiCompatRequest(params: {
   think?: ThinkValue;
   modelOptions?: ModelOptionOverrides;
 }) {
-  const { temperature, top_p, num_predict, top_k, num_ctx, think_budget } = params.modelOptions ?? {};
+  const {
+    temperature,
+    top_p,
+    num_predict,
+    top_k,
+    num_ctx,
+    think_budget,
+    seed,
+    stop,
+    frequency_penalty,
+    presence_penalty
+  } = params.modelOptions ?? {};
   return {
     model: params.modelId,
     messages: ollamaMessagesToOpenAICompat(params.messages),
@@ -110,7 +127,11 @@ function buildOpenAiCompatRequest(params: {
     ...(num_predict === undefined ? {} : { max_tokens: num_predict }),
     ...(top_k === undefined ? {} : { top_k }),
     ...(num_ctx === undefined ? {} : { num_ctx }),
-    ...(think_budget === undefined ? {} : { think_budget })
+    ...(think_budget === undefined ? {} : { think_budget }),
+    ...(seed === undefined ? {} : { seed }),
+    ...(stop === undefined ? {} : { stop }),
+    ...(frequency_penalty === undefined ? {} : { frequency_penalty }),
+    ...(presence_penalty === undefined ? {} : { presence_penalty })
   };
 }
 

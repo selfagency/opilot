@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// Mock web search tools so tests don't need vscode.lm.registerTool
+vi.mock('./web-search-tools.js', () => ({
+  registerOllamaWebTools: vi.fn()
+}));
+
 describe('activate', () => {
   beforeEach(() => {
     vi.resetModules();

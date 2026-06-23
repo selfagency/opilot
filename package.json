@@ -780,6 +780,60 @@
       ]
     }
   },
+  "languageModelTools": [
+    {
+      "name": "ollama_webSearch",
+      "toolReferenceName": "webSearch",
+      "displayName": "Ollama Web Search",
+      "icon": "$(search)",
+      "userDescription": "Search the web for current information using Ollama's web search API.",
+      "modelDescription": "Search the web for the latest information on a topic. Use this tool when the user asks about current events, recent developments, or any topic that may require up-to-date information beyond the model's training data. Requires an Ollama API key.",
+      "tags": [
+        "opilot-ollama"
+      ],
+      "canBeReferencedInPrompt": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "The search query string."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum number of search results to return (default 5, max 10)."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "ollama_webFetch",
+      "toolReferenceName": "webFetch",
+      "displayName": "Ollama Web Fetch",
+      "icon": "$(link)",
+      "userDescription": "Fetch the content of a web page using Ollama's web fetch API.",
+      "modelDescription": "Fetch and return the content of a single web page. Use this tool when the user references a specific URL or when more detailed information is needed from a web page. Requires an Ollama API key.",
+      "tags": [
+        "opilot-ollama"
+      ],
+      "canBeReferencedInPrompt": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The URL of the web page to fetch."
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    }
+  ],
   "activationEvents": [
     "onChatParticipant:opilot.ollama",
     "onLanguageModelChatProvider:selfagency-opilot",
