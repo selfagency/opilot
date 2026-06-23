@@ -75,6 +75,11 @@ export async function handleConnectionTestFailure(
   const commands = commandsApi ?? vscode.commands;
   const safeHost = redactDisplayHost(host);
 
+  // Allow users to suppress the popup and rely on the status bar indicator alone.
+  if (!getSetting<boolean>('showConnectionFailurePopup', true)) {
+    return;
+  }
+
   const selection = await window.showErrorMessage(
     `Cannot connect to Ollama server at ${safeHost}. Please check your ${SETTINGS_NAMESPACE}.host / ollama.host settings and authentication token.`,
     'Open Settings',

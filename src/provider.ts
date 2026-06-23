@@ -5,6 +5,7 @@ import type { ProcessedOutput } from '@agentsy/core/processor';
 import { LLMStreamProcessor } from '@agentsy/core/processor';
 import { normalizeOllamaChatChunk } from '@agentsy/providers/normalizers';
 import type { ChatResponse, Message, Ollama, ShowResponse } from 'ollama';
+import * as vscode from 'vscode';
 import {
   type CancellationToken,
   EventEmitter,
@@ -32,7 +33,8 @@ import {
   getOllamaClient,
   getOllamaHost
 } from './client';
-import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit, truncateMessages } from './context-utils.js';
+import { compressToContext } from './compression.js';
+import { BASE_SYSTEM_PROMPT, detectsRepetition, resolveContextLimit } from './context-utils.js';
 import type { DiagnosticsLogger } from './diagnostics.js';
 import { reportError } from './error-handler.js';
 import {
@@ -590,7 +592,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     // Convert VS Code messages to Ollama format, stripping images for non-vision models
     const supportsVision = this.visionByModelId.get(model.id) ?? this.visionByModelId.get(runtimeModelId) ?? false;
     const rawMessages = this.toOllamaMessages(messages, supportsVision) as Message[];
-    const effectiveMessages = this.ensurePromptMessage(rawMessages, options);
+    const effectiveMessages = rawMessages;
     this.outputChannel.info(
       `[context] before truncation: ${effectiveMessages.length} messages, ${JSON.stringify(effectiveMessages, null, 2).length} chars, model.maxInputTokens=${model.maxInputTokens}`
     );
@@ -603,7 +605,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       modelOptions.num_ctx,
       getSetting<number>('maxContextTokens', 0)
     );
-    const ollamaMessages = truncateMessages(effectiveMessages, maxInputTokens);
+    const ollamaMessages = await compressToContext(effectiveMessages, maxInputTokens);
     this.outputChannel.info(
       `[context] after truncation: ${ollamaMessages.length} messages, ${JSON.stringify(ollamaMessages, null, 2).length} chars`
     );
@@ -642,6 +644,10 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
     // Check if user wants to hide thinking content (only show header)
     const hideThinkingContent = getSetting<boolean>('hideThinkingContent', false);
+
+    // EXPERIMENTAL: Use VS Code's native collapsible "Thinking" part via the
+    // proposed LanguageModelThinkingPart API instead of the manual blockquote.
+    const useNativeThinkingPart = getSetting<boolean>('experimental.nativeThinkingPart', false);
 
     try {
       let response: AsyncIterable<ChatResponse>;
@@ -771,16 +777,24 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
 
         // Handle thinking tokens (reasoning phase) — Ollama server pre-splits these
         if (chunk.message?.thinking) {
-          if (!thinkingStarted) {
+          const thinkingPartValue = chunk.message.thinking;
+          if (!(thinkingStarted || useNativeThinkingPart)) {
             progress.report(new LanguageModelTextPart('\n\n> 💭 **Thinking**\n>\n'));
             thinkingStarted = true;
             thinkingLineStart = true;
             emittedOutput ||= true;
+          } else if (!thinkingStarted) {
+            thinkingStarted = true;
+            emittedOutput ||= true;
           }
-          if (!hideThinkingContent) {
-            const formatted = appendToBlockquote(chunk.message.thinking, thinkingLineStart);
+          if (!(hideThinkingContent || useNativeThinkingPart)) {
+            const formatted = appendToBlockquote(thinkingPartValue, thinkingLineStart);
             thinkingLineStart = false;
             progress.report(new LanguageModelTextPart(formatted));
+            emittedOutput ||= true;
+          } else if (useNativeThinkingPart) {
+            // biome-ignore lint/suspicious/noExplicitAny: experimental proposed API
+            progress.report(new (vscode as any).LanguageModelThinkingPart(thinkingPartValue));
             emittedOutput ||= true;
           }
         }
@@ -793,7 +807,7 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
             const output: ProcessedOutput = processor.process(normalized.chunk);
 
             // Handle thinking extracted from <think> tags in content
-            if (output.thinking) {
+            if (output.thinking && !useNativeThinkingPart) {
               if (!thinkingStarted) {
                 progress.report(new LanguageModelTextPart('\n\n> 💭 **Thinking**\n>\n'));
                 thinkingStarted = true;
@@ -801,19 +815,34 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
                 emittedOutput ||= true;
               }
               if (!hideThinkingContent) {
+                // When thinkingLineStart is false the thinking content from the
+                // processor may not begin with a blockquote marker, so prefix with
+                // `> ` to keep it inside the blockquote block.
                 const formatted = appendToBlockquote(output.thinking, thinkingLineStart);
                 thinkingLineStart = false;
                 progress.report(new LanguageModelTextPart(formatted));
                 emittedOutput ||= true;
               }
+            } else if (output.thinking && useNativeThinkingPart) {
+              if (!thinkingStarted) {
+                thinkingStarted = true;
+                emittedOutput ||= true;
+              }
+              // biome-ignore lint/suspicious/noExplicitAny: experimental proposed API
+              progress.report(new (vscode as any).LanguageModelThinkingPart(output.thinking));
+              emittedOutput ||= true;
             }
 
             // Handle content (already XML-scrubbed by LLMStreamProcessor)
             if (output.content) {
-              if (thinkingStarted && !contentStarted) {
-                progress.report(new LanguageModelTextPart('\n\n'));
+              // When using the native thinking part, VS Code handles the visual
+              // separation between thinking and response; no manual separator needed.
+              if (thinkingStarted && !contentStarted && !useNativeThinkingPart) {
+                progress.report(new LanguageModelTextPart('\n\n\n\n'));
                 contentStarted = true;
                 emittedOutput ||= true;
+              } else if (thinkingStarted && !contentStarted) {
+                contentStarted = true;
               }
               this.outputChannel.debug(`[client] streaming chunk: ${output.content.slice(0, 50)}`);
               progress.report(new LanguageModelTextPart(output.content));
@@ -853,6 +882,11 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
       // Flush any remaining buffered content from the processor
       const final: ProcessedOutput = processor.flush();
       if (final.content) {
+        if (thinkingStarted && !contentStarted) {
+          progress.report(new LanguageModelTextPart('\n\n\n\n'));
+          contentStarted = true;
+          emittedOutput ||= true;
+        }
         progress.report(new LanguageModelTextPart(final.content));
         emittedOutput ||= true;
       }
@@ -1326,116 +1360,6 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     };
   }
 
-  private ensurePromptMessage(messages: Message[], options: ProvideLanguageModelChatResponseOptions): Message[] {
-    const normalizedLastUser = this.extractMeaningfulUserText(messages);
-    if (normalizedLastUser) {
-      return messages;
-    }
-
-    const fallbackPrompt = this.extractPromptFromOptions(options);
-    if (!fallbackPrompt) {
-      return messages;
-    }
-
-    this.outputChannel.warn('[context] no meaningful user prompt in messages; appending fallback prompt from options');
-
-    return [...messages, { role: 'user', content: fallbackPrompt } as Message];
-  }
-
-  private extractMeaningfulUserText(messages: Message[]): string {
-    const userMessages = messages
-      .filter(m => m.role === 'user')
-      .map(m => (typeof m.content === 'string' ? m.content : ''));
-    const combined = userMessages.join('\n').trim();
-    if (!combined) {
-      return '';
-    }
-
-    const stripped = combined
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // Ignore known scaffolding blocks that can appear without the actual ask
-    const onlyScaffolding =
-      /^(No user preferences|Session memory|I am working in a workspace|The user's current OS)/i.test(stripped);
-    return onlyScaffolding ? '' : stripped;
-  }
-
-  private extractPromptFromOptions(options: ProvideLanguageModelChatResponseOptions): string {
-    const sources: unknown[] = [];
-    if (options.modelOptions) {
-      sources.push(options.modelOptions as unknown);
-    }
-    sources.push(options as unknown);
-
-    for (const source of sources) {
-      const prompt = this.deepFindPromptString(source, 0, new Set());
-      if (prompt) {
-        return prompt;
-      }
-    }
-
-    return '';
-  }
-
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recursive prompt search intentionally walks arbitrary nested inputs.
-  private deepFindPromptString(value: unknown, depth: number, seen: Set<unknown>): string {
-    if (depth > 5 || value == null) {
-      return '';
-    }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return '';
-      }
-      const isLikelyXmlScaffold = trimmed.startsWith('<') && trimmed.includes('>');
-      const looksLikeNaturalPrompt = /\s/.test(trimmed) || /[?.!,:;]/.test(trimmed);
-      return isLikelyXmlScaffold || !looksLikeNaturalPrompt ? '' : trimmed;
-    }
-    if (typeof value !== 'object') {
-      return '';
-    }
-    if (seen.has(value)) {
-      return '';
-    }
-    seen.add(value);
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        const found = this.deepFindPromptString(item, depth + 1, seen);
-        if (found) {
-          return found;
-        }
-      }
-      return '';
-    }
-
-    const record = value as Record<string, unknown>;
-    const priorityKeys = ['prompt', 'userPrompt', 'query', 'input', 'text', 'message'];
-    for (const key of priorityKeys) {
-      if (key in record) {
-        const found = this.deepFindPromptString(record[key], depth + 1, seen);
-        if (found) {
-          return found;
-        }
-      }
-    }
-
-    const ignoredTraversalKeys = new Set(['toolMode', 'tools']);
-    for (const [key, child] of Object.entries(record)) {
-      if (ignoredTraversalKeys.has(key)) {
-        continue;
-      }
-      const found = this.deepFindPromptString(child, depth + 1, seen);
-      if (found) {
-        return found;
-      }
-    }
-
-    return '';
-  }
-
   /**
    * Generate a VS Code tool call ID (9 alphanumeric characters)
    */
@@ -1473,38 +1397,81 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
     this.reverseToolCallIdMap.clear();
   }
 
+  /** Bounded FIFO cache for token counts, keyed by `${modelId}::${content}`. */
+  private static readonly TOKEN_COUNT_CACHE_MAX = 1000;
+  private readonly tokenCountCache = new Map<string, number>();
+
   /**
-   * Provide token count estimate
+   * Provide token count estimate using Ollama's `/api/tokenize` with a
+   * chars/4 heuristic fallback.
    */
   provideTokenCount(
-    _model: LanguageModelChatInformation,
+    model: LanguageModelChatInformation,
     text: string | LanguageModelChatRequestMessage,
-    _token: CancellationToken
+    token: CancellationToken
   ): Promise<number> {
-    // Ollama doesn't have a public tokenize endpoint, so use a heuristic
-    // Estimate: ~1 token per 4 characters (varies by model, this is approximate)
-    let textContent = '';
-    if (typeof text === 'string') {
-      textContent = text;
-    } else {
-      // Extract text from message parts
-      textContent = text.content
-        .map(part => {
-          if (part instanceof LanguageModelTextPart) {
-            return part.value;
-          }
-          if (part instanceof LanguageModelToolCallPart) {
-            return part.name + JSON.stringify(part.input);
-          }
-          if (part instanceof LanguageModelToolResultPart) {
-            return String(part.content);
-          }
-          return '';
-        })
-        .join('');
+    const textContent = extractTextFromTokenCountInput(text);
+    if (!textContent) {
+      return Promise.resolve(0);
     }
 
-    return Promise.resolve(Math.ceil(textContent.length / 4));
+    const runtimeModelId = this.toRuntimeModelId(model.id);
+    const cacheKey = `${runtimeModelId}::${textContent}`;
+    const cached = this.tokenCountCache.get(cacheKey);
+    if (cached !== undefined) {
+      return Promise.resolve(cached);
+    }
+
+    return this.tokenizeWithFallback(runtimeModelId, textContent, cacheKey, token);
+  }
+
+  private async tokenizeWithFallback(
+    runtimeModelId: string,
+    textContent: string,
+    cacheKey: string,
+    token: CancellationToken
+  ): Promise<number> {
+    try {
+      if (token.isCancellationRequested) {
+        return this.cacheAndReturn(cacheKey, this.heuristicTokenCount(textContent));
+      }
+
+      const host = getOllamaHost();
+      const url = `${host.replace(/\/+$/, '')}/api/tokenize`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: runtimeModelId, prompt: textContent })
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as { tokens?: unknown[] };
+        const count =
+          Array.isArray(data.tokens) && data.tokens.length > 0
+            ? data.tokens.length
+            : this.heuristicTokenCount(textContent);
+        return this.cacheAndReturn(cacheKey, count);
+      }
+    } catch {
+      // Fall through to heuristic on any error
+    }
+
+    return this.cacheAndReturn(cacheKey, this.heuristicTokenCount(textContent));
+  }
+
+  private heuristicTokenCount(text: string): number {
+    return Math.ceil(text.length / 4);
+  }
+
+  private cacheAndReturn(cacheKey: string, count: number): number {
+    if (this.tokenCountCache.size >= OllamaChatModelProvider.TOKEN_COUNT_CACHE_MAX) {
+      const firstKey = this.tokenCountCache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.tokenCountCache.delete(firstKey);
+      }
+    }
+    this.tokenCountCache.set(cacheKey, count);
+    return count;
   }
 
   /**
@@ -1580,6 +1547,29 @@ export class OllamaChatModelProvider implements LanguageModelChatProvider<Langua
  * Regex pattern for models that support extended thinking / reasoning.
  * Used as a fallback when the /api/show capabilities array is not yet cached.
  */
+/**
+ * Extract plain text from the union type accepted by provideTokenCount.
+ */
+function extractTextFromTokenCountInput(text: string | LanguageModelChatRequestMessage): string {
+  if (typeof text === 'string') {
+    return text;
+  }
+  return text.content
+    .map(part => {
+      if (part instanceof LanguageModelTextPart) {
+        return part.value;
+      }
+      if (part instanceof LanguageModelToolCallPart) {
+        return part.name + JSON.stringify(part.input);
+      }
+      if (part instanceof LanguageModelToolResultPart) {
+        return String(part.content);
+      }
+      return '';
+    })
+    .join('');
+}
+
 const THINKING_MODEL_PATTERN = /qwen3|qwq|deepseek-?r1|phi\d+-reasoning|kimi|thinking/i;
 
 export function isThinkingModelId(modelId: string): boolean {

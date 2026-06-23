@@ -253,7 +253,7 @@ describe('OllamaChatModelProvider utility flows', () => {
     );
 
     const count = await provider.provideTokenCount(
-      {} as unknown as LanguageModelChatInformation,
+      { id: 'ollama:smollm:135m' } as unknown as LanguageModelChatInformation,
       '12345678',
       {} as unknown as CancellationToken
     );
@@ -276,7 +276,7 @@ describe('OllamaChatModelProvider utility flows', () => {
     } as unknown as LanguageModelChatRequestMessage;
 
     const count = await provider.provideTokenCount(
-      {} as unknown as LanguageModelChatInformation,
+      { id: 'ollama:smollm:135m' } as unknown as LanguageModelChatInformation,
       message,
       {} as unknown as CancellationToken
     );
@@ -1104,7 +1104,7 @@ describe('OllamaChatModelProvider chat response', () => {
     expect(userMsg?.content).toContain('how do i center a div in css');
   });
 
-  it('appends fallback prompt from options when messages only contain scaffolding', async () => {
+  it('passes scaffolding-only messages through without injecting options prompt', async () => {
     const chat = vi.fn().mockImplementation(async function* () {
       await Promise.resolve();
       yield { message: { content: 'ok' }, done: true };
@@ -1163,8 +1163,10 @@ describe('OllamaChatModelProvider chat response', () => {
     expect(chat).toHaveBeenCalled();
     const chatArgs = chat.mock.calls[0]?.[0];
     const userMessages = chatArgs?.messages?.filter((m: any) => m.role === 'user') ?? [];
-    const lastUser = userMessages.at(-1);
-    expect(lastUser?.content).toContain('how do i center a div in css');
+    // The fallback prompt from options has been removed — scaffolding-only messages
+    // are passed through without injecting the options prompt into the conversation.
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]?.content).not.toContain('how do i center a div in css');
   });
 
   it('handles tool calls in response', async () => {
