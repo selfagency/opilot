@@ -215,14 +215,24 @@ For more information on Ollama's security and privacy model, see the [Ollama Git
 - [Node.js](https://nodejs.org/) 20+
 - [pnpm](https://pnpm.io/) (version pinned in `package.json`)
 - [VS Code](https://code.visualstudio.com/) 1.111.0+
+- [Task](https://taskfile.dev/) (optional; also installed via `pnpm install` as `node_modules/.bin/task`)
 
 ### Build
 
 ```bash
 pnpm install
-pnpm run compile        # type-check + lint + bundle
-pnpm run watch          # parallel watch for type-check and bundle
+pnpm run compile        # bundle extension to dist/
+pnpm run watch          # watch and recompile
 ```
+
+Type-check and lint separately:
+
+```bash
+pnpm run check-types
+pnpm run lint
+```
+
+Equivalent [Taskfile](Taskfile.yaml) commands: `task compile`, `task watch`, `task check-types`, `task lint`.
 
 ### Testing
 
@@ -230,7 +240,7 @@ pnpm run watch          # parallel watch for type-check and bundle
 pnpm test               # unit tests (Vitest)
 pnpm run test:coverage  # unit tests with coverage (target: 85%)
 pnpm run test:extension # VS Code integration tests
-pnpm run lint           # static analysis (oxlint)
+pnpm run lint           # lint and format check (Ultracite/Biome)
 ```
 
 ### Debugging

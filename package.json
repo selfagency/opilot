@@ -39,7 +39,15 @@
     "languageModelThinkingPart"
   ],
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "compile": "NODE_ENV=production node node_modules/tsup/dist/cli-default.js",
+    "watch": "node node_modules/tsup/dist/cli-default.js --watch",
+    "check-types": "node node_modules/typescript/bin/tsc --noEmit",
+    "lint": "node node_modules/ultracite/dist/index.js check",
+    "lint:fix": "node node_modules/ultracite/dist/index.js fix",
+    "test": "node node_modules/vitest/vitest.mjs run src",
+    "test:coverage": "node node_modules/vitest/vitest.mjs run src --coverage",
+    "test:extension": "node test/extension/index.mjs"
   },
   "contributes": {
     "chatParticipants": [
