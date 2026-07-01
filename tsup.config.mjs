@@ -8,7 +8,10 @@ export default defineConfig({
   format: ['cjs'],
   platform: 'node',
   external: ['vscode'],
-  noExternal: ['ollama', 'undici', /^@agentsy\/core/, /^@agentsy\/providers/],
+  // Bundle all @agentsy/* packages to avoid leaving runtime requires in the published
+  // extension (VS Code extensions do not ship node_modules). This mirrors prior
+  // fixes for undici and other packages that must be bundled.
+  noExternal: ['ollama', 'undici', /^@agentsy\//],
   sourcemap: !production,
   minify: production,
   clean: true,
