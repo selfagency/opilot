@@ -90,6 +90,18 @@ jobs:
         env:
           CI: true
 
+      - name: Bundling sanity check
+        run: |
+          # Fail if any runtime require/imports to @agentsy/* remain in the built bundle
+          set -e
+          if grep -RE "@agentsy/" dist/ | grep -E "require\(|from\s+['\"]@agentsy/"; then
+            echo "❌ Found runtime references to @agentsy/* in dist/ — bundling failed"
+            grep -RE "@agentsy/" dist/ || true
+            exit 1
+          else
+            echo "✅ No runtime @agentsy/* references found in dist/"
+          fi
+
       - name: Cache VS Code test binary
         uses: actions/cache@v5
         with:

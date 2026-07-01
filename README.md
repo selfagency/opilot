@@ -220,8 +220,26 @@ For more information on Ollama's security and privacy model, see the [Ollama Git
 
 ```bash
 pnpm install
-pnpm run compile        # type-check + lint + bundle
-pnpm run watch          # parallel watch for type-check and bundle
+
+# Quick commands
+```
+
+pnpm run compile        # type-check + lint + bundle (delegates to Task)
+pnpm run watch # parallel watch for type-check and bundle (delegates to Task)
+
+```text
+
+The project uses Task (go-task) as the canonical runner. The package.json scripts above are thin wrappers that delegate to Task to provide a discoverable, consistent interface for contributors and CI. You can run tasks directly with Task if you prefer:
+
+```
+
+task compile
+task unit-test-coverage
+task extension-tests
+
+```text
+
+If you don't have Task installed locally, the CI uses the go-task/setup-task action; alternatively run via pnpm/pnpx: `pnpm dlx task <name>`.
 ```
 
 ### Testing

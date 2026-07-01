@@ -39,7 +39,16 @@
     "languageModelThinkingPart"
   ],
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "compile": "task compile",
+    "check-types": "task check-types",
+    "lint": "task lint",
+    "lint:fix": "task lint-fix",
+    "test": "task unit-tests",
+    "test:coverage": "task unit-test-coverage",
+    "extension-tests": "task extension-tests",
+    "watch": "task watch",
+    "task": "task"
   },
   "contributes": {
     "chatParticipants": [
