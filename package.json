@@ -47,7 +47,8 @@
     "test": "task unit-tests",
     "test:coverage": "task unit-test-coverage",
     "extension-tests": "task extension-tests",
-    "watch": "task watch"
+    "watch": "task watch",
+    "task": "task"
   },
   "contributes": {
     "chatParticipants": [
