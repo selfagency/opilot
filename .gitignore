@@ -1,6 +1,5 @@
-# File created using '.gitignore Generator' for Visual Studio Code: https://bit.ly/vscode-gig
-# Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,macos,linux,node,windows
-# Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,macos,linux,node,windows
+# Created by https://www.toptal.com/developers/gitignore/api/windows,macos,linux,node,visualstudiocode
+# Edit at https://www.toptal.com/developers/gitignore?templates=windows,macos,linux,node,visualstudiocode
 
 ### Linux ###
 *~
@@ -235,15 +234,13 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-# End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,macos,linux,node,windows
+# End of https://www.toptal.com/developers/gitignore/api/windows,macos,linux,node,visualstudiocode
 
-# Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
-
-*.vsix
-test-report.junit.xml
-.gh-pages
-package-lock.json
 **/cache
-.remindb/memory.*
-.remindb/sessions
+*.vsix
+.gh-pages
+.opencode/magic-context/historian
+.rumdl_cache
 .tmp
+.wdio-vscode-service
+test-report.junit.xml

@@ -5,7 +5,14 @@
     "moduleResolution": "Bundler",
     "target": "ES2024",
     "lib": ["ES2024"],
-    "types": ["node"],
+    "types": [
+      "node",
+      "@wdio/globals/types",
+      "webdriverio/async",
+      "@wdio/mocha-framework",
+      "expect-webdriverio",
+      "wdio-vscode-service"
+    ],
     "sourceMap": true,
     "rootDir": "src",
     "strict": true,
