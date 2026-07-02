@@ -1,16 +1,16 @@
 /// <reference types="@wdio/globals/types" />
 /* global browser */
-type VscodeProxy = {
+interface VscodeProxy {
+  commands: { getCommands(all: boolean): Promise<string[]> };
   extensions: {
     getExtension(id: string): { isActive?: boolean; activate?: () => Promise<unknown> } | undefined;
   };
-  commands: { getCommands(all: boolean): Promise<string[]> };
-};
+}
 
-type BrowserProxy = {
-  getWorkbench(): { getTitleBar(): { getTitle(): Promise<string> } };
+interface BrowserProxy {
   executeWorkbench<T>(fn: (vscode: VscodeProxy) => Promise<T> | T): Promise<T>;
-};
+  getWorkbench(): { getTitleBar(): { getTitle(): Promise<string> } };
+}
 
 declare const browser: BrowserProxy;
 

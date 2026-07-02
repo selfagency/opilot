@@ -1,12 +1,12 @@
 <svg
+  aria-label="Ollama logo"
   clip-rule="evenodd"
   fill-rule="evenodd"
+  role="img"
   stroke-linejoin="round"
   stroke-miterlimit="2"
   viewBox="0 0 300 300"
   xmlns="http://www.w3.org/2000/svg"
-  role="img"
-  aria-label="Ollama logo"
 >
   <title>Ollama</title>
   <path

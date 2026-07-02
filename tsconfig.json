@@ -8,7 +8,6 @@
     "types": [
       "node",
       "@wdio/globals/types",
-      "webdriverio/async",
       "@wdio/mocha-framework",
       "expect-webdriverio",
       "wdio-vscode-service"

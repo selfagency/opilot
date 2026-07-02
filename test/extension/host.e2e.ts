@@ -1,16 +1,16 @@
 /// <reference types="@wdio/globals/types" />
 /* global browser */
-type VscodeProxy = {
+interface VscodeProxy {
+  commands: { getCommands(all: boolean): Promise<string[]> };
   extensions: {
     getExtension(id: string): { isActive?: boolean; activate?: () => Promise<unknown> } | undefined;
   };
-  commands: { getCommands(all: boolean): Promise<string[]> };
-};
+}
 
-type BrowserProxy = {
-  getWorkbench(): { getTitleBar(): { getTitle(): Promise<string> } };
+interface BrowserProxy {
   executeWorkbench<T>(fn: (vscode: VscodeProxy) => Promise<T> | T): Promise<T>;
-};
+  getWorkbench(): { getTitleBar(): { getTitle(): Promise<string> } };
+}
 
 declare const browser: BrowserProxy;
 
@@ -24,7 +24,7 @@ describe('Extension Host E2E', () => {
     expect(title).to.contain('Extension Development Host');
 
     const activated = await browser.executeWorkbench(async (vscode: unknown) => {
-      const ext = (vscode as any).extensions.getExtension('selfagency.opilot');
+      const ext = (vscode as unknown as VscodeProxy).extensions.getExtension('selfagency.opilot');
       if (!ext) {
         return false;
       }
@@ -49,7 +49,7 @@ describe('Extension Host E2E', () => {
       'opilot.openExtensionSettings'
     ];
     const missing = await browser.executeWorkbench(async (vscode: unknown) => {
-      const cmds = await (vscode as any).commands.getCommands(true);
+      const cmds = await (vscode as unknown as VscodeProxy).commands.getCommands(true);
       return expectedCommands.filter((c: string) => !cmds.includes(c));
     });
     expect(Array.isArray(missing)).to.equal(true);
