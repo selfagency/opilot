@@ -49,11 +49,11 @@ describe('Extension E2E', () => {
       'opilot.buildModelfile',
       'opilot.openExtensionSettings'
     ];
-    const missing = await browser.executeWorkbench(async (vscode: unknown) => {
-      const cmds = await (vscode as any).commands.getCommands(true);
-      return expectedCommands.filter((c: string) => !cmds.includes(c));
-    });
-    expect(Array.isArray(missing)).to.equal(true);
+    const cmds = await browser.executeWorkbench(
+      async (vscode: unknown) => await (vscode as any).commands.getCommands(true)
+    );
+    expect(Array.isArray(cmds)).to.equal(true);
+    const missing = expectedCommands.filter((c: string) => !cmds.includes(c));
     expect(missing.length).to.equal(0, `Missing extension commands: ${missing.join(', ')}`);
   });
 });
