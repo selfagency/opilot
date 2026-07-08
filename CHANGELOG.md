@@ -7,17 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.8.3] - 2026-07-08
-
-## What's Changed
-
-- Consolidated remediation and CI cleanup (July 1) by @selfagency in https://github.com/selfagency/opilot/pull/135
-- feat(e2e): add WebdriverIO VS Code e2e harness + lint fixes by @selfagency in https://github.com/selfagency/opilot/pull/141
-
-**Full Changelog**: https://github.com/selfagency/opilot/compare/v1.8.2...v1.8.3
-
-_Source: changes from v1.8.2 to v1.8.3._
-
 ## [1.8.2] - 2026-06-24
 
 **Full Changelog**: https://github.com/selfagency/opilot/compare/v1.8.1...v1.8.2
