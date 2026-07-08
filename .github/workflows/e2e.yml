@@ -1,0 +1,38 @@
+name: e2e
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build extension
+        run: pnpm run compile
+      - name: Run e2e
+        run: |
+          # Ensure WDIO receives the --enable-proposed-api flag when launching VS Code in CI
+          export WDIO_VSCODE_ARGS="--enable-proposed-api=selfagency.opilot"
+          pnpm run e2e
+        env:
+          CI: true
+      - name: Upload artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-artifacts
+          path: ./wdio-report || ./screenshots || ./trace
