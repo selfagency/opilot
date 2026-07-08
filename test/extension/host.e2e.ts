@@ -48,11 +48,15 @@ describe('Extension Host E2E', () => {
       'opilot.buildModelfile',
       'opilot.openExtensionSettings'
     ];
-    const missing = await browser.executeWorkbench(async (vscode: unknown) => {
-      const cmds = await (vscode as unknown as VscodeProxy).commands.getCommands(true);
-      return expectedCommands.filter((c: string) => !cmds.includes(c));
-    });
-    expect(Array.isArray(missing)).to.equal(true);
+    // Execute inside the extension host to retrieve registered commands, then
+    // compare on the test side to avoid referencing test-scope variables inside
+    // the serialized function (closures are not transferred into the extension host).
+    const registered = await browser.executeWorkbench(
+      async (vscode: unknown) => await (vscode as unknown as VscodeProxy).commands.getCommands(true)
+    );
+
+    expect(Array.isArray(registered)).to.equal(true);
+    const missing = expectedCommands.filter((c: string) => !registered.includes(c));
     expect(missing.length).to.equal(0, `Missing extension commands: ${missing.join(', ')}`);
   });
 });
