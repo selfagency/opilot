@@ -1,4 +1,4 @@
-/* eslint-env node */
+/* global require, module, exports */
 const path = require('node:path');
 
 exports.config = {
