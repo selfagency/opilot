@@ -872,7 +872,7 @@
     "@agentsy/core": "^0.2.0",
     "@agentsy/providers": "^0.2.0",
     "ollama": "^0.6.3",
-    "undici": "^8.6.0"
+    "undici": "^8.7.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
