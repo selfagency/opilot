@@ -810,11 +810,65 @@ export async function handleChatRequest(
         }
 
         if (chunk.message?.tool_calls?.length) {
-          for (const toolCall of chunk.message.tool_calls) {
-            stream.markdown(
-              `\n\`\`\`json\n${JSON.stringify({ tool: toolCall.function.name, arguments: toolCall.function.arguments }, null, 2)}\n\`\`\`\n`
-            );
-            emittedContent = true;
+          if (request.toolInvocationToken) {
+            // Execute tool calls when a tool invocation token is available,
+            // instead of dumping raw JSON. This handles models that emit
+            // tool calls in the streaming pass (e.g. when the tool loop
+            // was skipped or exhausted).
+            for (const toolCall of chunk.message.tool_calls) {
+              const toolName = toolCall.function.name;
+              if (toolName === TASK_COMPLETE_TOOL_NAME) {
+                try {
+                  await vscode.lm.invokeTool(
+                    toolName,
+                    {
+                      input: toolCall.function.arguments as Record<string, unknown>,
+                      toolInvocationToken: request.toolInvocationToken
+                    },
+                    token
+                  );
+                } catch (taskCompleteError) {
+                  const message =
+                    taskCompleteError instanceof Error ? taskCompleteError.message : String(taskCompleteError);
+                  outputChannel?.warn(`[client] task_complete invocation failed (streaming pass): ${message}`);
+                }
+                break;
+              }
+              const toolInput = toolCall.function.arguments;
+              let resultText: string;
+              try {
+                const result = await vscode.lm.invokeTool(
+                  toolName,
+                  {
+                    input: toolInput,
+                    toolInvocationToken: request.toolInvocationToken
+                  },
+                  token
+                );
+                resultText = result.content
+                  .filter((c): c is vscode.LanguageModelTextPart => c instanceof vscode.LanguageModelTextPart)
+                  .map(c => c.value)
+                  .join('');
+              } catch (invokeError) {
+                resultText = invokeError instanceof Error ? invokeError.message : 'Tool execution failed';
+              }
+              // Append tool result to the conversation so subsequent streaming
+              // chunks have context of what was executed.
+              ollamaMessages.push({
+                role: 'tool',
+                content: resultText,
+                tool_name: toolName,
+                tool_call_id: (toolCall as { id?: string }).id
+              });
+            }
+          } else {
+            // No tool invocation token — fall back to displaying tool calls as text.
+            for (const toolCall of chunk.message.tool_calls) {
+              stream.markdown(
+                `\n\`\`\`json\n${JSON.stringify({ tool: toolCall.function.name, arguments: toolCall.function.arguments }, null, 2)}\n\`\`\`\n`
+              );
+              emittedContent = true;
+            }
           }
         }
 
@@ -1003,6 +1057,28 @@ export async function handleChatRequest(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+
+    // Detect Copilot utility model configuration errors (BYOK mode).
+    // VS Code's Copilot requires a separate utility model for lightweight
+    // tasks when the main agent model is BYOK. This is a Copilot
+    // configuration issue, not an Opilot bug.
+    if (
+      error instanceof Error &&
+      (error.message.includes('No utility model is configured') || error.message.includes('copilot-utility-small'))
+    ) {
+      stream.markdown(
+        '**Utility model not configured**\n\n' +
+          'VS Code Copilot requires a utility model when using a BYOK (Bring Your Own Key) ' +
+          'model as the main agent. To fix this:\n\n' +
+          '1. Open VS Code Settings (`Cmd+,` / `Ctrl+,`)\n' +
+          '2. Search for `github.copilot.chat.utilityModel`\n' +
+          '3. Set it to a small model like `copilot-gpt-4o-mini` or another lightweight model\n\n' +
+          'Alternatively, switch to a non-BYOK agent model in the model picker.\n\n' +
+          `*Underlying error: ${message}*`
+      );
+      return;
+    }
+
     stream.markdown(`Error: ${message}`);
   }
 }
