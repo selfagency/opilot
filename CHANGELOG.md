@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-07-16
+
+## What's Changed
+
+- fix: execute tool calls in @ollama streaming pass + utility model guidance by @selfagency in https://github.com/selfagency/opilot/pull/150
+
+**Full Changelog**: https://github.com/selfagency/opilot/compare/v1.8.3...v1.8.4
+
+_Source: changes from v1.8.3 to v1.8.4._
+
 ## [1.8.3] - 2026-07-08
 
 ## What's Changed
